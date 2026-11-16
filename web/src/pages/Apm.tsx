@@ -10,7 +10,7 @@ import { compact, duration, percent, rate, serviceColor, spanTypeIcon } from "..
 import { useTimeRange } from "../lib/time";
 import { APM_TABS } from "./TraceExplorer";
 
-function useEnv(): [string, (v: string) => void] {
+export function useEnv(): [string, (v: string) => void] {
   const [params, setParams] = useSearchParams();
   const env = params.get("env") ?? "";
   return [
@@ -25,7 +25,7 @@ function useEnv(): [string, (v: string) => void] {
   ];
 }
 
-function EnvSelect() {
+export function EnvSelect() {
   const [env, setEnv] = useEnv();
   const envs = useQuery({ queryKey: ["envs"], queryFn: api.envs });
   return (

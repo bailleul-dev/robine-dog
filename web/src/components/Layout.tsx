@@ -1,6 +1,15 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import type { Identity } from "../lib/api";
-import { ApmIcon, Logo, LogsIcon, MetricsIcon, SignOutIcon } from "./Icons";
+import {
+  ApmIcon,
+  BellIcon,
+  BugIcon,
+  DashboardIcon,
+  Logo,
+  LogsIcon,
+  MetricsIcon,
+  SignOutIcon,
+} from "./Icons";
 
 type Item = {
   to: string;
@@ -22,6 +31,7 @@ const ITEMS: Item[] = [
       { to: "/logs", label: "Explorer" },
       { to: "/logs/livetail", label: "Live Tail" },
       { to: "/logs/pipelines", label: "Pipelines" },
+      { to: "/logs/generate-metrics", label: "Generate Metrics" },
     ],
   },
   {
@@ -33,6 +43,8 @@ const ITEMS: Item[] = [
     links: [
       { to: "/apm/services", label: "Service Catalog" },
       { to: "/apm/traces", label: "Traces" },
+      { to: "/apm/map", label: "Service Map" },
+      { to: "/apm/generate-metrics", label: "Generate Metrics" },
     ],
   },
   {
@@ -44,6 +56,35 @@ const ITEMS: Item[] = [
     links: [
       { to: "/metrics/explorer", label: "Explorer" },
       { to: "/metrics/summary", label: "Summary" },
+    ],
+  },
+  {
+    to: "/dashboard/lists",
+    match: "/dashboard",
+    label: "Dashboards",
+    icon: <DashboardIcon />,
+    title: "Dashboards",
+    links: [{ to: "/dashboard/lists", label: "Dashboard List" }],
+  },
+  {
+    to: "/error-tracking",
+    match: "/error-tracking",
+    label: "Errors",
+    icon: <BugIcon />,
+    title: "Error Tracking",
+    links: [{ to: "/error-tracking", label: "Issues" }],
+  },
+  {
+    to: "/monitors/manage",
+    match: "/monitors",
+    label: "Monitors",
+    icon: <BellIcon />,
+    title: "Monitors",
+    links: [
+      { to: "/monitors/manage", label: "Manage Monitors" },
+      { to: "/monitors/create", label: "New Monitor" },
+      { to: "/monitors/triggered", label: "Triggered Monitors" },
+      { to: "/monitors/webhooks", label: "Webhooks" },
     ],
   },
 ];
@@ -69,7 +110,10 @@ export function Layout({ me }: { me: Identity }) {
         <div className="nav-items">
           {ITEMS.map((it) => (
             <div className="nav-item" key={it.to}>
-              <NavLink to={it.to} className={`nav-link${pathname.startsWith(it.match) ? " active" : ""}`}>
+              <NavLink
+                to={it.to}
+                className={`nav-link${pathname.startsWith(it.match) ? " active" : ""}`}
+              >
                 {it.icon}
                 <span>{it.label}</span>
               </NavLink>
@@ -93,8 +137,15 @@ export function Layout({ me }: { me: Identity }) {
             </div>
             <div className="nav-flyout" style={{ top: "auto", bottom: 0 }}>
               <div className="nav-flyout-title">{me.name ?? "Signed in"}</div>
-              {me.email && <div style={{ padding: "0 16px 8px", fontSize: 12 }}>{me.email}</div>}
-              <a href="/auth/logout" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {me.email && (
+                <div style={{ padding: "0 16px 8px", fontSize: 12 }}>
+                  {me.email}
+                </div>
+              )}
+              <a
+                href="/auth/logout"
+                style={{ display: "flex", gap: 8, alignItems: "center" }}
+              >
                 <SignOutIcon width={14} height={14} /> Sign out
               </a>
             </div>
@@ -120,7 +171,8 @@ export function PageHeader({
   const { search } = useLocation();
   // Keep the time range when switching tabs.
   const keep = new URLSearchParams(search);
-  for (const k of [...keep.keys()]) if (!["range", "from_ts", "to_ts", "live"].includes(k)) keep.delete(k);
+  for (const k of [...keep.keys()])
+    if (!["range", "from_ts", "to_ts", "live"].includes(k)) keep.delete(k);
   const qs = keep.toString() ? `?${keep}` : "";
   return (
     <header className="page-header">

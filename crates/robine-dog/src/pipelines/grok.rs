@@ -96,7 +96,10 @@ fn split_rules(text: &str) -> Result<Vec<(String, String)>, String> {
         let (name, pattern) = line
             .split_once(char::is_whitespace)
             .ok_or_else(|| format!("line {}: expected `rule_name pattern`", i + 1))?;
-        if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+        if !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+        {
             return Err(format!("line {}: invalid rule name `{name}`", i + 1));
         }
         out.push((name.to_string(), pattern.trim_start().to_string()));
@@ -253,7 +256,11 @@ fn date_pattern(p: &str) -> Result<(String, String, bool, bool), String> {
                     3 => "%3f",
                     6 => "%6f",
                     9 => "%9f",
-                    _ => return Err(format!("{n} fraction digits are not supported (use 3, 6 or 9)")),
+                    _ => {
+                        return Err(format!(
+                            "{n} fraction digits are not supported (use 3, 6 or 9)"
+                        ));
+                    }
                 },
             ),
             ('a', _) => ("[AaPp][Mm]".into(), "%p"),
@@ -329,7 +336,10 @@ fn parse_offset(s: &str) -> Option<i32> {
     let digits: String = rest.chars().filter(|c| c.is_ascii_digit()).collect();
     let (h, m) = match digits.len() {
         1 | 2 => (digits.parse::<i32>().ok()?, 0),
-        4 => (digits[..2].parse::<i32>().ok()?, digits[2..].parse::<i32>().ok()?),
+        4 => (
+            digits[..2].parse::<i32>().ok()?,
+            digits[2..].parse::<i32>().ok()?,
+        ),
         _ => return None,
     };
     Some(sign * (h * 3600 + m * 60))
@@ -370,7 +380,10 @@ fn builtin(name: &str, a: &[String]) -> Result<Option<(String, Conv)>, String> {
             r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}".into(),
             Conv::Text,
         ),
-        "mac" => (r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}".into(), Conv::Text),
+        "mac" => (
+            r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}".into(),
+            Conv::Text,
+        ),
         "ipv4" => (ipv4.into(), Conv::Text),
         "ipv6" => (ipv6.into(), Conv::Text),
         "ip" => (format!("(?:{ipv6}|{ipv4})"), Conv::Text),
@@ -401,7 +414,11 @@ fn filter(name: &str, a: &[String]) -> Result<Filter, String> {
         "lowercase" => Filter::Lowercase,
         "uppercase" => Filter::Uppercase,
         "keyvalue" => Filter::KeyValue {
-            sep: a.first().filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "=".into()),
+            sep: a
+                .first()
+                .filter(|s| !s.is_empty())
+                .cloned()
+                .unwrap_or_else(|| "=".into()),
             allow: a.get(1).cloned().unwrap_or_default(),
             quoting: a.get(2).cloned().unwrap_or_default(),
             delimiter: a.get(3).cloned().filter(|s| !s.is_empty()),
@@ -493,7 +510,10 @@ impl Compiler<'_> {
 
             let parts = token_parts(token);
             let (name, a) = call(parts[0].trim());
-            let attr = parts.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
+            let attr = parts
+                .get(1)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
             let filt = match parts.get(2).map(|s| s.trim()).filter(|s| !s.is_empty()) {
                 Some(f) => {
                     let (n, x) = call(f);
@@ -535,11 +555,7 @@ impl Grok {
         if matching.is_empty() {
             return Err("at least one parsing rule is needed".into());
         }
-        let all: HashMap<String, String> = support
-            .iter()
-            .chain(matching.iter())
-            .cloned()
-            .collect();
+        let all: HashMap<String, String> = support.iter().chain(matching.iter()).cloned().collect();
         let mut compiler = Compiler { rules: &all, n: 0 };
         let mut rules = Vec::new();
         for (name, pattern) in matching {
@@ -549,11 +565,7 @@ impl Grok {
                 .map_err(|e| format!("rule `{name}`: {e}"))?;
             let re = Regex::new(&format!("(?s)^(?:{body})$"))
                 .map_err(|e| format!("rule `{name}`: {e}"))?;
-            rules.push(Rule {
-                name,
-                re,
-                captures,
-            });
+            rules.push(Rule { name, re, captures });
         }
         Ok(Grok { rules })
     }
@@ -660,7 +672,13 @@ pub fn url_details(s: &str) -> Option<Value> {
     Some(Value::Object(d))
 }
 
-fn key_value(s: &str, sep: &str, allow: &str, quoting: &str, delimiter: Option<&str>) -> Map<String, Value> {
+fn key_value(
+    s: &str,
+    sep: &str,
+    allow: &str,
+    quoting: &str,
+    delimiter: Option<&str>,
+) -> Map<String, Value> {
     let quotes: Vec<(char, char)> = if quoting.is_empty() {
         vec![('"', '"'), ('\'', '\''), ('<', '>')]
     } else {

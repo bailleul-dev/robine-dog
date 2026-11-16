@@ -207,7 +207,11 @@ fn query(q: &str) -> Result<Expr, String> {
 fn compile_steps(ps: &[ProcessorDef], nested: bool) -> Result<Vec<Step>, String> {
     let mut out = Vec::new();
     for p in ps.iter().filter(|p| p.is_enabled) {
-        let label = if p.name.is_empty() { "processor" } else { &p.name };
+        let label = if p.name.is_empty() {
+            "processor"
+        } else {
+            &p.name
+        };
         let step = match &p.kind {
             Kind::GrokParser { source, grok, .. } => Step::Grok(
                 source.clone(),
@@ -266,7 +270,11 @@ fn compile_steps(ps: &[ProcessorDef], nested: bool) -> Result<Vec<Step>, String>
                 template,
                 target,
                 is_replace_missing,
-            } => Step::Builder(template_parts(template), target.clone(), *is_replace_missing),
+            } => Step::Builder(
+                template_parts(template),
+                target.clone(),
+                *is_replace_missing,
+            ),
             Kind::LookupProcessor {
                 source,
                 target,
@@ -314,9 +322,13 @@ fn read(log: &LogRow, path: &str) -> Option<Value> {
     match path {
         "message" => Some(json!(log.message)),
         "status" if !log.attributes.contains_key("status") => Some(json!(log.status)),
-        "service" if !log.attributes.contains_key("service") => log.service.as_ref().map(|s| json!(s)),
+        "service" if !log.attributes.contains_key("service") => {
+            log.service.as_ref().map(|s| json!(s))
+        }
         "host" if !log.attributes.contains_key("host") => log.host.as_ref().map(|s| json!(s)),
-        p => attribute(&log.attributes, p).filter(|v| !v.is_null()).cloned(),
+        p => attribute(&log.attributes, p)
+            .filter(|v| !v.is_null())
+            .cloned(),
     }
 }
 
@@ -324,20 +336,16 @@ fn remove_path(m: &mut Map<String, Value>, path: &str) -> bool {
     if m.remove(path).is_some() {
         return true;
     }
-    let mut parts = path.splitn(2, '.');
-    let (Some(head), Some(rest)) = (parts.next(), parts.next()) else {
+    let Some((head, rest)) = path.split_once('.') else {
         return false;
     };
-    let removed = match m.get_mut(head) {
-        Some(Value::Object(inner)) => {
-            let r = remove_path(inner, rest);
-            if r && inner.is_empty() {
-                m.remove(head);
-            }
-            r
-        }
-        _ => false,
+    let Some(Value::Object(inner)) = m.get_mut(head) else {
+        return false;
     };
+    let removed = remove_path(inner, rest);
+    if removed && inner.is_empty() {
+        m.remove(head);
+    }
     removed
 }
 
@@ -448,7 +456,9 @@ impl Step {
                 }
             }
             Step::Url(sources, target, normalize) => {
-                let Some((_, v)) = first(log, sources) else { return };
+                let Some((_, v)) = first(log, sources) else {
+                    return;
+                };
                 if let Some(mut d) = grok::url_details(&text(&v)) {
                     if *normalize
                         && let Some(Value::String(p)) = d.get_mut("path")
@@ -461,7 +471,9 @@ impl Step {
                 }
             }
             Step::UserAgent(sources, target, encoded) => {
-                let Some((_, v)) = first(log, sources) else { return };
+                let Some((_, v)) = first(log, sources) else {
+                    return;
+                };
                 let mut ua = text(&v);
                 if *encoded {
                     ua = grok::decode_uri(&ua);
@@ -637,7 +649,9 @@ impl Arith {
                 *i += 1;
                 Ok(e)
             }
-            f @ ("abs" | "ceil" | "floor" | "round") if t.get(*i).map(String::as_str) == Some("(") => {
+            f @ ("abs" | "ceil" | "floor" | "round")
+                if t.get(*i).map(String::as_str) == Some("(") =>
+            {
                 *i += 1;
                 let e = Self::sum(t, i)?;
                 if t.get(*i).map(String::as_str) != Some(")") {
@@ -646,10 +660,15 @@ impl Arith {
                 *i += 1;
                 Ok(Arith::Call(f.to_string(), Box::new(e)))
             }
-            n if n.chars().next().is_some_and(|c| c.is_ascii_digit() || c == '.') => n
-                .parse()
-                .map(Arith::Num)
-                .map_err(|_| format!("bad number `{n}`")),
+            n if n
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_digit() || c == '.') =>
+            {
+                n.parse()
+                    .map(Arith::Num)
+                    .map_err(|_| format!("bad number `{n}`"))
+            }
             a if !"+*/%)".contains(a) => Ok(Arith::Attr(a.trim_start_matches('@').to_string())),
             other => Err(format!("unexpected `{other}`")),
         }
@@ -658,11 +677,13 @@ impl Arith {
     fn eval(&self, log: &LogRow, replace_missing: bool) -> Option<f64> {
         Some(match self {
             Arith::Num(n) => *n,
-            Arith::Attr(a) => match read(log, a).and_then(|v| text(&v).trim().parse::<f64>().ok()) {
-                Some(v) => v,
-                None if replace_missing => 0.0,
-                None => return None,
-            },
+            Arith::Attr(a) => {
+                match read(log, a).and_then(|v| text(&v).trim().parse::<f64>().ok()) {
+                    Some(v) => v,
+                    None if replace_missing => 0.0,
+                    None => return None,
+                }
+            }
             Arith::Neg(e) => -e.eval(log, replace_missing)?,
             Arith::Bin(op, l, r) => {
                 let (l, r) = (l.eval(log, replace_missing)?, r.eval(log, replace_missing)?);
@@ -729,8 +750,8 @@ impl Pipelines {
     pub fn load(&self, defs: &[PipelineDef]) {
         let mut out = Vec::new();
         for d in defs.iter().filter(|d| d.is_enabled) {
-            let compiled = query(&d.filter.query)
-                .and_then(|f| Ok((f, compile_steps(&d.processors, false)?)));
+            let compiled =
+                query(&d.filter.query).and_then(|f| Ok((f, compile_steps(&d.processors, false)?)));
             match compiled {
                 Ok((filter, steps)) => out.push(Compiled { filter, steps }),
                 Err(e) => tracing::warn!(pipeline = %d.name, error = %e, "pipeline skipped"),
@@ -786,7 +807,9 @@ fn status_category() -> ProcessorDef {
             ]
             .iter()
             .map(|(q, n)| Category {
-                filter: FilterDef { query: q.to_string() },
+                filter: FilterDef {
+                    query: q.to_string(),
+                },
                 name: n.to_string(),
             })
             .collect(),
@@ -802,7 +825,9 @@ pub fn integration_pipelines() -> Vec<PipelineDef> {
         typ: "pipeline".into(),
         name: name.into(),
         is_enabled: true,
-        filter: FilterDef { query: query.into() },
+        filter: FilterDef {
+            query: query.into(),
+        },
         processors,
         is_read_only: true,
         description: None,
@@ -925,7 +950,10 @@ mod tests {
         assert_eq!(l.attributes["http"]["status_category"], "error");
         assert_eq!(l.attributes["http"]["url_details"]["path"], "/api/cart");
         assert_eq!(l.attributes["http"]["url_details"]["queryString"]["u"], "7");
-        assert_eq!(l.attributes["http"]["useragent_details"]["browser"]["family"], "curl");
+        assert_eq!(
+            l.attributes["http"]["useragent_details"]["browser"]["family"],
+            "curl"
+        );
         assert_eq!(l.attributes["network"]["client"]["ip"], "10.0.3.7");
     }
 
@@ -955,32 +983,94 @@ mod tests {
             typ: "pipeline".into(),
             name: "app".into(),
             is_enabled: true,
-            filter: FilterDef { query: "service:app".into() },
+            filter: FilterDef {
+                query: "service:app".into(),
+            },
             is_read_only: false,
             description: None,
             processors: vec![
-                processor("", Kind::AttributeRemapper {
-                    sources: s(&["user_id"]), source_type: "attribute".into(), target: "usr.id".into(),
-                    target_type: "attribute".into(), target_format: Some("string".into()), preserve_source: false, override_on_conflict: false,
-                }),
-                processor("", Kind::AttributeRemapper {
-                    sources: s(&["team"]), source_type: "attribute".into(), target: "team".into(),
-                    target_type: "tag".into(), target_format: None, preserve_source: true, override_on_conflict: false,
-                }),
-                processor("", Kind::ArithmeticProcessor { expression: "(bytes_in + bytes_out) / 1024".into(), target: "kb".into(), is_replace_missing: false }),
-                processor("", Kind::StringBuilderProcessor { template: "%{usr.id} on %{team}".into(), target: "who".into(), is_replace_missing: false }),
-                processor("", Kind::LookupProcessor { source: "country".into(), target: "country_name".into(), lookup_table: s(&["fr, France", "de, Germany"]), default_lookup: Some("Unknown".into()) }),
-                processor("", Kind::ServiceRemapper { sources: s(&["svc"]) }),
-                processor("", Kind::Pipeline {
-                    filter: FilterDef { query: "@kb:>1".into() },
-                    processors: vec![processor("", Kind::MessageRemapper { sources: s(&["who"]) })],
-                }),
-                processor("disabled", Kind::StatusRemapper { sources: s(&["lvl"]) }),
+                processor(
+                    "",
+                    Kind::AttributeRemapper {
+                        sources: s(&["user_id"]),
+                        source_type: "attribute".into(),
+                        target: "usr.id".into(),
+                        target_type: "attribute".into(),
+                        target_format: Some("string".into()),
+                        preserve_source: false,
+                        override_on_conflict: false,
+                    },
+                ),
+                processor(
+                    "",
+                    Kind::AttributeRemapper {
+                        sources: s(&["team"]),
+                        source_type: "attribute".into(),
+                        target: "team".into(),
+                        target_type: "tag".into(),
+                        target_format: None,
+                        preserve_source: true,
+                        override_on_conflict: false,
+                    },
+                ),
+                processor(
+                    "",
+                    Kind::ArithmeticProcessor {
+                        expression: "(bytes_in + bytes_out) / 1024".into(),
+                        target: "kb".into(),
+                        is_replace_missing: false,
+                    },
+                ),
+                processor(
+                    "",
+                    Kind::StringBuilderProcessor {
+                        template: "%{usr.id} on %{team}".into(),
+                        target: "who".into(),
+                        is_replace_missing: false,
+                    },
+                ),
+                processor(
+                    "",
+                    Kind::LookupProcessor {
+                        source: "country".into(),
+                        target: "country_name".into(),
+                        lookup_table: s(&["fr, France", "de, Germany"]),
+                        default_lookup: Some("Unknown".into()),
+                    },
+                ),
+                processor(
+                    "",
+                    Kind::ServiceRemapper {
+                        sources: s(&["svc"]),
+                    },
+                ),
+                processor(
+                    "",
+                    Kind::Pipeline {
+                        filter: FilterDef {
+                            query: "@kb:>1".into(),
+                        },
+                        processors: vec![processor(
+                            "",
+                            Kind::MessageRemapper {
+                                sources: s(&["who"]),
+                            },
+                        )],
+                    },
+                ),
+                processor(
+                    "disabled",
+                    Kind::StatusRemapper {
+                        sources: s(&["lvl"]),
+                    },
+                ),
             ],
         }];
         let mut defs = defs;
         defs[0].processors[7].is_enabled = false;
-        let mut l = log(json!({"service": "app", "message": "x", "user_id": 42, "team": "pay", "bytes_in": 1024, "bytes_out": 2048, "country": "fr", "svc": "renamed", "lvl": "error"}));
+        let mut l = log(
+            json!({"service": "app", "message": "x", "user_id": 42, "team": "pay", "bytes_in": 1024, "bytes_out": 2048, "country": "fr", "svc": "renamed", "lvl": "error"}),
+        );
         preview(&defs, &mut l);
         let a = &l.attributes;
         assert!(a.get("user_id").is_none());

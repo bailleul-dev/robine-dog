@@ -463,6 +463,7 @@ pub async fn intake(
         .map(|o| {
             let mut row = process(o, &defaults, now);
             st.pipelines.apply(&mut row);
+            st.generated.on_log(&st.aggregator, &row);
             row
         })
         .collect();

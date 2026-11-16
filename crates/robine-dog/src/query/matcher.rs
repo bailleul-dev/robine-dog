@@ -1,10 +1,11 @@
-//! The search syntax evaluated in memory against one log, with the same
-//! semantics as the SQL translation: what pipeline filters, category
-//! processors and log-based metrics need at ingestion time.
+//! The search syntax evaluated in memory against one log or span, with the
+//! same semantics as the SQL translation: what pipeline filters, category
+//! processors and log- or span-based metrics need at ingestion time.
 
 use super::parser::{CmpOp, Cond, Expr, Value as Word};
 use super::sql::parse_duration_ns;
 use crate::intake::logs::LogRow;
+use crate::intake::traces::SpanRow;
 use serde_json::Value;
 
 /// `*` matches any run of characters; everything else literally.
@@ -44,7 +45,10 @@ fn eq(w: &Word, text: &str) -> bool {
 }
 
 fn number(v: &str) -> Option<f64> {
-    v.trim().parse::<f64>().ok().or_else(|| parse_duration_ns(v))
+    v.trim()
+        .parse::<f64>()
+        .ok()
+        .or_else(|| parse_duration_ns(v))
 }
 
 fn cmp(op: CmpOp, x: f64, y: f64) -> bool {
@@ -99,12 +103,59 @@ pub fn attribute<'a>(attrs: &'a serde_json::Map<String, Value>, path: &str) -> O
     if let Some(v) = attrs.get(path) {
         return Some(v);
     }
-    let mut parts = path.splitn(2, '.');
-    let head = parts.next()?;
-    let rest = parts.next()?;
+    let (head, rest) = path.split_once('.')?;
     match attrs.get(head)? {
         Value::Object(inner) => attribute(inner, rest),
         _ => None,
+    }
+}
+
+/// What a query is evaluated against.
+pub trait Record {
+    /// The values of a field (`service`, `@http.status_code`, a tag…).
+    fn values(&self, key: &str) -> Vec<String>;
+    /// What full-text terms search.
+    fn text(&self) -> &str;
+}
+
+impl Record for LogRow {
+    fn values(&self, key: &str) -> Vec<String> {
+        field_values(self, key)
+    }
+    fn text(&self) -> &str {
+        &self.message
+    }
+}
+
+impl Record for SpanRow {
+    fn values(&self, key: &str) -> Vec<String> {
+        let one = |s: &str| vec![s.to_string()];
+        let opt = |v: &Option<String>| v.iter().cloned().collect::<Vec<_>>();
+        match key {
+            "service" => one(&self.service),
+            "resource_name" | "resource" => one(&self.resource),
+            "operation_name" | "name" => one(&self.name),
+            "env" => opt(&self.env),
+            "version" => opt(&self.version),
+            "type" | "span.type" => opt(&self.typ),
+            "status" => one(if self.error { "error" } else { "ok" }),
+            "trace_id" => one(&self.trace_id),
+            "span_id" => one(&self.span_id),
+            "parent_id" => one(&self.parent_id),
+            "@duration" | "duration" => vec![self.duration.to_string()],
+            "_entry" => one(if self.top_level { "1" } else { "0" }),
+            "_root" => one(if self.parent_id == "0" { "1" } else { "0" }),
+            k => {
+                let k = k.strip_prefix('@').unwrap_or(k);
+                attribute(&self.meta, k)
+                    .or_else(|| attribute(&self.metrics, k))
+                    .map(scalars)
+                    .unwrap_or_default()
+            }
+        }
+    }
+    fn text(&self) -> &str {
+        &self.resource
     }
 }
 
@@ -132,9 +183,9 @@ fn field_values(log: &LogRow, key: &str) -> Vec<String> {
 }
 
 /// Full-text terms match words of the message, case-insensitively.
-fn text(w: &Word, log: &LogRow) -> bool {
+fn text<R: Record + ?Sized>(w: &Word, r: &R) -> bool {
     let needle = w.text.to_lowercase();
-    let hay = log.message.to_lowercase();
+    let hay = r.text().to_lowercase();
     if w.wildcard {
         hay.split(|c: char| !c.is_alphanumeric() && c != '*' && c != '_' && c != '-')
             .any(|tok| glob(&needle, tok))
@@ -148,14 +199,14 @@ fn text(w: &Word, log: &LogRow) -> bool {
     }
 }
 
-pub fn matches(e: &Expr, log: &LogRow) -> bool {
+pub fn matches<R: Record + ?Sized>(e: &Expr, r: &R) -> bool {
     match e {
         Expr::All => true,
-        Expr::And(xs) => xs.iter().all(|x| matches(x, log)),
-        Expr::Or(xs) => xs.iter().any(|x| matches(x, log)),
-        Expr::Not(x) => !matches(x, log),
-        Expr::Text(w) => text(w, log),
-        Expr::Field { key, cond: c } => cond(c, &field_values(log, key)),
+        Expr::And(xs) => xs.iter().all(|x| matches(x, r)),
+        Expr::Or(xs) => xs.iter().any(|x| matches(x, r)),
+        Expr::Not(x) => !matches(x, r),
+        Expr::Text(w) => text(w, r),
+        Expr::Field { key, cond: c } => cond(c, &r.values(key)),
     }
 }
 

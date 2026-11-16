@@ -2,6 +2,7 @@
 //! DogStatsD packets), and the trace metrics derived from service entry spans.
 
 pub mod dogstatsd;
+pub mod generated;
 pub mod query;
 
 use crate::store::Store;
@@ -176,7 +177,8 @@ impl Aggregator {
                     weight,
                 });
             };
-            let mut emit = |name: String, kind: Kind, value: f64| emit_weighted(name, kind, value, 1.0);
+            let mut emit =
+                |name: String, kind: Kind, value: f64| emit_weighted(name, kind, value, 1.0);
             match acc {
                 Acc::Count(c) => emit(k.name.clone(), Kind::Count, c),
                 Acc::Gauge(g) => emit(k.name.clone(), Kind::Gauge, g),

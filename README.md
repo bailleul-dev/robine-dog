@@ -29,11 +29,25 @@ state (facets, metric metadata) is in PostgreSQL.
 | Metrics Summary: type, unit, description (editable), tags and hosts per metric | `/metrics/summary` |
 | DogStatsD (`c`, `g`, `s`, `h`/`ms`, `d`, sample rates, `#tags`, `\|T` timestamps), aggregated into 10-second buckets | UDP 8125 |
 | Series intake `POST /api/v1/series`, `/api/v2/series` (JSON), `/api/v1/validate` | port 8080 |
+| Analytics ("Visualize as" Timeseries / Top List / Table): count, unique count, avg/sum/min/max/median/pcNN of a measure, by up to two facets (top N per parent, like Datadog) | Log and Trace Explorers |
+| Log Patterns: the latest 10,000 matching logs clustered by message shape (Drain), wildcards highlighted, click to search | Log Explorer |
+| Aggregate API `/api/v2/logs/analytics/aggregate`, `/api/v2/spans/analytics/aggregate` (Datadog's request and bucket format) | port 8080 |
+| Dashboards: Datadog's dashboard JSON (import / export), 12-column grid, timeseries (lines, bars), query value with conditional formatting, top list, table, note (Markdown) and group widgets, template variables (`$service`), widget editor with live preview | `/dashboard/lists` |
+| Queries and formulas: metrics, logs and spans queries on one time grid, `a / b * 100`, `per_second`, `cumsum`, `diff`, `derivative`, `abs`, `log10`, `clamp_min/max`, `default_zero`, `timeshift`, `hour_before`… `week_before`, `top(a, 10, 'mean', 'desc')`; scalar queries reduce first, as Datadog | `/api/v2/query/timeseries`, `/api/v2/query/scalar` |
+| Dashboards API `/api/v1/dashboard` (list, CRUD) | port 8080 |
+| Saved views of the Log and Trace explorers (query, facets, visualization, time) | `/api/ui/views` |
+| Generate Metrics: log- and span-based counts and distributions, tagged by attributes, computed at ingestion | `/api/v2/logs/config/metrics`, `/api/v2/apm/config/metrics` |
+| OpenTelemetry: OTLP/HTTP traces, logs and metrics (protobuf and JSON, gzip), with Datadog's OTLP mapping | `/v1/traces`, `/v1/logs`, `/v1/metrics` |
+| Service Map: services laid out by call depth, edges from real parent / child spans across services (calls, error rate, latency), health colors, neighbors on hover, details panel | `/apm/map` |
+| Error Tracking: error spans (`error.type`, `error.message`, `error.stack`) and error logs (`error.kind`, `error.stack`) grouped into issues by service, type, masked message and top stack frame; volume, first / last seen, stack trace with app frames highlighted, breakdown by version, env, host and resource, links to the trace or log; For Review / Reviewed / Ignored / Resolved, with regressions | `/error-tracking` |
+| Monitors: metric (`avg(last_5m):avg:system.cpu.user{*} by {host} > 80`), logs (`logs("…").rollup(…).by(…).last("5m") > 10`) and APM (`trace-analytics(…)`) queries, evaluated every minute per group, OK / Warn / Alert / No Data, recovery thresholds, renotify, mute by scope, priority, event history and value graph, Manage / Triggered Monitors pages, an editor with live evaluation | `/monitors` |
+| Notifications: Datadog message templates (`{{#is_alert}}`, `{{value}}`, `{{host.name}}`, `{{#is_match}}`…) to `@webhook-<name>` (Webhooks integration format: `$EVENT_TITLE`… payloads, custom headers, JSON or form) | `/monitors/webhooks` |
+| Monitors and webhooks APIs `/api/v1/monitor` (CRUD, partial update, validate, mute/unmute), `/api/v1/integration/webhooks/configuration/webhooks` | port 8080 |
+| Log Pipelines: grok parser (Datadog matchers and filters, helper rules, live sample preview), date / status / service / message / trace id / span id remappers, attribute remapper, URL and user-agent parsers, category, arithmetic, string builder and lookup processors, nested pipelines; read-only Nginx, PostgreSQL and Kubernetes integration pipelines | `/logs/pipelines`, applied at intake |
+| Logs pipelines API `/api/v1/logs/config/pipelines`, `/pipeline-order` (Datadog's JSON, `DD-API-KEY`) | port 8080 |
+| Datadog Agent: protobuf traces `/api/v0.2/traces` (classic and indexed formats), protobuf series, sketches `/api/beta/sketches`, logs, zstd | port 8080 |
 | Trace metrics `trace.<span>.hits`, `.errors` and `trace.<span>` (distribution, seconds), tagged `service`, `resource_name`, `env`, `version`, `http.status_code` | computed at ingestion |
 
-Not there yet: monitors, dashboards, log pipelines/patterns, the
-Datadog Agent's own trace forwarding protocol (`/api/v0.2/traces`, protobuf),
-protobuf series payloads (set `use_v2_api.series: false` on an Agent), OTLP.
 
 ## Run it
 
@@ -112,6 +126,48 @@ curl -X POST http://localhost:8080/api/v2/series -H "DD-API-KEY: $ROBINE_DOG_API
         \"tags\":[\"env:dev\"],\"resources\":[{\"type\":\"host\",\"name\":\"worker-1\"}]}]}"
 ```
 
+**The Datadog Agent** — point every endpoint at robine-dog and give it a
+site that doesn't resolve, so whatever is not overridden (process,
+inventories, remote config…) can't reach Datadog with your key:
+
+```sh
+docker run -d --name dd-agent \
+  -e DD_API_KEY=$ROBINE_DOG_API_KEY -e DD_SITE=robine-dog.invalid \
+  -e DD_DD_URL=http://robine-dog:8080 \
+  -e DD_APM_DD_URL=http://robine-dog:8080 \
+  -e DD_LOGS_ENABLED=true -e DD_LOGS_CONFIG_USE_HTTP=true \
+  -e DD_LOGS_CONFIG_LOGS_DD_URL=robine-dog:8080 -e DD_LOGS_CONFIG_LOGS_NO_SSL=true \
+  -e DD_PROCESS_AGENT_ENABLED=false -e DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED=false \
+  -e DD_PROCESS_CONFIG_CONTAINER_COLLECTION_ENABLED=false \
+  -e DD_REMOTE_CONFIGURATION_ENABLED=false -e DD_INSTRUMENTATION_TELEMETRY_ENABLED=false \
+  -e DD_INVENTORIES_ENABLED=false -e DD_SBOM_ENABLED=false \
+  -p 8126:8126 -p 8125:8125/udp datadog/agent:7
+```
+
+Applications then talk to the Agent as usual (APM on 8126, DogStatsD on 8125);
+it forwards traces, series, sketches and logs to robine-dog. Endpoints
+robine-dog doesn't use (`/intake/`, check runs, metadata…) are acknowledged.
+
+**OpenTelemetry** — OTLP/HTTP (protobuf or JSON) on the main port, mapped
+as Datadog's OTLP ingestion maps it (`service.name`, `deployment.environment.name`,
+`service.version`, `host.name`; operation and resource names from the semantic
+conventions; exceptions become `error.*`; cumulative counters become deltas):
+
+```sh
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:8080 \
+OTEL_EXPORTER_OTLP_HEADERS="dd-api-key=$ROBINE_DOG_API_KEY" \
+OTEL_SERVICE_NAME=my-api OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=dev \
+opentelemetry-instrument python app.py
+```
+
+Traces, logs and metrics go to `/v1/traces`, `/v1/logs` and `/v1/metrics`.
+
+**Log pipelines** — raw lines (nginx, PostgreSQL…) are parsed by the
+pipelines of `/logs/pipelines`, in Datadog's grok syntax; Terraform's
+`datadog_logs_custom_pipeline` and the API clients work against
+`/api/v1/logs/config/pipelines`.
+
 ## Configuration
 
 All in the environment (see [`.env.example`](.env.example)): listen addresses
@@ -135,8 +191,11 @@ crates/robine-dog/src
   intake/logs.rs     /api/v2/logs (remapping, JSON messages, tags, trace ids)
   intake/traces.rs   trace-agent API (v0.4/v0.5 msgpack), service entry spans, trace metrics
   intake/series.rs   /api/v1/series, /api/v2/series
+  intake/agent.rs    Datadog Agent protobuf: traces (v0.2), series, sketches
+  pipelines/         log pipelines: processors, grok engine, user-agent parser
+  monitors/          monitor queries, evaluation loop, message templates, webhooks
   metrics/           DogStatsD, 10 s aggregator, metric query language → SQL
-  api/               UI API: logs, spans, facets, APM, metrics
+  api/               UI API: logs, spans, facets, APM, metrics, pipelines, analytics, patterns
   auth.rs            Robine ID OIDC + session
 crates/robine-dog-demo  demo traffic generator
 web/src                React UI (pages/, components/, lib/)

@@ -52,7 +52,73 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (kind, id)
     );
     "#,
+    // Monitors: per-group state, and the history of state changes.
+    r#"
+    CREATE SEQUENCE monitor_ids START 1000;
+    CREATE TABLE monitor_groups (
+        monitor_id      BIGINT NOT NULL,
+        grp             TEXT NOT NULL,
+        status          TEXT NOT NULL,
+        value           DOUBLE PRECISION,
+        last_data       TIMESTAMPTZ,
+        last_triggered  TIMESTAMPTZ,
+        last_notified   TIMESTAMPTZ,
+        last_resolved   TIMESTAMPTZ,
+        since           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (monitor_id, grp)
+    );
+    CREATE TABLE monitor_events (
+        id           BIGSERIAL PRIMARY KEY,
+        monitor_id   BIGINT NOT NULL,
+        grp          TEXT NOT NULL,
+        ts           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        from_status  TEXT NOT NULL,
+        to_status    TEXT NOT NULL,
+        value        DOUBLE PRECISION,
+        title        TEXT NOT NULL,
+        message      TEXT NOT NULL,
+        notified     TEXT[] NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX monitor_events_by_monitor ON monitor_events (monitor_id, ts DESC);
+    "#,
 ];
+
+/// A monitor group's state, as last evaluated.
+#[derive(Debug, Clone, Serialize)]
+pub struct GroupState {
+    pub group: String,
+    pub status: String,
+    pub value: Option<f64>,
+    /// Epoch milliseconds.
+    pub last_data: Option<i64>,
+    pub last_triggered: Option<i64>,
+    pub last_notified: Option<i64>,
+    pub last_resolved: Option<i64>,
+    pub since: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MonitorEvent {
+    pub id: i64,
+    pub monitor_id: i64,
+    pub group: String,
+    pub ts: i64,
+    pub from_status: String,
+    pub to_status: String,
+    pub value: Option<f64>,
+    pub title: String,
+    pub message: String,
+    pub notified: Vec<String>,
+}
+
+fn ms(t: Option<std::time::SystemTime>) -> Option<i64> {
+    t.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64)
+}
+
+fn time(ms: Option<i64>) -> Option<std::time::SystemTime> {
+    ms.map(|m| std::time::UNIX_EPOCH + std::time::Duration::from_millis(m.max(0) as u64))
+}
 
 /// A stored configuration document.
 #[derive(Debug, Clone, Serialize)]
@@ -286,8 +352,11 @@ impl Pg {
 
     pub async fn delete_doc(&self, kind: &str, id: &str) -> Result<bool> {
         let c = self.pool.get().await?;
-        Ok(c.execute("DELETE FROM documents WHERE kind = $1 AND id = $2", &[&kind, &id])
-            .await?
+        Ok(c.execute(
+            "DELETE FROM documents WHERE kind = $1 AND id = $2",
+            &[&kind, &id],
+        )
+        .await?
             > 0)
     }
 
@@ -299,6 +368,140 @@ impl Pg {
              FROM unnest($2::text[]) WITH ORDINALITY AS o(id, pos)
              WHERE d.kind = $1 AND d.id = o.id",
             &[&kind, &ids],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn next_monitor_id(&self) -> Result<i64> {
+        let c = self.pool.get().await?;
+        Ok(c.query_one("SELECT nextval('monitor_ids')", &[])
+            .await?
+            .get(0))
+    }
+
+    pub async fn monitor_groups(&self, monitor_id: i64) -> Result<Vec<GroupState>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT grp, status, value, last_data, last_triggered, last_notified, last_resolved, since
+                 FROM monitor_groups WHERE monitor_id = $1 ORDER BY grp",
+                &[&monitor_id],
+            )
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| GroupState {
+                group: r.get(0),
+                status: r.get(1),
+                value: r.get(2),
+                last_data: ms(r.get(3)),
+                last_triggered: ms(r.get(4)),
+                last_notified: ms(r.get(5)),
+                last_resolved: ms(r.get(6)),
+                since: ms(r.get(7)).unwrap_or(0),
+            })
+            .collect())
+    }
+
+    pub async fn put_monitor_group(&self, monitor_id: i64, g: &GroupState) -> Result<()> {
+        let c = self.pool.get().await?;
+        c.execute(
+            "INSERT INTO monitor_groups (monitor_id, grp, status, value, last_data, last_triggered, last_notified, last_resolved, since)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT (monitor_id, grp) DO UPDATE SET status = excluded.status, value = excluded.value,
+               last_data = excluded.last_data, last_triggered = excluded.last_triggered,
+               last_notified = excluded.last_notified, last_resolved = excluded.last_resolved, since = excluded.since",
+            &[
+                &monitor_id,
+                &g.group,
+                &g.status,
+                &g.value,
+                &time(g.last_data),
+                &time(g.last_triggered),
+                &time(g.last_notified),
+                &time(g.last_resolved),
+                &time(Some(g.since)),
+            ],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn delete_monitor_groups(&self, monitor_id: i64, keep: &[String]) -> Result<()> {
+        let c = self.pool.get().await?;
+        c.execute(
+            "DELETE FROM monitor_groups WHERE monitor_id = $1 AND NOT (grp = ANY($2))",
+            &[&monitor_id, &keep],
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_monitor_event(
+        &self,
+        monitor_id: i64,
+        group: &str,
+        from: &str,
+        to: &str,
+        value: Option<f64>,
+        title: &str,
+        message: &str,
+        notified: &[String],
+    ) -> Result<()> {
+        let c = self.pool.get().await?;
+        c.execute(
+            "INSERT INTO monitor_events (monitor_id, grp, from_status, to_status, value, title, message, notified)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            &[&monitor_id, &group, &from, &to, &value, &title, &message, &notified],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// The latest events, of one monitor or of all.
+    pub async fn monitor_events(
+        &self,
+        monitor_id: Option<i64>,
+        limit: i64,
+    ) -> Result<Vec<MonitorEvent>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT id, monitor_id, grp, ts, from_status, to_status, value, title, message, notified
+                 FROM monitor_events WHERE $1::bigint IS NULL OR monitor_id = $1
+                 ORDER BY ts DESC, id DESC LIMIT $2",
+                &[&monitor_id, &limit],
+            )
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| MonitorEvent {
+                id: r.get(0),
+                monitor_id: r.get(1),
+                group: r.get(2),
+                ts: ms(r.get(3)).unwrap_or(0),
+                from_status: r.get(4),
+                to_status: r.get(5),
+                value: r.get(6),
+                title: r.get(7),
+                message: r.get(8),
+                notified: r.get(9),
+            })
+            .collect())
+    }
+
+    pub async fn forget_monitor(&self, monitor_id: i64) -> Result<()> {
+        let c = self.pool.get().await?;
+        c.execute(
+            "DELETE FROM monitor_groups WHERE monitor_id = $1",
+            &[&monitor_id],
+        )
+        .await?;
+        c.execute(
+            "DELETE FROM monitor_events WHERE monitor_id = $1",
+            &[&monitor_id],
         )
         .await?;
         Ok(())

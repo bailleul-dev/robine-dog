@@ -83,6 +83,7 @@ impl Greptime {
             ("logs", logs_ttl_days),
             ("spans", logs_ttl_days),
             ("metric_points", metrics_ttl_days),
+            ("monitor_values", metrics_ttl_days),
         ] {
             self.exec(&format!("ALTER TABLE {table} SET 'ttl' = '{days}d'"))
                 .await?;
@@ -132,6 +133,15 @@ const SCHEMA: &[&str] = &[
         "value" DOUBLE,
         "weight" DOUBLE DEFAULT 1,
         PRIMARY KEY ("metric", "host", "tags")
+    ) WITH ('append_mode' = 'true')"#,
+    // Every monitor evaluation, per group: the monitor page's graph.
+    r#"CREATE TABLE IF NOT EXISTS "monitor_values" (
+        "ts" TIMESTAMP(3) TIME INDEX,
+        "monitor_id" BIGINT,
+        "grp" STRING,
+        "value" DOUBLE,
+        "status" STRING,
+        PRIMARY KEY ("monitor_id", "grp")
     ) WITH ('append_mode' = 'true')"#,
 ];
 

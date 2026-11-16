@@ -348,6 +348,48 @@ pub async fn service(
     }))
 }
 
+#[derive(Serialize)]
+pub struct Edge {
+    source: String,
+    target: String,
+    calls: i64,
+    errors: i64,
+    avg: i64,
+}
+
+/// The service map's edges: calls from a span of one service into an entry
+/// span of another, in the same trace.
+pub async fn map(State(st): State<AppState>, Query(r): Query<Range>) -> ApiResult<Vec<Edge>> {
+    let span_window = time_clause(Dataset::Spans, r.from, r.to);
+    let env = r
+        .env
+        .as_ref()
+        .filter(|e| !e.is_empty() && *e != "*")
+        .map(|e| format!(" AND c.env = {}", lit(e)))
+        .unwrap_or_default();
+    let sql = format!(
+        "SELECT p.service, c.service, count(*) AS n, sum(CASE WHEN c.error THEN 1 ELSE 0 END), avg(c.duration)
+         FROM spans c JOIN spans p ON p.trace_id = c.trace_id AND p.span_id = c.parent_id
+         WHERE c.service != p.service AND c.top_level{env}
+           AND c.{w1} AND p.{w2}
+         GROUP BY p.service, c.service ORDER BY n DESC LIMIT 500",
+        w1 = span_window.replace(" AND ts", " AND c.ts"),
+        w2 = span_window.replace(" AND ts", " AND p.ts"),
+    );
+    let rows = st.store.gt.query(&sql).await?;
+    Ok(Json(
+        rows.iter()
+            .map(|row| Edge {
+                source: str_at(row, 0).unwrap_or_default(),
+                target: str_at(row, 1).unwrap_or_default(),
+                calls: i64_at(row, 2),
+                errors: i64_at(row, 3),
+                avg: f64_at(row, 4).unwrap_or(0.0) as i64,
+            })
+            .collect(),
+    ))
+}
+
 pub async fn envs(State(st): State<AppState>) -> ApiResult<Vec<String>> {
     let rows = st
         .store

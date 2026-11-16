@@ -155,3 +155,33 @@ export const TrashIcon = (p: P) => (
     <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
   </svg>
 );
+
+export const BellIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z" />
+    <path d="M10 20a2 2 0 0 0 4 0" />
+  </svg>
+);
+
+export const MuteIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M6 9a6 6 0 0 1 9.5-4.9M18 9c0 6 2.5 7.5 2.5 7.5H9" />
+    <path d="M10 20a2 2 0 0 0 4 0M3 3l18 18" />
+  </svg>
+);
+
+export const DashboardIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <rect x="3" y="3" width="8" height="8" rx="1" />
+    <rect x="13" y="3" width="8" height="5" rx="1" />
+    <rect x="13" y="10" width="8" height="11" rx="1" />
+    <rect x="3" y="13" width="8" height="8" rx="1" />
+  </svg>
+);
+
+export const BugIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <rect x="7" y="8" width="10" height="12" rx="5" />
+    <path d="M12 8v12M9 5l1.5 3M15 5l-1.5 3M3 13h4M17 13h4M4 8l3 2M20 8l-3 2M4 19l3-2M20 19l-3-2" />
+  </svg>
+);

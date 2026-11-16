@@ -1,11 +1,19 @@
 //! JSON API used by the web UI, under `/api/ui`, behind a session.
 
+pub mod analytics;
 pub mod apm;
+pub mod dashboards;
+pub mod errors;
 pub mod facets;
+pub mod generated_metrics;
 pub mod logs;
 pub mod metrics;
+pub mod monitors;
+pub mod patterns;
 pub mod pipelines;
+pub mod query;
 pub mod spans;
+pub mod views;
 
 use crate::query::parser::{self, Expr};
 use crate::query::sql::{self, Dataset};
@@ -15,6 +23,7 @@ use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::json;
 
+#[derive(Debug)]
 pub enum ApiError {
     BadQuery(String),
     NotFound,

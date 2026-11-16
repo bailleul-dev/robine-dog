@@ -39,6 +39,7 @@ export function TimeChart({
   format = compact,
   onZoom,
   onBarClick,
+  markers = [],
 }: {
   times: number[];
   interval: number;
@@ -50,6 +51,8 @@ export function TimeChart({
   format?: (v: number) => string;
   onZoom?: (from: number, to: number) => void;
   onBarClick?: (t: number) => void;
+  /** Horizontal reference lines (monitor thresholds). */
+  markers?: { value: number; color: string; label?: string }[];
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
@@ -68,7 +71,7 @@ export function TimeChart({
   const totals = times.map((_, i) =>
     kind === "bars" ? series.reduce((s, se) => s + val(se.values[i]), 0) : Math.max(0, ...series.map((se) => val(se.values[i]))),
   );
-  const max = niceMax(Math.max(0, ...totals));
+  const max = niceMax(Math.max(0, ...totals, ...markers.map((m) => m.value * 1.1)));
   const y = (v: number) => top + plotH - (v / max) * plotH;
   const barW = Math.max(1, (interval / span) * plotW - (interval / span) * plotW * 0.18);
 
@@ -186,6 +189,16 @@ export function TimeChart({
               ))}
           </g>
         )}
+        {markers.map((m) => (
+          <g key={`${m.value}-${m.color}`}>
+            <line x1={left} x2={left + plotW} y1={y(m.value)} y2={y(m.value)} stroke={m.color} strokeDasharray="4 3" strokeWidth={1.2} />
+            {m.label && (
+              <text x={left + plotW - 4} y={y(m.value) - 4} textAnchor="end" fontSize={10} fill={m.color}>
+                {m.label}
+              </text>
+            )}
+          </g>
+        ))}
         {drag && Math.abs(drag.x1 - drag.x0) > 1 && (
           <rect className="brush" x={Math.min(drag.x0, drag.x1)} y={top} width={Math.abs(drag.x1 - drag.x0)} height={plotH} />
         )}

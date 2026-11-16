@@ -376,6 +376,7 @@ pub async fn ingest(st: &AppState, chunks: Vec<Vec<SpanRow>>) -> anyhow::Result<
         mark_top_level(&mut chunk);
         for s in &chunk {
             crate::metrics::trace_metrics(&st.aggregator, s);
+            st.generated.on_span(&st.aggregator, s);
         }
         spans.extend(chunk);
     }

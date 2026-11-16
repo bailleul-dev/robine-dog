@@ -1,8 +1,26 @@
-import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SavedViews } from "../components/SavedViews";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  AnalyticsView,
+  PatternsView,
+  useViz,
+  VizPicker,
+} from "../components/Analytics";
 import { TimeChart } from "../components/Charts";
-import { ServiceChip, SidePanel, StatusPill, ValueMenu, type ValueAction } from "../components/Common";
+import {
+  ServiceChip,
+  SidePanel,
+  StatusPill,
+  ValueMenu,
+  type ValueAction,
+} from "../components/Common";
 import { AddFacet, FacetPanel, type CoreFacet } from "../components/FacetPanel";
 import { ChevronDown, ChevronUp, TraceIcon } from "../components/Icons";
 import { JsonTree } from "../components/JsonTree";
@@ -10,7 +28,13 @@ import { PageHeader } from "../components/Layout";
 import { SearchBar, type KeyHint } from "../components/SearchBar";
 import { TimePicker } from "../components/TimePicker";
 import { api, ApiError, type Log } from "../lib/api";
-import { fullDate, logDate, statusColor, STATUS_ORDER, thousands } from "../lib/format";
+import {
+  fullDate,
+  logDate,
+  statusColor,
+  STATUS_ORDER,
+  thousands,
+} from "../lib/format";
 import { addClause } from "../lib/query";
 import { useQueryParam, useTimeRange } from "../lib/time";
 
@@ -25,12 +49,18 @@ export const LOG_TABS = [
   { to: "/logs", label: "Explorer", end: true },
   { to: "/logs/livetail", label: "Live Tail" },
   { to: "/logs/pipelines", label: "Pipelines" },
+  { to: "/logs/generate-metrics", label: "Generate Metrics" },
 ];
 
 /** Every leaf path of an attributes object, as `@a.b.c`. */
-export function attributePaths(obj: unknown, prefix: string[] = [], out = new Set<string>()): Set<string> {
+export function attributePaths(
+  obj: unknown,
+  prefix: string[] = [],
+  out = new Set<string>(),
+): Set<string> {
   if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-    for (const [k, v] of Object.entries(obj)) attributePaths(v, [...prefix, k], out);
+    for (const [k, v] of Object.entries(obj))
+      attributePaths(v, [...prefix, k], out);
   } else if (prefix.length) {
     out.add(`@${prefix.join(".")}`);
   }
@@ -49,33 +79,57 @@ export function LogsExplorer() {
   const [params, setParams] = useSearchParams();
   const selectedId = Number(params.get("event")) || null;
   const scope = { query, from: time.from, to: time.to };
+  const viz = useViz("logs");
+  const listing = viz.viz === "list";
 
   const histogram = useQuery({
     queryKey: ["logsHistogram", scope],
     queryFn: ({ signal }) => api.logsHistogram(scope, signal),
+    enabled: listing,
     placeholderData: keepPreviousData,
   });
 
   const list = useInfiniteQuery({
     queryKey: ["logs", scope],
-    queryFn: ({ pageParam, signal }) => api.searchLogs({ ...scope, limit: 100, cursor: pageParam ?? undefined }, signal),
+    queryFn: ({ pageParam, signal }) =>
+      api.searchLogs(
+        { ...scope, limit: 100, cursor: pageParam ?? undefined },
+        signal,
+      ),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
     placeholderData: keepPreviousData,
   });
 
-  const logs = useMemo(() => list.data?.pages.flatMap((p) => p.logs) ?? [], [list.data]);
+  const logs = useMemo(
+    () => list.data?.pages.flatMap((p) => p.logs) ?? [],
+    [list.data],
+  );
   const total = list.data?.pages[0]?.total ?? null;
-  const error = list.error instanceof ApiError && list.error.status === 400 ? list.error.message : null;
+  const error =
+    list.error instanceof ApiError && list.error.status === 400
+      ? list.error.message
+      : null;
 
-  const defs = useQuery({ queryKey: ["facetDefs", "logs"], queryFn: () => api.facetDefs("logs") });
+  const defs = useQuery({
+    queryKey: ["facetDefs", "logs"],
+    queryFn: () => api.facetDefs("logs"),
+  });
   const keys: KeyHint[] = useMemo(() => {
-    const out: KeyHint[] = [...LOG_CORE_FACETS.map((f) => ({ path: f.path, name: f.name })), { path: "trace_id", name: "Trace ID" }];
-    for (const d of defs.data ?? []) if (!out.some((k) => k.path === d.path)) out.push({ path: d.path, name: d.name });
+    const out: KeyHint[] = [
+      ...LOG_CORE_FACETS.map((f) => ({ path: f.path, name: f.name })),
+      { path: "trace_id", name: "Trace ID" },
+    ];
+    for (const d of defs.data ?? [])
+      if (!out.some((k) => k.path === d.path))
+        out.push({ path: d.path, name: d.name });
     const seen = new Set<string>();
     for (const l of logs.slice(0, 200)) attributePaths(l.attributes, [], seen);
-    for (const t of logs.slice(0, 200).flatMap((l) => l.tags)) seen.add(t.split(":")[0]);
-    for (const p of [...seen].sort()) if (!out.some((k) => k.path === p)) out.push({ path: p, name: p.startsWith("@") ? "attribute" : "tag" });
+    for (const t of logs.slice(0, 200).flatMap((l) => l.tags))
+      seen.add(t.split(":")[0]);
+    for (const p of [...seen].sort())
+      if (!out.some((k) => k.path === p))
+        out.push({ path: p, name: p.startsWith("@") ? "attribute" : "tag" });
     return out;
   }, [defs.data, logs]);
 
@@ -94,7 +148,8 @@ export function LogsExplorer() {
   const onScroll = () => {
     const el = wrap.current;
     if (!el || !list.hasNextPage || list.isFetchingNextPage) return;
-    if (el.scrollTop + el.clientHeight > el.scrollHeight - 400) list.fetchNextPage();
+    if (el.scrollTop + el.clientHeight > el.scrollHeight - 400)
+      list.fetchNextPage();
   };
 
   const index = logs.findIndex((l) => l.id === selectedId);
@@ -117,7 +172,8 @@ export function LogsExplorer() {
 
   const statuses = useMemo(() => {
     const present = new Set<string>();
-    for (const b of histogram.data?.buckets ?? []) for (const k of Object.keys(b.counts)) present.add(k);
+    for (const b of histogram.data?.buckets ?? [])
+      for (const k of Object.keys(b.counts)) present.add(k);
     return STATUS_ORDER.filter((s) => present.has(s));
   }, [histogram.data]);
 
@@ -127,27 +183,56 @@ export function LogsExplorer() {
         <TimePicker time={time} />
       </PageHeader>
       <div className="searchbar-row">
-        <SearchBar value={query} onSubmit={setQuery} dataset="logs" scope={time} keys={keys} error={error} placeholder="Search for logs: service:web-store status:error @http.status_code:>=500" />
+        <SavedViews page="logs" />
+        <SearchBar
+          value={query}
+          onSubmit={setQuery}
+          dataset="logs"
+          scope={time}
+          keys={keys}
+          error={error}
+          placeholder="Search for logs: service:web-store status:error @http.status_code:>=500"
+        />
       </div>
       <div className="explorer">
-        <FacetPanel dataset="logs" query={query} setQuery={setQuery} from={time.from} to={time.to} core={LOG_CORE_FACETS} />
+        <FacetPanel
+          dataset="logs"
+          query={query}
+          setQuery={setQuery}
+          from={time.from}
+          to={time.to}
+          core={LOG_CORE_FACETS}
+        />
         <div className="content">
-          <div className="histogram">
-            {histogram.data && (
-              <TimeChart
-                times={histogram.data.buckets.map((b) => b.t)}
-                interval={histogram.data.interval_ms}
-                from={time.from}
-                to={time.to}
-                height={92}
-                series={statuses.map((s) => ({ key: s, color: statusColor(s), values: histogram.data!.buckets.map((b) => b.counts[s] ?? 0) }))}
-                onZoom={time.setAbsolute}
-              />
-            )}
-            {!histogram.data && <div style={{ height: 92 }} />}
-          </div>
+          {listing && (
+            <div className="histogram">
+              {histogram.data && (
+                <TimeChart
+                  times={histogram.data.buckets.map((b) => b.t)}
+                  interval={histogram.data.interval_ms}
+                  from={time.from}
+                  to={time.to}
+                  height={92}
+                  series={statuses.map((s) => ({
+                    key: s,
+                    color: statusColor(s),
+                    values: histogram.data!.buckets.map(
+                      (b) => b.counts[s] ?? 0,
+                    ),
+                  }))}
+                  onZoom={time.setAbsolute}
+                />
+              )}
+              {!histogram.data && <div style={{ height: 92 }} />}
+            </div>
+          )}
           <div className="toolbar">
-            {total !== null ? (
+            <VizPicker
+              viz={viz.viz}
+              options={["list", "patterns", "timeseries", "toplist", "table"]}
+              onChange={(v) => viz.set({ viz: v === "list" ? null : v })}
+            />
+            {!listing ? null : total !== null ? (
               <span>
                 <strong>{thousands(total)}</strong> logs found
               </span>
@@ -156,53 +241,89 @@ export function LogsExplorer() {
             )}
             {list.isFetching && <span className="spinner" />}
             <div className="spacer" />
-            <span className="faint">Click a log for details · ↑/↓ to move</span>
-          </div>
-          <div className="table-wrap" ref={wrap} onScroll={onScroll}>
-            <table className="list">
-              <colgroup>
-                <col style={{ width: 6 }} />
-                <col style={{ width: 172 }} />
-                <col style={{ width: 170 }} />
-                <col style={{ width: 150 }} />
-                <col />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th />
-                  <th>Date</th>
-                  <th>Host</th>
-                  <th>Service</th>
-                  <th>Content</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((l) => (
-                  <tr key={l.id} className={l.id === selectedId ? "selected" : undefined} onClick={() => select(l.id)}>
-                    <td className="status-cell">
-                      <span className="status-bar" style={{ background: statusColor(l.status) }} />
-                    </td>
-                    <td className="date">{logDate(l.timestamp)}</td>
-                    <td>{l.host ?? <span className="faint">—</span>}</td>
-                    <td>
-                      <ServiceChip name={l.service} />
-                    </td>
-                    <td className="content-cell" title={logContent(l)}>
-                      {logContent(l)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!list.isLoading && logs.length === 0 && (
-              <div className="empty-state">
-                <h3>No logs match this query</h3>
-                Widen the time range, or remove a filter.
-              </div>
+            {listing && (
+              <span className="faint">
+                Click a log for details · ↑/↓ to move
+              </span>
             )}
-            {list.isFetchingNextPage && <div className="list-footer">Loading more…</div>}
-            {!list.hasNextPage && logs.length > 0 && <div className="list-footer">End of results</div>}
           </div>
+          {viz.viz === "patterns" && (
+            <PatternsView
+              scope={scope}
+              onOpen={(q) => {
+                setQuery(q);
+                viz.set({ viz: null });
+              }}
+            />
+          )}
+          {!listing && viz.viz !== "patterns" && (
+            <AnalyticsView
+              dataset="logs"
+              scope={scope}
+              keys={keys}
+              v={viz}
+              onZoom={time.setAbsolute}
+              onFilter={(f, val) => setQuery(addClause(query, f, val))}
+            />
+          )}
+          {listing && (
+            <div className="table-wrap" ref={wrap} onScroll={onScroll}>
+              <table className="list">
+                <colgroup>
+                  <col style={{ width: 6 }} />
+                  <col style={{ width: 172 }} />
+                  <col style={{ width: 170 }} />
+                  <col style={{ width: 150 }} />
+                  <col />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th />
+                    <th>Date</th>
+                    <th>Host</th>
+                    <th>Service</th>
+                    <th>Content</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((l) => (
+                    <tr
+                      key={l.id}
+                      className={l.id === selectedId ? "selected" : undefined}
+                      onClick={() => select(l.id)}
+                    >
+                      <td className="status-cell">
+                        <span
+                          className="status-bar"
+                          style={{ background: statusColor(l.status) }}
+                        />
+                      </td>
+                      <td className="date">{logDate(l.timestamp)}</td>
+                      <td>{l.host ?? <span className="faint">—</span>}</td>
+                      <td>
+                        <ServiceChip name={l.service} />
+                      </td>
+                      <td className="content-cell" title={logContent(l)}>
+                        {logContent(l)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!list.isLoading && logs.length === 0 && (
+                <div className="empty-state">
+                  <h3>No logs match this query</h3>
+                  Widen the time range, or remove a filter.
+                </div>
+              )}
+              {list.isFetchingNextPage && (
+                <div className="list-footer">Loading more…</div>
+              )}
+              {!list.hasNextPage && logs.length > 0 && (
+                <div className="list-footer">End of results</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {selectedId && (
@@ -213,7 +334,11 @@ export function LogsExplorer() {
           setQuery={setQuery}
           onClose={() => select(null)}
           onPrev={index > 0 ? () => select(logs[index - 1].id) : undefined}
-          onNext={index >= 0 && index < logs.length - 1 ? () => select(logs[index + 1].id) : undefined}
+          onNext={
+            index >= 0 && index < logs.length - 1
+              ? () => select(logs[index + 1].id)
+              : undefined
+          }
         />
       )}
     </>
@@ -237,28 +362,50 @@ export function LogPanel({
   onPrev?: () => void;
   onNext?: () => void;
 }) {
-  const fetched = useQuery({ queryKey: ["log", id], queryFn: () => api.log(id), enabled: !initial });
+  const fetched = useQuery({
+    queryKey: ["log", id],
+    queryFn: () => api.log(id),
+    enabled: !initial,
+  });
   const log = initial ?? fetched.data;
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [menu, setMenu] = useState<{ at: { x: number; y: number }; action: ValueAction } | null>(null);
+  const [menu, setMenu] = useState<{
+    at: { x: number; y: number };
+    action: ValueAction;
+  } | null>(null);
   const [facetPath, setFacetPath] = useState<string | null>(null);
-  const defs = useQuery({ queryKey: ["facetDefs", "logs"], queryFn: () => api.facetDefs("logs") });
+  const defs = useQuery({
+    queryKey: ["facetDefs", "logs"],
+    queryFn: () => api.facetDefs("logs"),
+  });
   const facetSet = new Set((defs.data ?? []).map((d) => d.path));
 
-  const filter = (a: ValueAction) => setQuery(addClause(query, a.path, a.value));
-  const exclude = (a: ValueAction) => setQuery(addClause(query, a.path, a.value, true));
+  const filter = (a: ValueAction) =>
+    setQuery(addClause(query, a.path, a.value));
+  const exclude = (a: ValueAction) =>
+    setQuery(addClause(query, a.path, a.value, true));
 
   const openTrace = () => {
     if (!log?.trace_id) return;
     const from = log.timestamp - 15 * 60_000;
     const to = log.timestamp + 15 * 60_000;
-    navigate(`/apm/traces?query=${encodeURIComponent(`trace_id:${log.trace_id}`)}&from_ts=${from}&to_ts=${to}&live=false&trace=${log.trace_id}${log.span_id ? `&span=${log.span_id}` : ""}`);
+    navigate(
+      `/apm/traces?query=${encodeURIComponent(`trace_id:${log.trace_id}`)}&from_ts=${from}&to_ts=${to}&live=false&trace=${log.trace_id}${log.span_id ? `&span=${log.span_id}` : ""}`,
+    );
   };
 
   const field = (path: string, value: string | null) =>
     value ? (
-      <span className="json-value" onClick={(e) => setMenu({ at: { x: e.clientX, y: e.clientY }, action: { path, value } })}>
+      <span
+        className="json-value"
+        onClick={(e) =>
+          setMenu({
+            at: { x: e.clientX, y: e.clientY },
+            action: { path, value },
+          })
+        }
+      >
         {value}
       </span>
     ) : (
@@ -276,10 +423,20 @@ export function LogPanel({
             <ServiceChip name={log.service} />
             <span className="muted">{fullDate(log.timestamp)}</span>
             <div className="btn-group" style={{ marginLeft: 8 }}>
-              <button className="btn icon" disabled={!onPrev} onClick={onPrev} title="Previous log (↑)">
+              <button
+                className="btn icon"
+                disabled={!onPrev}
+                onClick={onPrev}
+                title="Previous log (↑)"
+              >
                 <ChevronUp />
               </button>
-              <button className="btn icon" disabled={!onNext} onClick={onNext} title="Next log (↓)">
+              <button
+                className="btn icon"
+                disabled={!onNext}
+                onClick={onNext}
+                title="Next log (↓)"
+              >
                 <ChevronDown />
               </button>
             </div>
@@ -305,14 +462,20 @@ export function LogPanel({
               <dd className="mono">{field("trace_id", log.trace_id)}</dd>
             </dl>
             {log.trace_id && (
-              <button className="btn" style={{ marginTop: 12 }} onClick={openTrace}>
+              <button
+                className="btn"
+                style={{ marginTop: 12 }}
+                onClick={openTrace}
+              >
                 <TraceIcon /> View Trace
               </button>
             )}
           </div>
           <div className="panel-section">
             <h4>Message</h4>
-            <div className="message-box">{log.message || <span className="faint">(no message)</span>}</div>
+            <div className="message-box">
+              {log.message || <span className="faint">(no message)</span>}
+            </div>
           </div>
           <div className="panel-section">
             <h4>Tags</h4>
@@ -320,9 +483,19 @@ export function LogPanel({
             <div>
               {log.tags.map((t) => {
                 const i = t.indexOf(":");
-                const action = i > 0 ? { path: t.slice(0, i), value: t.slice(i + 1) } : { path: t, value: "" };
+                const action =
+                  i > 0
+                    ? { path: t.slice(0, i), value: t.slice(i + 1) }
+                    : { path: t, value: "" };
                 return (
-                  <span key={t} className="tag" title={t} onClick={(e) => setMenu({ at: { x: e.clientX, y: e.clientY }, action })}>
+                  <span
+                    key={t}
+                    className="tag"
+                    title={t}
+                    onClick={(e) =>
+                      setMenu({ at: { x: e.clientX, y: e.clientY }, action })
+                    }
+                  >
                     {t}
                   </span>
                 );
@@ -334,7 +507,12 @@ export function LogPanel({
             <JsonTree
               data={log.attributes}
               facets={facetSet}
-              onValue={(path, value, e) => setMenu({ at: { x: e.clientX, y: e.clientY }, action: { path: `@${path.join(".")}`, value } })}
+              onValue={(path, value, e) =>
+                setMenu({
+                  at: { x: e.clientX, y: e.clientY },
+                  action: { path: `@${path.join(".")}`, value },
+                })
+              }
             />
           </div>
           {facetPath && (
@@ -359,7 +537,11 @@ export function LogPanel({
           onClose={() => setMenu(null)}
           onFilter={filter}
           onExclude={exclude}
-          onAddFacet={menu.action.path.startsWith("@") && !facetSet.has(menu.action.path) ? setFacetPath : undefined}
+          onAddFacet={
+            menu.action.path.startsWith("@") && !facetSet.has(menu.action.path)
+              ? setFacetPath
+              : undefined
+          }
         />
       )}
     </SidePanel>

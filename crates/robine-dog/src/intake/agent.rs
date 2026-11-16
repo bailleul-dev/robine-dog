@@ -415,7 +415,11 @@ pub mod idx {
                     kv.key_values
                         .iter()
                         .map(|k| {
-                            let v = k.value.as_ref().map(|v| self.json(v)).unwrap_or(Value::Null);
+                            let v = k
+                                .value
+                                .as_ref()
+                                .map(|v| self.json(v))
+                                .unwrap_or(Value::Null);
                             (self.get(k.key), v)
                         })
                         .collect(),
@@ -695,7 +699,11 @@ pub fn sketch_points(p: SketchPayload) -> (Vec<Point>, Vec<String>) {
                     metric: s.metric.clone(),
                     host: host.clone(),
                     tags: tags.clone(),
-                    value: if d.min <= d.max { v.clamp(d.min, d.max) } else { v },
+                    value: if d.min <= d.max {
+                        v.clamp(d.min, d.max)
+                    } else {
+                        v
+                    },
                     weight: n as f64,
                 });
             }
@@ -814,9 +822,20 @@ mod tests {
     #[test]
     fn decodes_the_indexed_trace_format() {
         use idx::{Any, AnyValue};
-        let strings: Vec<String> = ["", "web", "http.request", "GET /", "prod", "h1", "http.status_code", "500", "_top_level", "1.4.0"]
-            .map(String::from)
-            .to_vec();
+        let strings: Vec<String> = [
+            "",
+            "web",
+            "http.request",
+            "GET /",
+            "prod",
+            "h1",
+            "http.status_code",
+            "500",
+            "_top_level",
+            "1.4.0",
+        ]
+        .map(String::from)
+        .to_vec();
         let attr = |v| AnyValue { value: Some(v) };
         let span = idx::Span {
             service_ref: 1,
@@ -854,7 +873,10 @@ mod tests {
         assert_eq!((s.service.as_str(), s.resource.as_str()), ("web", "GET /"));
         assert_eq!(s.trace_id, "42");
         assert_eq!(s.meta["_dd.p.tid"], "0000000000000001");
-        assert_eq!((s.env.as_deref(), s.version.as_deref()), (Some("prod"), Some("1.4.0")));
+        assert_eq!(
+            (s.env.as_deref(), s.version.as_deref()),
+            (Some("prod"), Some("1.4.0"))
+        );
         assert_eq!(s.meta["http.status_code"], "500");
         assert_eq!(s.meta["span.kind"], "server");
         assert_eq!(s.meta["_dd.hostname"], "h1");
@@ -914,7 +936,10 @@ mod tests {
         let (points, names) = sketch_points(payload);
         assert_eq!(names, vec!["req.latency"]);
         assert_eq!(points.len(), 2);
-        assert_eq!((points[0].value, points[0].weight, points[0].ts), (1.0, 3.0, 10_000));
+        assert_eq!(
+            (points[0].value, points[0].weight, points[0].ts),
+            (1.0, 3.0, 10_000)
+        );
         assert_eq!(points[1].value, 2.0);
     }
 }

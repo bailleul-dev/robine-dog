@@ -20,7 +20,12 @@ fn from_doc(d: crate::store::pg::Doc) -> Option<PipelineDef> {
 }
 
 pub async fn stored(pg: &Pg) -> anyhow::Result<Vec<PipelineDef>> {
-    Ok(pg.docs(KIND).await?.into_iter().filter_map(from_doc).collect())
+    Ok(pg
+        .docs(KIND)
+        .await?
+        .into_iter()
+        .filter_map(from_doc)
+        .collect())
 }
 
 /// Installs the integration pipelines missing, and refreshes the read-only
@@ -70,13 +75,20 @@ async fn save(st: &AppState, id: &str, mut p: PipelineDef) -> Result<PipelineDef
     let doc = st
         .store
         .pg
-        .put_doc(KIND, id, &serde_json::to_value(&p).map_err(anyhow::Error::from)?)
+        .put_doc(
+            KIND,
+            id,
+            &serde_json::to_value(&p).map_err(anyhow::Error::from)?,
+        )
         .await?;
     reload(st).await?;
     from_doc(doc).ok_or_else(|| ApiError::Internal(anyhow::anyhow!("unreadable pipeline")))
 }
 
-pub async fn create(State(st): State<AppState>, Json(mut p): Json<PipelineDef>) -> ApiResult<PipelineDef> {
+pub async fn create(
+    State(st): State<AppState>,
+    Json(mut p): Json<PipelineDef>,
+) -> ApiResult<PipelineDef> {
     p.is_read_only = false;
     Ok(Json(save(&st, &new_id(), p).await?))
 }
@@ -102,7 +114,10 @@ pub async fn update(
     Ok(Json(save(&st, &id, p).await?))
 }
 
-pub async fn delete(State(st): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, ApiError> {
+pub async fn delete(
+    State(st): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
     let current = st
         .store
         .pg

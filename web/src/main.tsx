@@ -9,7 +9,12 @@ import { LiveTail } from "./pages/LiveTail";
 import { Login } from "./pages/Login";
 import { LogsExplorer } from "./pages/LogsExplorer";
 import { MetricsExplorer, MetricsSummary } from "./pages/Metrics";
+import { DashboardList, DashboardPage } from "./pages/Dashboards";
+import { ErrorTracking, IssuePage } from "./pages/ErrorTracking";
+import { ManageMonitors, MonitorEditor, MonitorPage, TriggeredMonitors, Webhooks } from "./pages/Monitors";
+import { GenerateMetrics } from "./pages/GenerateMetrics";
 import { Pipelines } from "./pages/Pipelines";
+import { ServiceMap } from "./pages/ServiceMap";
 import { TraceExplorer } from "./pages/TraceExplorer";
 import "./styles.css";
 
@@ -43,9 +48,24 @@ function App() {
         <Route path="/logs" element={<LogsExplorer />} />
         <Route path="/logs/livetail" element={<LiveTail />} />
         <Route path="/logs/pipelines" element={<Pipelines />} />
+        <Route path="/logs/generate-metrics" element={<GenerateMetrics source="logs" key="logs" />} />
+        <Route path="/apm/generate-metrics" element={<GenerateMetrics source="spans" key="spans" />} />
+        <Route path="/dashboard" element={<Navigate to="/dashboard/lists" replace />} />
+        <Route path="/dashboard/lists" element={<DashboardList />} />
+        <Route path="/dashboard/:id/:slug?" element={<DashboardPage key="dash" />} />
+        <Route path="/error-tracking" element={<ErrorTracking />} />
+        <Route path="/error-tracking/issue/:id" element={<IssuePage />} />
+        <Route path="/monitors" element={<Navigate to="/monitors/manage" replace />} />
+        <Route path="/monitors/manage" element={<ManageMonitors />} />
+        <Route path="/monitors/triggered" element={<TriggeredMonitors />} />
+        <Route path="/monitors/webhooks" element={<Webhooks />} />
+        <Route path="/monitors/create" element={<MonitorEditor key="create" />} />
+        <Route path="/monitors/:id" element={<MonitorPage />} />
+        <Route path="/monitors/:id/edit" element={<MonitorEditor key="edit" />} />
         <Route path="/apm/services" element={<ServiceCatalog />} />
         <Route path="/apm/services/:name" element={<ServicePage />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
+        <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/metrics" element={<Navigate to="/metrics/explorer" replace />} />
         <Route path="/metrics/explorer" element={<MetricsExplorer />} />
         <Route path="/metrics/summary" element={<MetricsSummary />} />

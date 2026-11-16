@@ -80,7 +80,7 @@ impl Node {
         self.error = true;
         self.meta.push(("error.type", kind.to_string()));
         self.meta.push(("error.message", msg.to_string()));
-        self.meta.push(("error.stack", format!("{kind}: {msg}\n  at handler (app/handlers.py:142)\n  at dispatch (framework/core.py:88)")));
+        self.meta.push(("error.stack", stack(kind, msg)));
         self
     }
     fn log(mut self, status: &'static str, message: impl Into<String>, attrs: Value) -> Self {
@@ -90,6 +90,44 @@ impl Node {
             attrs,
         });
         self
+    }
+}
+
+/// A stack trace in the style of the error's language.
+fn stack(kind: &str, msg: &str) -> String {
+    if kind.starts_with("com.") || kind.starts_with("java.") {
+        let (class, file) = if kind.contains("SocketTimeout") {
+            (
+                "com.shop.payments.stripe.StripeClient.charge",
+                "StripeClient.java:211",
+            )
+        } else {
+            (
+                "com.shop.payments.PaymentService.authorize",
+                "PaymentService.java:148",
+            )
+        };
+        format!(
+            "{kind}: {msg}\n\tat {class}({file})\n\tat com.shop.payments.PaymentController.pay(PaymentController.java:87)\n\tat org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:897)\n\tat jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)"
+        )
+    } else if kind.starts_with("context.") || kind.starts_with("upstream.") {
+        let (func, file) = if kind.starts_with("context.") {
+            ("main.(*Syncer).fetchShipments", "/app/sync.go:118")
+        } else {
+            ("shop/api.(*PaymentClient).Pay", "/app/api/payments.go:73")
+        };
+        format!(
+            "{kind}: {msg}\n\ngoroutine 42 [running]:\n{func}(...)\n\t{file} +0x1c5\nshop/api.(*Server).handle(...)\n\t/app/api/server.go:64 +0x8a"
+        )
+    } else {
+        let (file, line, func) = if kind.starts_with("psycopg2") {
+            ("/app/catalog/repository.py", 57, "search_products")
+        } else {
+            ("/app/store/checkout.py", 142, "place_order")
+        };
+        format!(
+            "Traceback (most recent call last):\n  File \"{file}\", line {line}, in {func}\n    return self.client.execute(query)\n  File \"/usr/lib/python3.12/site-packages/app/http.py\", line 88, in execute\n    raise err\n{kind}: {msg}"
+        )
     }
 }
 
@@ -708,7 +746,11 @@ fn noise_logs(rng: &mut impl Rng, ts_ms: i64, env: &str, out: &mut Out) {
     let (service, source, host, status, message) = if r < 0.3 {
         // Raw nginx lines, as the Agent tails them: the Nginx integration
         // pipeline parses them (status, URL, user agent, date).
-        let ip = format!("10.0.{}.{}", rng.random_range(0..255), rng.random_range(1..255));
+        let ip = format!(
+            "10.0.{}.{}",
+            rng.random_range(0..255),
+            rng.random_range(1..255)
+        );
         let date = time::OffsetDateTime::from_unix_timestamp(ts_ms / 1000)
             .unwrap_or(time::OffsetDateTime::UNIX_EPOCH)
             .format(time::macros::format_description!(
@@ -728,12 +770,27 @@ fn noise_logs(rng: &mut impl Rng, ts_ms: i64, env: &str, out: &mut Out) {
             )
         } else {
             let (path, code, bytes) = match rng.random_range(0..10) {
-                0..=3 => (format!("/static/app.{}.js", rng.random_range(1000..9999)), 200, 48211),
+                0..=3 => (
+                    format!("/static/app.{}.js", rng.random_range(1000..9999)),
+                    200,
+                    48211,
+                ),
                 4 => ("/static/logo.svg".to_string(), 304, 0),
-                5 | 6 => (format!("/products/{}", ["espresso-machine", "milk-jug", "scale-v2"][rng.random_range(0..3)]), 200, 18_342),
+                5 | 6 => (
+                    format!(
+                        "/products/{}",
+                        ["espresso-machine", "milk-jug", "scale-v2"][rng.random_range(0..3)]
+                    ),
+                    200,
+                    18_342,
+                ),
                 7 => ("/api/cart?u=u-1042".to_string(), 200, 912),
                 8 => ("/wp-login.php".to_string(), 404, 153),
-                _ => ("/api/orders".to_string(), if rng.random_bool(0.2) { 502 } else { 201 }, 211),
+                _ => (
+                    "/api/orders".to_string(),
+                    if rng.random_bool(0.2) { 502 } else { 201 },
+                    211,
+                ),
             };
             let ua = [
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -742,7 +799,11 @@ fn noise_logs(rng: &mut impl Rng, ts_ms: i64, env: &str, out: &mut Out) {
                 "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
                 "kube-probe/1.31",
             ][rng.random_range(0..5)];
-            let method = if path.starts_with("/api/orders") { "POST" } else { "GET" };
+            let method = if path.starts_with("/api/orders") {
+                "POST"
+            } else {
+                "GET"
+            };
             format!("{ip} - - [{date}] \"{method} {path} HTTP/1.1\" {code} {bytes} \"-\" \"{ua}\"")
         };
         ("nginx", "nginx", "edge-lb-01", "info", message)
@@ -872,7 +933,11 @@ impl Statsd {
     /// `backfill`: points carry their timestamp (`|T`), which the Agent only
     /// honors for gauges and counts; live points are sent untimestamped.
     fn tick(&self, rng: &mut impl Rng, ts_s: i64, backfill: bool) {
-        let t = if backfill { format!("|T{ts_s}") } else { String::new() };
+        let t = if backfill {
+            format!("|T{ts_s}")
+        } else {
+            String::new()
+        };
         let mut lines = Vec::new();
         let hour = (ts_s / 3600) % 24;
         let load = 0.6 + 0.4 * ((ts_s as f64 / 900.0).sin().abs());

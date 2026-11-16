@@ -12,6 +12,7 @@ mod auth;
 mod config;
 mod intake;
 mod metrics;
+mod monitors;
 mod pipelines;
 mod query;
 mod store;
@@ -28,6 +29,7 @@ pub struct AppState {
     pub store: Arc<store::Store>,
     pub aggregator: Arc<metrics::Aggregator>,
     pub pipelines: Arc<pipelines::Pipelines>,
+    pub generated: Arc<metrics::generated::Generated>,
     pub cfg: Arc<config::Config>,
     pub auth: Arc<auth::Auth>,
 }
@@ -47,6 +49,81 @@ fn ui_api(st: AppState) -> Router<AppState> {
         .route("/apm/services", get(api::apm::services))
         .route("/apm/services/{name}", get(api::apm::service))
         .route("/apm/envs", get(api::apm::envs))
+        .route("/apm/map", get(api::apm::map))
+        .route(
+            "/monitors",
+            get(api::monitors::list).post(api::monitors::create),
+        )
+        .route("/monitors/validate", post(api::monitors::validate))
+        .route("/monitors/preview", post(api::monitors::preview))
+        .route("/monitors/events", get(api::monitors::all_events))
+        .route(
+            "/monitors/{id}",
+            get(api::monitors::get)
+                .put(api::monitors::update)
+                .delete(api::monitors::delete),
+        )
+        .route("/monitors/{id}/mute", post(api::monitors::mute))
+        .route("/monitors/{id}/unmute", post(api::monitors::unmute))
+        .route("/monitors/{id}/events", get(api::monitors::events))
+        .route("/monitors/{id}/history", get(api::monitors::history))
+        .route(
+            "/webhooks",
+            get(api::monitors::webhooks).post(api::monitors::create_webhook),
+        )
+        .route(
+            "/webhooks/{name}",
+            get(api::monitors::webhook)
+                .put(api::monitors::update_webhook)
+                .delete(api::monitors::delete_webhook),
+        )
+        .route("/webhooks/{name}/test", post(api::monitors::test_webhook))
+        .route("/logs/aggregate", post(api::analytics::logs))
+        .route("/logs/patterns", post(api::patterns::patterns))
+        .route("/spans/aggregate", post(api::analytics::spans))
+        .route("/views", get(api::views::list).post(api::views::create))
+        .route(
+            "/views/{id}",
+            axum::routing::put(api::views::update).delete(api::views::delete),
+        )
+        .route(
+            "/logs/config/metrics",
+            get(api::generated_metrics::logs_list).post(api::generated_metrics::logs_create),
+        )
+        .route(
+            "/logs/config/metrics/{id}",
+            get(api::generated_metrics::logs_get)
+                .patch(api::generated_metrics::logs_update)
+                .delete(api::generated_metrics::logs_delete),
+        )
+        .route(
+            "/apm/config/metrics",
+            get(api::generated_metrics::spans_list).post(api::generated_metrics::spans_create),
+        )
+        .route(
+            "/apm/config/metrics/{id}",
+            get(api::generated_metrics::spans_get)
+                .patch(api::generated_metrics::spans_update)
+                .delete(api::generated_metrics::spans_delete),
+        )
+        .route("/errors/issues", post(api::errors::issues))
+        .route(
+            "/errors/issues/{id}",
+            get(api::errors::issue).put(api::errors::set_status),
+        )
+        .route("/query/timeseries", post(api::query::timeseries))
+        .route("/query/scalar", post(api::query::scalar))
+        .route(
+            "/dashboards",
+            get(api::dashboards::list).post(api::dashboards::create),
+        )
+        .route(
+            "/dashboards/{id}",
+            get(api::dashboards::get)
+                .put(api::dashboards::update)
+                .delete(api::dashboards::delete),
+        )
+        .route("/dashboards/{id}/clone", post(api::dashboards::clone))
         .route(
             "/pipelines",
             get(api::pipelines::list).post(api::pipelines::create),
@@ -86,6 +163,69 @@ fn public_api(st: AppState) -> Router<AppState> {
                 .delete(api::pipelines::delete),
         )
         .route(
+            "/api/v1/monitor",
+            get(api::monitors::list).post(api::monitors::create),
+        )
+        .route("/api/v1/monitor/validate", post(api::monitors::validate))
+        .route(
+            "/api/v1/monitor/{id}",
+            get(api::monitors::get)
+                .put(api::monitors::update)
+                .delete(api::monitors::delete),
+        )
+        .route("/api/v1/monitor/{id}/mute", post(api::monitors::mute))
+        .route("/api/v1/monitor/{id}/unmute", post(api::monitors::unmute))
+        .route(
+            "/api/v1/integration/webhooks/configuration/webhooks",
+            post(api::monitors::create_webhook),
+        )
+        .route(
+            "/api/v1/integration/webhooks/configuration/webhooks/{name}",
+            get(api::monitors::webhook)
+                .put(api::monitors::update_webhook)
+                .delete(api::monitors::delete_webhook),
+        )
+        .route(
+            "/api/v2/logs/config/metrics",
+            get(api::generated_metrics::logs_list).post(api::generated_metrics::logs_create),
+        )
+        .route(
+            "/api/v2/logs/config/metrics/{id}",
+            get(api::generated_metrics::logs_get)
+                .patch(api::generated_metrics::logs_update)
+                .delete(api::generated_metrics::logs_delete),
+        )
+        .route(
+            "/api/v2/apm/config/metrics",
+            get(api::generated_metrics::spans_list).post(api::generated_metrics::spans_create),
+        )
+        .route(
+            "/api/v2/apm/config/metrics/{id}",
+            get(api::generated_metrics::spans_get)
+                .patch(api::generated_metrics::spans_update)
+                .delete(api::generated_metrics::spans_delete),
+        )
+        .route("/api/v2/query/timeseries", post(api::query::timeseries))
+        .route("/api/v2/query/scalar", post(api::query::scalar))
+        .route(
+            "/api/v1/dashboard",
+            get(api::dashboards::list).post(api::dashboards::create),
+        )
+        .route(
+            "/api/v1/dashboard/{id}",
+            get(api::dashboards::get)
+                .put(api::dashboards::update)
+                .delete(api::dashboards::delete),
+        )
+        .route(
+            "/api/v2/logs/analytics/aggregate",
+            post(api::analytics::logs),
+        )
+        .route(
+            "/api/v2/spans/analytics/aggregate",
+            post(api::analytics::spans_public),
+        )
+        .route(
             "/api/v1/logs/config/pipeline-order",
             get(api::pipelines::order).put(api::pipelines::set_order),
         )
@@ -102,6 +242,9 @@ fn app(st: AppState) -> Router {
         .route("/api/v2/logs", post(intake::logs::intake))
         .route("/v1/input", post(intake::logs::intake))
         .route("/v1/input/{key}", post(intake::logs::intake))
+        .route("/v1/traces", post(intake::otlp::traces_handler))
+        .route("/v1/logs", post(intake::otlp::logs_handler))
+        .route("/v1/metrics", post(intake::otlp::metrics_handler))
         .route("/api/v1/series", post(intake::series::v1))
         .route("/api/v2/series", post(intake::series::v2))
         .route("/api/v1/validate", get(intake::series::validate))
@@ -182,9 +325,18 @@ async fn main() -> anyhow::Result<()> {
         store: store.clone(),
         aggregator: aggregator.clone(),
         pipelines,
+        generated: Arc::new(metrics::generated::Generated::default()),
         cfg: cfg.clone(),
         auth: Arc::new(auth::Auth::new()),
     };
+    if let Err(e) = api::dashboards::ensure_default(&st).await {
+        tracing::warn!(error = %e, "could not install the default dashboard");
+    }
+    intake::otlp::init();
+    if let Err(e) = api::generated_metrics::reload(&st).await {
+        tracing::warn!(error = %e, "could not load the generated metrics");
+    }
+    monitors::spawn(st.clone());
     if cfg.auth_disabled {
         tracing::warn!(
             "authentication is DISABLED (ROBINE_DOG_AUTH=disabled): loopback development only"
