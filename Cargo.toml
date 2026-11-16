@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = ["crates/robine-dog", "crates/robine-dog-demo"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+authors = ["Guillaume Bailleul"]
+
+[profile.release]
+strip = true
+lto = "thin"

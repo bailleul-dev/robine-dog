@@ -1,0 +1,12 @@
+# Entries for `robine_id_applications` in silo01
+# (inventory/production/group_vars/all.yml), then `make robine-id` there.
+# robine-dog authenticates with client_secret_post, PKCE S256 and a nonce, and
+# checks the ID token's RS256 signature against the JWKS.
+- id: robine-dog
+  name: robine-dog
+  redirect_uris: ["https://dog.bailleul.dev/auth/callback"]
+  secret_env: ROBINE_DOG_OIDC_CLIENT_SECRET
+- id: robine-dog-dev
+  name: robine-dog (dev)
+  redirect_uris: ["http://localhost:5173/auth/callback"]
+  secret_env: ROBINE_DOG_DEV_OIDC_CLIENT_SECRET
