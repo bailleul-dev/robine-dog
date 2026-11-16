@@ -1,10 +1,10 @@
 use super::logs::{Bucket, fill};
-use super::{ApiError, ApiResult, Scope, compile, interval_ms};
+use super::{ApiError, ApiResult, Scope, compile, interval_ms, time_clause};
 use crate::AppState;
 use crate::query::sql::Dataset;
+use crate::store::greptime::{Row, bool_at, i64_at, json_at, lit, str_at};
 use axum::Json;
 use axum::extract::{Path, State};
-use rusqlite::types::Value as SqlValue;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -31,33 +31,27 @@ pub struct Span {
     pub metrics: Value,
 }
 
-const COLUMNS: &str = "id, trace_id, span_id, parent_id, service, name, resource, type, env, version, start, duration, error, top_level, meta, metrics";
+pub const COLUMNS: &str = "id, trace_id, span_id, parent_id, service, name, resource, type, env, version, CAST(ts AS BIGINT) AS start_ns, duration, error, top_level, meta, metrics";
 
-pub fn row(r: &rusqlite::Row) -> rusqlite::Result<Span> {
-    let meta: String = r.get(14)?;
-    let metrics: String = r.get(15)?;
-    Ok(Span {
-        id: r.get(0)?,
-        trace_id: r.get(1)?,
-        span_id: r.get(2)?,
-        parent_id: r.get(3)?,
-        service: r.get(4)?,
-        name: r.get(5)?,
-        resource: r.get(6)?,
-        typ: r.get(7)?,
-        env: r.get(8)?,
-        version: r.get(9)?,
-        start: r.get(10)?,
-        duration: r.get(11)?,
-        error: r.get(12)?,
-        top_level: r.get(13)?,
-        meta: serde_json::from_str(&meta).unwrap_or(Value::Null),
-        metrics: serde_json::from_str(&metrics).unwrap_or(Value::Null),
-    })
-}
-
-fn ns(ms: i64) -> i64 {
-    ms * 1_000_000
+pub fn row(r: &Row) -> Span {
+    Span {
+        id: i64_at(r, 0),
+        trace_id: str_at(r, 1).unwrap_or_default(),
+        span_id: str_at(r, 2).unwrap_or_default(),
+        parent_id: str_at(r, 3).unwrap_or_default(),
+        service: str_at(r, 4).unwrap_or_default(),
+        name: str_at(r, 5).unwrap_or_default(),
+        resource: str_at(r, 6).unwrap_or_default(),
+        typ: str_at(r, 7),
+        env: str_at(r, 8),
+        version: str_at(r, 9),
+        start: i64_at(r, 10),
+        duration: i64_at(r, 11),
+        error: bool_at(r, 12),
+        top_level: bool_at(r, 13),
+        meta: json_at(r, 14),
+        metrics: json_at(r, 15),
+    }
 }
 
 #[derive(Deserialize)]
@@ -82,67 +76,56 @@ pub async fn search(
     State(st): State<AppState>,
     Json(req): Json<SearchReq>,
 ) -> ApiResult<SearchResp> {
-    let f = compile(&req.scope.query, Dataset::Spans)?;
+    let filter = compile(&req.scope.query, Dataset::Spans)?;
     let limit = req.limit.unwrap_or(100).clamp(1, 1000);
     let by_duration = req.sort.as_deref() == Some("duration");
-    let out = st
-        .db
-        .read(move |c| {
-            let where_ = format!("start >= ? AND start <= ? AND {}", f.sql);
-            let mut params: Vec<SqlValue> = vec![
-                ns(req.scope.from).into(),
-                (ns(req.scope.to) + 999_999).into(),
-            ];
-            params.extend(f.params.iter().cloned());
-            let count_params = params.clone();
-            let mut sql = format!("SELECT {COLUMNS} FROM spans WHERE {where_}");
-            let mut offset = 0i64;
-            if by_duration {
-                offset = req
-                    .cursor
-                    .as_deref()
-                    .and_then(|c| c.parse().ok())
-                    .unwrap_or(0);
-                sql.push_str(" ORDER BY duration DESC LIMIT ? OFFSET ?");
-                params.extend([limit.into(), offset.into()]);
-            } else {
-                if let Some((t, id)) = req.cursor.as_deref().and_then(|c| c.split_once(':')) {
-                    sql.push_str(" AND (start < ? OR (start = ? AND id < ?))");
-                    let t: i64 = t.parse().unwrap_or(0);
-                    params.extend([t.into(), t.into(), id.parse::<i64>().unwrap_or(0).into()]);
-                }
-                sql.push_str(" ORDER BY start DESC, id DESC LIMIT ?");
-                params.push(limit.into());
-            }
-            let spans: Vec<Span> = c
-                .prepare(&sql)?
-                .query_map(rusqlite::params_from_iter(params), row)?
-                .collect::<Result<_, _>>()?;
-            let total = if req.cursor.is_none() {
-                Some(c.query_row(
-                    &format!("SELECT COUNT(*) FROM spans WHERE {where_}"),
-                    rusqlite::params_from_iter(count_params),
-                    |r| r.get(0),
-                )?)
-            } else {
-                None
-            };
-            let full = spans.len() as i64 == limit;
-            let next_cursor = if !full {
-                None
-            } else if by_duration {
-                Some((offset + limit).to_string())
-            } else {
-                spans.last().map(|s| format!("{}:{}", s.start, s.id))
-            };
-            Ok(SearchResp {
-                spans,
-                next_cursor,
-                total,
-            })
-        })
-        .await?;
-    Ok(Json(out))
+    let where_ = format!(
+        "{} AND {filter}",
+        time_clause(Dataset::Spans, req.scope.from, req.scope.to)
+    );
+    let mut sql = format!("SELECT {COLUMNS} FROM spans WHERE {where_}");
+    let mut offset = 0i64;
+    if by_duration {
+        offset = req
+            .cursor
+            .as_deref()
+            .and_then(|c| c.parse().ok())
+            .unwrap_or(0)
+            .max(0);
+        sql.push_str(&format!(
+            " ORDER BY duration DESC LIMIT {limit} OFFSET {offset}"
+        ));
+    } else {
+        if let Some((t, id)) = req.cursor.as_deref().and_then(|c| c.split_once(':')) {
+            let t: i64 = t.parse().unwrap_or(0);
+            let id: i64 = id.parse().unwrap_or(0);
+            sql.push_str(&format!(" AND (ts < {t} OR (ts = {t} AND id < {id}))"));
+        }
+        sql.push_str(&format!(" ORDER BY ts DESC, id DESC LIMIT {limit}"));
+    }
+    let count_sql = format!("SELECT count(*) FROM spans WHERE {where_}");
+    let want_total = req.cursor.is_none();
+    let (rows, total) = tokio::try_join!(st.store.gt.query(&sql), async {
+        if want_total {
+            Ok(Some(st.store.gt.query(&count_sql).await?))
+        } else {
+            Ok(None)
+        }
+    })?;
+    let spans: Vec<Span> = rows.iter().map(row).collect();
+    let full = spans.len() as i64 == limit;
+    let next_cursor = if !full {
+        None
+    } else if by_duration {
+        Some((offset + limit).to_string())
+    } else {
+        spans.last().map(|s| format!("{}:{}", s.start, s.id))
+    };
+    Ok(Json(SearchResp {
+        spans,
+        next_cursor,
+        total: total.and_then(|r| r.first().map(|r| i64_at(r, 0))),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -162,26 +145,29 @@ pub async fn histogram(
     State(st): State<AppState>,
     Json(req): Json<HistogramReq>,
 ) -> ApiResult<HistogramResp> {
-    let f = compile(&req.scope.query, Dataset::Spans)?;
+    let filter = compile(&req.scope.query, Dataset::Spans)?;
     let (from, to) = (req.scope.from, req.scope.to);
     let interval = interval_ms(from, to, req.buckets.unwrap_or(80));
     let rows = st
-        .db
-        .read(move |c| {
-            let sql = format!(
-                "SELECT ((start / 1000000) / ?) * ? AS b, CASE WHEN error THEN 'error' ELSE 'ok' END, COUNT(*)
-                 FROM spans WHERE start >= ? AND start <= ? AND {} GROUP BY 1, 2",
-                f.sql
-            );
-            let mut params: Vec<SqlValue> = vec![interval.into(), interval.into(), ns(from).into(), (ns(to) + 999_999).into()];
-            params.extend(f.params);
-            let rows: Vec<(i64, String, i64)> = c
-                .prepare(&sql)?
-                .query_map(rusqlite::params_from_iter(params), |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-                .collect::<Result<_, _>>()?;
-            Ok(rows)
-        })
+        .store
+        .gt
+        .query(&format!(
+            "SELECT CAST(date_bin(INTERVAL '{interval} milliseconds', ts) AS BIGINT) AS b,
+                    CASE WHEN error THEN 'error' ELSE 'ok' END AS s, count(*)
+             FROM spans WHERE {} AND {filter} GROUP BY b, s",
+            time_clause(Dataset::Spans, from, to)
+        ))
         .await?;
+    let rows = rows
+        .iter()
+        .map(|r| {
+            (
+                i64_at(r, 0) / 1_000_000,
+                str_at(r, 1).unwrap_or_default(),
+                i64_at(r, 2),
+            )
+        })
+        .collect();
     Ok(Json(HistogramResp {
         interval_ms: interval,
         buckets: fill(from, to, interval, rows),
@@ -198,19 +184,19 @@ pub async fn trace(
     State(st): State<AppState>,
     Path(trace_id): Path<String>,
 ) -> ApiResult<TraceResp> {
-    let id = trace_id.clone();
-    let spans = st
-        .db
-        .read(move |c| {
-            Ok(c.prepare(&format!(
-                "SELECT {COLUMNS} FROM spans WHERE trace_id = ? ORDER BY start, id"
-            ))?
-            .query_map([&id], row)?
-            .collect::<Result<Vec<_>, _>>()?)
-        })
+    let rows = st
+        .store
+        .gt
+        .query(&format!(
+            "SELECT {COLUMNS} FROM spans WHERE trace_id = {} ORDER BY ts, id",
+            lit(&trace_id)
+        ))
         .await?;
-    if spans.is_empty() {
+    if rows.is_empty() {
         return Err(ApiError::NotFound);
     }
-    Ok(Json(TraceResp { trace_id, spans }))
+    Ok(Json(TraceResp {
+        trace_id,
+        spans: rows.iter().map(row).collect(),
+    }))
 }

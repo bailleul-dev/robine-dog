@@ -70,6 +70,12 @@ export type ServiceDetail = {
   downstream: { service: string; calls: number; errors: number; avg: number }[];
 };
 
+export type MetricMeta = { name: string; type: string; unit: string | null; description: string | null; last_seen: number };
+export type MetricDetail = MetricMeta & { hosts: string[]; tags: Record<string, string[]>; series: number };
+export type MetricSeries = { query_index: number; group: Record<string, string>; points: [number, number][] };
+export type MetricQueryResult = { query: string; metric: string | null; type: string | null; unit: string | null; error: string | null };
+export type MetricsResponse = { interval_ms: number; results: MetricQueryResult[]; series: MetricSeries[] };
+
 export type Identity = { sub: string; name: string | null; email: string | null };
 
 export class ApiError extends Error {
@@ -130,4 +136,11 @@ export const api = {
       `/apm/services/${encodeURIComponent(name)}?from=${from}&to=${to}${env ? `&env=${encodeURIComponent(env)}` : ""}`,
     ),
   envs: () => call<string[]>("/apm/envs"),
+  metrics: () => call<MetricMeta[]>("/metrics"),
+  metric: (name: string, from: number, to: number) =>
+    call<MetricDetail>(`/metrics/${encodeURIComponent(name)}?from=${from}&to=${to}`),
+  updateMetric: (name: string, body: { unit: string | null; description: string | null }) =>
+    call<MetricMeta>(`/metrics/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  queryMetrics: (queries: string[], from: number, to: number, signal?: AbortSignal) =>
+    post<MetricsResponse>("/metrics/query", { queries, from, to }, signal),
 };

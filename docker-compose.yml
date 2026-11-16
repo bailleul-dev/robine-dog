@@ -1,0 +1,27 @@
+# Development databases: `make deps` (also started by `make dev`).
+name: robine-dog
+services:
+  greptime:
+    image: greptime/greptimedb:v1.3.0
+    command: ["standalone", "start", "--http-addr", "0.0.0.0:4000", "--data-home", "/greptimedb_data"]
+    ports: ["127.0.0.1:14000:4000"]
+    volumes: ["greptime:/greptimedb_data"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:4000/health || exit 1"]
+      interval: 2s
+      retries: 30
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: robine_dog
+      POSTGRES_PASSWORD: robine_dog
+      POSTGRES_DB: robine_dog
+    ports: ["127.0.0.1:15432:5432"]
+    volumes: ["postgres:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U robine_dog"]
+      interval: 2s
+      retries: 30
+volumes:
+  greptime: {}
+  postgres: {}

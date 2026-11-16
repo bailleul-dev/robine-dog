@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import type { Identity } from "../lib/api";
-import { ApmIcon, Logo, LogsIcon, SignOutIcon } from "./Icons";
+import { ApmIcon, Logo, LogsIcon, MetricsIcon, SignOutIcon } from "./Icons";
 
 type Item = {
   to: string;
@@ -32,6 +32,17 @@ const ITEMS: Item[] = [
     links: [
       { to: "/apm/services", label: "Service Catalog" },
       { to: "/apm/traces", label: "Traces" },
+    ],
+  },
+  {
+    to: "/metrics/explorer",
+    match: "/metrics",
+    label: "Metrics",
+    icon: <MetricsIcon />,
+    title: "Metrics",
+    links: [
+      { to: "/metrics/explorer", label: "Explorer" },
+      { to: "/metrics/summary", label: "Summary" },
     ],
   },
 ];

@@ -5,6 +5,8 @@
 //! objects, optionally gzip/deflate-compressed, authenticated by `DD-API-KEY`.
 
 use crate::AppState;
+use crate::store::greptime::{lit, opt_lit, tags_column};
+use crate::store::writer::{Insertable, next_id};
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Query, State};
@@ -301,30 +303,29 @@ pub fn process(obj: Map<String, Value>, defaults: &Defaults, now: i64) -> LogRow
     }
 }
 
-pub fn insert(conn: &mut rusqlite::Connection, rows: &[LogRow]) -> anyhow::Result<()> {
-    let tx = conn.transaction()?;
-    {
-        let mut stmt = tx.prepare_cached(
-            "INSERT INTO logs (ts, status, service, host, source, message, tags, attributes, trace_id, span_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )?;
-        for r in rows {
-            stmt.execute(rusqlite::params![
-                r.ts,
-                r.status,
-                r.service,
-                r.host,
-                r.source,
-                r.message,
-                serde_json::to_string(&r.tags)?,
-                serde_json::to_string(&r.attributes)?,
-                r.trace_id,
-                r.span_id,
-            ])?;
-        }
+impl Insertable for LogRow {
+    const TABLE: &'static str = "logs";
+    const COLUMNS: &'static str = r#"("ts", "id", "status", "service", "host", "source", "message", "tags", "attributes", "trace_id", "span_id")"#;
+
+    fn values(&self, out: &mut String) {
+        use std::fmt::Write;
+        let attrs = serde_json::to_string(&self.attributes).unwrap_or_else(|_| "{}".into());
+        let _ = write!(
+            out,
+            "({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
+            self.ts,
+            next_id(),
+            lit(&self.status),
+            opt_lit(self.service.as_deref()),
+            opt_lit(self.host.as_deref()),
+            opt_lit(self.source.as_deref()),
+            lit(&self.message),
+            lit(&tags_column(&self.tags)),
+            lit(&attrs),
+            opt_lit(self.trace_id.as_deref()),
+            opt_lit(self.span_id.as_deref()),
+        );
     }
-    tx.commit()?;
-    Ok(())
 }
 
 pub fn decompress(headers: &HeaderMap, body: Bytes) -> std::io::Result<Vec<u8>> {
@@ -424,7 +425,7 @@ pub async fn intake(
         .map(|o| process(o, &defaults, now))
         .collect();
     let n = rows.len();
-    if let Err(e) = st.db.write(move |c| insert(c, &rows)).await {
+    if let Err(e) = st.store.logs.send(rows).await {
         tracing::error!(error = %e, "storing logs");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,

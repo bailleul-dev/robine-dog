@@ -63,8 +63,10 @@ export function TimeChart({
   const span = Math.max(1, to - from);
   const x = (t: number) => left + ((t - from) / span) * plotW;
 
+  // A NaN value is a gap: no line segment, nothing stacked.
+  const val = (v: number | undefined) => (v === undefined || Number.isNaN(v) ? 0 : v);
   const totals = times.map((_, i) =>
-    kind === "bars" ? series.reduce((s, se) => s + (se.values[i] ?? 0), 0) : Math.max(0, ...series.map((se) => se.values[i] ?? 0)),
+    kind === "bars" ? series.reduce((s, se) => s + val(se.values[i]), 0) : Math.max(0, ...series.map((se) => val(se.values[i]))),
   );
   const max = niceMax(Math.max(0, ...totals));
   const y = (v: number) => top + plotH - (v / max) * plotH;
@@ -145,7 +147,7 @@ export function TimeChart({
             return (
               <g key={t} opacity={hover === null || hover === i ? 1 : 0.55}>
                 {series.map((s) => {
-                  const v = s.values[i] ?? 0;
+                  const v = val(s.values[i]);
                   if (!v) return null;
                   const y0 = y(acc);
                   acc += v;
@@ -159,7 +161,15 @@ export function TimeChart({
           series.map((s) => (
             <path
               key={s.key}
-              d={times.map((t, i) => `${i ? "L" : "M"}${(x(t + interval / 2)).toFixed(1)},${y(s.values[i] ?? 0).toFixed(1)}`).join("")}
+              d={times
+                .map((t, i) => {
+                  const v = s.values[i];
+                  if (v === undefined || Number.isNaN(v)) return "";
+                  const prev = s.values[i - 1];
+                  const move = i === 0 || prev === undefined || Number.isNaN(prev);
+                  return `${move ? "M" : "L"}${x(t + interval / 2).toFixed(1)},${y(v).toFixed(1)}`;
+                })
+                .join("")}
               fill="none"
               stroke={s.color}
               strokeWidth={1.6}
@@ -169,9 +179,11 @@ export function TimeChart({
         {kind === "lines" && hover !== null && (
           <g>
             <line x1={x(times[hover] + interval / 2)} x2={x(times[hover] + interval / 2)} y1={top} y2={top + plotH} stroke="#c9ccd6" />
-            {series.map((s) => (
-              <circle key={s.key} cx={x(times[hover] + interval / 2)} cy={y(s.values[hover] ?? 0)} r={3} fill={s.color} />
-            ))}
+            {series
+              .filter((s) => !Number.isNaN(s.values[hover] ?? NaN))
+              .map((s) => (
+                <circle key={s.key} cx={x(times[hover] + interval / 2)} cy={y(s.values[hover])} r={3} fill={s.color} />
+              ))}
           </g>
         )}
         {drag && Math.abs(drag.x1 - drag.x0) > 1 && (
@@ -191,7 +203,7 @@ export function TimeChart({
             <div className="chart-tooltip-row" key={s.key}>
               <i style={{ width: 8, height: 8, background: s.color, borderRadius: 2, display: "inline-block" }} />
               <span>{s.label ?? s.key}</span>
-              <span>{format(s.values[hover] ?? 0)}</span>
+              <span>{Number.isNaN(s.values[hover] ?? NaN) ? "–" : format(s.values[hover])}</span>
             </div>
           ))}
         </div>

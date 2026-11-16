@@ -1699,3 +1699,85 @@ table.list th.num {
     animation: none;
   }
 }
+
+/* Metrics Explorer */
+.metric-queries {
+  display: grid;
+  gap: 8px;
+}
+
+.metric-query {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.metric-query-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--purple-soft);
+  color: var(--purple);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.metric-query.has-error .metric-query-letter {
+  background: #fde8e9;
+  color: var(--red);
+}
+
+.metric-query-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.metric-query-raw {
+  flex: 1;
+  min-width: 240px;
+}
+
+.metric-query-error {
+  flex-basis: 100%;
+  padding-left: 28px;
+  color: var(--red);
+  font-size: 12px;
+}
+
+.metric-legend {
+  margin-top: 10px;
+}
+
+.metric-legend tbody tr {
+  cursor: default;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  margin-right: 8px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.metric-tag-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f1f2f6;
+  font-size: 12px;
+}
+
+.metric-tag-row .tag {
+  margin: 0 4px 4px 0;
+}

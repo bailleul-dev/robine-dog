@@ -3,10 +3,11 @@
 pub mod apm;
 pub mod facets;
 pub mod logs;
+pub mod metrics;
 pub mod spans;
 
 use crate::query::parser::{self, Expr};
-use crate::query::sql::{self, Dataset, Filter};
+use crate::query::sql::{self, Dataset};
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -61,8 +62,22 @@ pub fn parse_query(q: &str) -> Result<Expr, ApiError> {
     parser::parse(q).map_err(|e| ApiError::BadQuery(e.0))
 }
 
-pub fn compile(q: &str, ds: Dataset) -> Result<Filter, ApiError> {
+/// The query as a `WHERE` fragment.
+pub fn compile(q: &str, ds: Dataset) -> Result<String, ApiError> {
     Ok(sql::compile(&parse_query(q)?, ds))
+}
+
+/// The time clause of a dataset, from a range in epoch milliseconds (spans
+/// are timestamped in nanoseconds; the upper bound covers its whole millisecond).
+pub fn time_clause(ds: Dataset, from: i64, to: i64) -> String {
+    match ds {
+        Dataset::Spans => format!(
+            "ts >= {} AND ts <= {}",
+            from.saturating_mul(1_000_000),
+            to.saturating_mul(1_000_000).saturating_add(999_999)
+        ),
+        _ => format!("ts >= {from} AND ts <= {to}"),
+    }
 }
 
 /// Picks a round bucket size giving about `target` buckets over the range.

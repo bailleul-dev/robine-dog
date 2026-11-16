@@ -1,18 +1,17 @@
-//! Compiles a search [`Expr`] into a SQLite `WHERE` fragment.
+//! Compiles a search [`Expr`] into a GreptimeDB `WHERE` fragment.
+//!
+//! Every value from the query is embedded through [`lit`] / [`json_path`],
+//! which quote it; numbers are re-printed from their parsed `f64`.
 
 use super::parser::{CmpOp, Cond, Expr, Value};
-use rusqlite::types::Value as SqlValue;
+use crate::store::greptime::{json_path, lit, num};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Dataset {
     Logs,
     Spans,
-}
-
-#[derive(Debug, Default)]
-pub struct Filter {
-    pub sql: String,
-    pub params: Vec<SqlValue>,
+    /// Metric tag filters (`env:prod,!host:a`): every key is a tag.
+    Metrics,
 }
 
 /// Where a field lives in the schema.
@@ -20,32 +19,23 @@ pub struct Filter {
 pub enum Target {
     /// A plain text column.
     Column(&'static str),
-    /// A path inside a JSON column, e.g. `json_extract(attributes, '$."http"."status_code"')`.
-    Json { column: &'static str, path: String },
-    /// A span attribute: looked up in `meta`, then in `metrics`.
+    /// A path inside a nested JSON column (logs attributes).
+    Json {
+        column: &'static str,
+        path: Vec<String>,
+    },
+    /// A span attribute: a flat key of `meta`, else of `metrics`.
     SpanAttr(String),
-    /// A `key:value` tag in the `tags` JSON array.
+    /// A `key:value` entry of the `tags` column (`,env:prod,team:a,`).
     Tag(String),
     /// Span duration in nanoseconds; values accept units (`1.5s`, `200ms`).
     Duration,
     /// Span status, stored as the `error` flag.
     SpanStatus,
-}
-
-/// `a.b.c` → `$."a"."b"."c"` (nested, as logs attributes are stored).
-pub fn nested_path(path: &str) -> String {
-    let mut out = String::from("$");
-    for seg in path.split('.') {
-        out.push_str(".\"");
-        out.push_str(&seg.replace('"', "\\\""));
-        out.push('"');
-    }
-    out
-}
-
-/// `a.b.c` → `$."a.b.c"` (flat, as span meta keys are stored).
-pub fn flat_path(path: &str) -> String {
-    format!("$.\"{}\"", path.replace('"', "\\\""))
+    /// A boolean column (`_entry:1` → `top_level`).
+    Flag(&'static str),
+    /// Root spans (`_root:1`): no parent.
+    Root,
 }
 
 pub fn resolve(key: &str, ds: Dataset) -> Target {
@@ -59,7 +49,7 @@ pub fn resolve(key: &str, ds: Dataset) -> Target {
             "message" => Target::Column("message"),
             k if k.starts_with('@') => Target::Json {
                 column: "attributes",
-                path: nested_path(&k[1..]),
+                path: k[1..].split('.').map(str::to_string).collect(),
             },
             k => Target::Tag(k.to_string()),
         },
@@ -75,30 +65,53 @@ pub fn resolve(key: &str, ds: Dataset) -> Target {
             "type" | "span.type" => Target::Column("type"),
             "status" => Target::SpanStatus,
             // Internal keys behind the "Service entry spans / Root spans" selector.
-            "_entry" => Target::Column("top_level"),
-            "_root" => Target::Column("CAST(parent_id = '0' AS TEXT)"),
+            "_entry" => Target::Flag("top_level"),
+            "_root" => Target::Root,
             "@duration" | "duration" => Target::Duration,
             k => Target::SpanAttr(k.strip_prefix('@').unwrap_or(k).to_string()),
+        },
+        Dataset::Metrics => match key {
+            "host" => Target::Column("host"),
+            k => Target::Tag(k.to_string()),
         },
     }
 }
 
-/// SQL expression reading a target's value (not usable for tags).
-pub fn target_expr(t: &Target, params: &mut Vec<SqlValue>) -> String {
+/// SQL expression reading a target's value as text (not for tags).
+pub fn target_expr(t: &Target) -> String {
     match t {
         Target::Column(c) => (*c).to_string(),
         Target::Json { column, path } => {
-            params.push(SqlValue::Text(path.clone()));
-            format!("json_extract({column}, ?)")
+            format!(
+                "json_get({column}, {})",
+                json_path(path.iter().map(String::as_str))
+            )
         }
-        Target::SpanAttr(k) => {
-            params.push(SqlValue::Text(flat_path(k)));
-            params.push(SqlValue::Text(flat_path(k)));
-            "COALESCE(json_extract(meta, ?), json_extract(metrics, ?))".to_string()
-        }
-        Target::Duration => "duration".to_string(),
+        Target::SpanAttr(k) => format!(
+            "COALESCE(json_get(meta, {p}), json_get(metrics, {p}))",
+            p = json_path([k.as_str()])
+        ),
+        Target::Duration => "CAST(duration AS STRING)".to_string(),
         Target::SpanStatus => "(CASE WHEN error THEN 'error' ELSE 'ok' END)".to_string(),
+        Target::Flag(c) => format!("(CASE WHEN {c} THEN '1' ELSE '0' END)"),
+        Target::Root => "(CASE WHEN parent_id = '0' THEN '1' ELSE '0' END)".to_string(),
         Target::Tag(_) => unreachable!("tags have no scalar expression"),
+    }
+}
+
+/// SQL expression reading a target's value as a number (NULL when it isn't one).
+pub fn number_expr(t: &Target) -> String {
+    match t {
+        Target::Json { column, path } => format!(
+            "json_get_float({column}, {})",
+            json_path(path.iter().map(String::as_str))
+        ),
+        Target::SpanAttr(k) => format!(
+            "COALESCE(json_get_float(metrics, {p}), json_get_float(meta, {p}))",
+            p = json_path([k.as_str()])
+        ),
+        Target::Duration => "duration".to_string(),
+        other => format!("TRY_CAST({} AS DOUBLE)", target_expr(other)),
     }
 }
 
@@ -122,6 +135,7 @@ pub fn parse_duration_ns(s: &str) -> Option<f64> {
     Some(n * mult)
 }
 
+/// A `LIKE` pattern (escape character `\`): `*` is the wildcard, `%` and `_` are literal.
 pub fn like_pattern(v: &str, contains: bool) -> String {
     let mut out = String::new();
     if contains {
@@ -143,6 +157,22 @@ pub fn like_pattern(v: &str, contains: bool) -> String {
     out
 }
 
+/// A regular expression matching `v` literally, with `*` as "anything but a comma".
+pub fn tag_regex(v: &str) -> String {
+    let mut out = String::new();
+    for ch in v.chars() {
+        match ch {
+            '*' => out.push_str("[^,]*"),
+            c if "\\.+?()[]{}|^$#&-~".contains(c) => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 fn normalize_status(v: &str) -> String {
     crate::intake::logs::normalize_status(v).to_string()
 }
@@ -156,15 +186,30 @@ fn cmp_sql(op: CmpOp) -> &'static str {
     }
 }
 
+/// Free text is matched as whole terms, case-insensitively, as Datadog does;
+/// `*` turns a term into a substring pattern.
+fn free_text(column: &str, v: &Value) -> String {
+    if v.wildcard || v.text.chars().any(|c| c == '%' || c == '_') {
+        format!(
+            "lower({column}) LIKE {} ESCAPE '\\'",
+            lit(&like_pattern(&v.text.to_lowercase(), true))
+        )
+    } else {
+        format!(
+            "matches_term(lower({column}), {})",
+            lit(&v.text.to_lowercase())
+        )
+    }
+}
+
 struct Compiler {
     ds: Dataset,
-    params: Vec<SqlValue>,
 }
 
 impl Compiler {
-    fn expr(&mut self, e: &Expr) -> String {
+    fn expr(&self, e: &Expr) -> String {
         match e {
-            Expr::All => "1".into(),
+            Expr::All => "true".into(),
             Expr::And(items) => format!(
                 "({})",
                 items
@@ -181,27 +226,23 @@ impl Compiler {
                     .collect::<Vec<_>>()
                     .join(" OR ")
             ),
-            Expr::Not(inner) => format!("NOT COALESCE({}, 0)", self.expr(inner)),
+            Expr::Not(inner) => format!("NOT COALESCE({}, false)", self.expr(inner)),
             Expr::Text(v) => self.text(v),
-            Expr::Field { key, cond } => {
-                let target = resolve(key, self.ds);
-                self.field(&target, cond)
-            }
+            Expr::Field { key, cond } => self.field(&resolve(key, self.ds), cond),
         }
     }
 
-    fn text(&mut self, v: &Value) -> String {
-        let pat = like_pattern(&v.text, true);
+    fn text(&self, v: &Value) -> String {
         match self.ds {
-            Dataset::Logs => {
-                self.params.push(SqlValue::Text(pat));
-                "message LIKE ? ESCAPE '\\'".into()
-            }
+            Dataset::Logs => free_text("message", v),
             Dataset::Spans => {
-                self.params.push(SqlValue::Text(pat.clone()));
-                self.params.push(SqlValue::Text(pat));
-                "(resource LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')".into()
+                let pat = lit(&like_pattern(&v.text.to_lowercase(), true));
+                format!(
+                    "(lower(resource) LIKE {pat} ESCAPE '\\' OR lower(name) LIKE {pat} ESCAPE '\\')"
+                )
             }
+            // A bare word in a metric filter is a valueless tag (`#mytag`).
+            Dataset::Metrics => self.tag_eq(&v.text, v.wildcard),
         }
     }
 
@@ -212,7 +253,7 @@ impl Compiler {
         }
     }
 
-    fn field(&mut self, target: &Target, cond: &Cond) -> String {
+    fn field(&self, target: &Target, cond: &Cond) -> String {
         if let Target::Tag(key) = target {
             return self.tag(key, cond);
         }
@@ -226,134 +267,98 @@ impl Compiler {
             });
         }
         match &cond {
-            Cond::Exists => {
-                let lhs = target_expr(target, &mut self.params);
-                format!("{lhs} IS NOT NULL")
-            }
-            Cond::Eq(v) if v.wildcard => {
-                let lhs = target_expr(target, &mut self.params);
-                self.params
-                    .push(SqlValue::Text(like_pattern(&v.text, false)));
-                format!("CAST({lhs} AS TEXT) LIKE ? ESCAPE '\\'")
-            }
+            Cond::Exists => format!("{} IS NOT NULL", target_expr(target)),
+            Cond::Eq(v) if v.wildcard => format!(
+                "{} LIKE {} ESCAPE '\\'",
+                target_expr(target),
+                lit(&like_pattern(&v.text, false))
+            ),
             Cond::Eq(v) => match target {
                 Target::Duration => {
-                    let n = parse_duration_ns(&v.text).unwrap_or(-1.0);
-                    self.params.push(SqlValue::Real(n));
-                    "duration = ?".into()
+                    format!(
+                        "duration = {}",
+                        num(parse_duration_ns(&v.text).unwrap_or(-1.0))
+                    )
+                }
+                Target::Flag(c) => {
+                    let on = matches!(v.text.as_str(), "1" | "true");
+                    format!("{c} = {on}")
+                }
+                Target::Root => {
+                    let on = matches!(v.text.as_str(), "1" | "true");
+                    format!("(parent_id = '0') = {on}")
                 }
                 Target::Column(_) | Target::SpanStatus => {
-                    let lhs = target_expr(target, &mut self.params);
-                    self.params.push(SqlValue::Text(v.text.clone()));
-                    format!("{lhs} = ?")
+                    format!("{} = {}", target_expr(target), lit(&v.text))
                 }
                 _ => {
                     // JSON values may be numbers or strings ("500" in span meta, 500 in metrics).
-                    let lhs = target_expr(target, &mut self.params);
-                    let mut lhs2_params = Vec::new();
-                    let lhs2 = target_expr(target, &mut lhs2_params);
-                    self.params.push(SqlValue::Text(v.text.clone()));
+                    let text = format!("{} = {}", target_expr(target), lit(&v.text));
                     match v.text.parse::<f64>() {
-                        Ok(n) => {
-                            self.params.extend(lhs2_params);
-                            self.params.push(SqlValue::Real(n));
-                            format!("(CAST({lhs} AS TEXT) = ? OR {lhs2} = ?)")
-                        }
-                        Err(_) => {
-                            let b = match v.text.as_str() {
-                                "true" => Some(1),
-                                "false" => Some(0),
-                                _ => None,
-                            };
-                            match b {
-                                Some(b) => {
-                                    self.params.extend(lhs2_params);
-                                    self.params.push(SqlValue::Integer(b));
-                                    format!("(CAST({lhs} AS TEXT) = ? OR {lhs2} = ?)")
-                                }
-                                None => format!("CAST({lhs} AS TEXT) = ?"),
-                            }
-                        }
+                        Ok(n) => format!("({text} OR {} = {})", number_expr(target), num(n)),
+                        Err(_) => text,
                     }
                 }
             },
-            Cond::Cmp(op, raw) => {
-                let lhs = target_expr(target, &mut self.params);
-                match self.number(target, raw) {
-                    Some(n) => {
-                        self.params.push(SqlValue::Real(n));
-                        format!("CAST({lhs} AS REAL) {} ?", cmp_sql(*op))
-                    }
-                    None => {
-                        self.params.push(SqlValue::Text(raw.clone()));
-                        format!("CAST({lhs} AS TEXT) {} ?", cmp_sql(*op))
-                    }
-                }
-            }
+            Cond::Cmp(op, raw) => match self.number(target, raw) {
+                Some(n) => format!("{} {} {}", number_expr(target), cmp_sql(*op), num(n)),
+                None => format!("{} {} {}", target_expr(target), cmp_sql(*op), lit(raw)),
+            },
             Cond::Range {
                 lo,
                 hi,
                 lo_inc,
                 hi_inc,
             } => {
-                let lhs = target_expr(target, &mut self.params);
-                let mut lhs2_params = Vec::new();
-                let lhs2 = target_expr(target, &mut lhs2_params);
                 let lo_op = if *lo_inc { ">=" } else { ">" };
                 let hi_op = if *hi_inc { "<=" } else { "<" };
-                let (lo_v, hi_v, cast) = match (self.number(target, lo), self.number(target, hi)) {
-                    (Some(a), Some(b)) => (SqlValue::Real(a), SqlValue::Real(b), "REAL"),
-                    _ => (
-                        SqlValue::Text(lo.clone()),
-                        SqlValue::Text(hi.clone()),
-                        "TEXT",
-                    ),
-                };
-                self.params.push(lo_v);
-                self.params.extend(lhs2_params);
-                self.params.push(hi_v);
-                format!("(CAST({lhs} AS {cast}) {lo_op} ? AND CAST({lhs2} AS {cast}) {hi_op} ?)")
+                match (self.number(target, lo), self.number(target, hi)) {
+                    (Some(a), Some(b)) => {
+                        let e = number_expr(target);
+                        format!("({e} {lo_op} {} AND {e} {hi_op} {})", num(a), num(b))
+                    }
+                    _ => {
+                        let e = target_expr(target);
+                        format!("({e} {lo_op} {} AND {e} {hi_op} {})", lit(lo), lit(hi))
+                    }
+                }
             }
         }
     }
 
-    fn tag(&mut self, key: &str, cond: &Cond) -> String {
-        let prefix = format!("{key}:");
+    fn tag_eq(&self, entry: &str, wildcard: bool) -> String {
+        if wildcard {
+            format!(
+                "regexp_like(tags, {})",
+                lit(&format!(",{},", tag_regex(entry)))
+            )
+        } else {
+            format!(
+                "tags LIKE {} ESCAPE '\\'",
+                lit(&format!("%,{},%", like_pattern(entry, false)))
+            )
+        }
+    }
+
+    /// The first value of tag `key` as a number.
+    fn tag_number(key: &str) -> String {
+        format!(
+            "TRY_CAST(array_element(regexp_match(tags, {}), 1) AS DOUBLE)",
+            lit(&format!(",{}:([^,]*),", tag_regex(key)))
+        )
+    }
+
+    fn tag(&self, key: &str, cond: &Cond) -> String {
         match cond {
-            Cond::Exists => {
-                self.params
-                    .push(SqlValue::Text(like_pattern(&prefix, false) + "%"));
-                "EXISTS (SELECT 1 FROM json_each(tags) WHERE json_each.value LIKE ? ESCAPE '\\')"
-                    .into()
-            }
-            Cond::Eq(v) if v.wildcard => {
-                self.params.push(SqlValue::Text(like_pattern(
-                    &format!("{prefix}{}", v.text),
-                    false,
-                )));
-                "EXISTS (SELECT 1 FROM json_each(tags) WHERE json_each.value LIKE ? ESCAPE '\\')"
-                    .into()
-            }
-            Cond::Eq(v) => {
-                self.params
-                    .push(SqlValue::Text(format!("{prefix}{}", v.text)));
-                "EXISTS (SELECT 1 FROM json_each(tags) WHERE json_each.value = ?)".into()
-            }
-            Cond::Cmp(op, raw) => {
-                self.params
-                    .push(SqlValue::Text(like_pattern(&prefix, false) + "%"));
-                self.params
-                    .push(SqlValue::Integer(prefix.chars().count() as i64 + 1));
-                self.params.push(
-                    raw.parse::<f64>()
-                        .map(SqlValue::Real)
-                        .unwrap_or(SqlValue::Text(raw.clone())),
-                );
-                format!(
-                    "EXISTS (SELECT 1 FROM json_each(tags) WHERE json_each.value LIKE ? ESCAPE '\\' AND CAST(substr(json_each.value, ?) AS REAL) {} ?)",
-                    cmp_sql(*op)
-                )
-            }
+            Cond::Exists => format!(
+                "tags LIKE {} ESCAPE '\\'",
+                lit(&format!("%,{}:%", like_pattern(key, false)))
+            ),
+            Cond::Eq(v) => self.tag_eq(&format!("{key}:{}", v.text), v.wildcard),
+            Cond::Cmp(op, raw) => match raw.parse::<f64>() {
+                Ok(n) => format!("{} {} {}", Self::tag_number(key), cmp_sql(*op), num(n)),
+                Err(_) => "false".into(),
+            },
             Cond::Range {
                 lo,
                 hi,
@@ -362,39 +367,29 @@ impl Compiler {
             } => {
                 let lo_op = if *lo_inc { ">=" } else { ">" };
                 let hi_op = if *hi_inc { "<=" } else { "<" };
-                let start = prefix.chars().count() as i64 + 1;
-                self.params
-                    .push(SqlValue::Text(like_pattern(&prefix, false) + "%"));
-                self.params.push(SqlValue::Integer(start));
-                self.params
-                    .push(SqlValue::Real(lo.parse().unwrap_or(f64::MIN)));
-                self.params.push(SqlValue::Integer(start));
-                self.params
-                    .push(SqlValue::Real(hi.parse().unwrap_or(f64::MAX)));
+                let e = Self::tag_number(key);
                 format!(
-                    "EXISTS (SELECT 1 FROM json_each(tags) WHERE json_each.value LIKE ? ESCAPE '\\' AND CAST(substr(json_each.value, ?) AS REAL) {lo_op} ? AND CAST(substr(json_each.value, ?) AS REAL) {hi_op} ?)"
+                    "({e} {lo_op} {} AND {e} {hi_op} {})",
+                    num(lo.parse().unwrap_or(f64::MIN)),
+                    num(hi.parse().unwrap_or(f64::MAX))
                 )
             }
         }
     }
 }
 
-pub fn compile(e: &Expr, ds: Dataset) -> Filter {
-    let mut c = Compiler {
-        ds,
-        params: Vec::new(),
-    };
-    let sql = c.expr(e);
-    Filter {
-        sql,
-        params: c.params,
-    }
+pub fn compile(e: &Expr, ds: Dataset) -> String {
+    Compiler { ds }.expr(e)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::query::parser::parse;
+
+    fn sql(q: &str, ds: Dataset) -> String {
+        compile(&parse(q).unwrap(), ds)
+    }
 
     #[test]
     fn durations() {
@@ -405,30 +400,66 @@ mod tests {
     }
 
     #[test]
-    fn nested_and_flat_paths() {
+    fn columns_attributes_and_text() {
+        assert_eq!(sql("service:web", Dataset::Logs), "service = 'web'");
+        assert_eq!(sql("status:ERROR", Dataset::Logs), "status = 'error'");
         assert_eq!(
-            nested_path("http.status_code"),
-            "$.\"http\".\"status_code\""
+            sql("@http.status_code:>=500", Dataset::Logs),
+            r#"json_get_float(attributes, '$["http"]["status_code"]') >= 500.0"#
         );
-        assert_eq!(flat_path("http.status_code"), "$.\"http.status_code\"");
+        assert_eq!(
+            sql("timeout", Dataset::Logs),
+            "matches_term(lower(message), 'timeout')"
+        );
+        assert_eq!(
+            sql("time*", Dataset::Logs),
+            r"lower(message) LIKE '%time%%' ESCAPE '\'"
+        );
+        assert_eq!(
+            sql("@peer.service:redis", Dataset::Spans),
+            r#"COALESCE(json_get(meta, '$["peer.service"]'), json_get(metrics, '$["peer.service"]')) = 'redis'"#
+        );
+        assert_eq!(sql("_entry:1", Dataset::Spans), "top_level = true");
     }
 
     #[test]
-    fn compiles_and_binds_every_param() {
-        for (q, ds) in [
-            (
-                "service:web @http.status_code:>=500 -env:prod \"timeout\"",
-                Dataset::Logs,
-            ),
-            (
-                "@duration:[1ms TO 2s] status:error resource_name:GET*",
-                Dataset::Spans,
-            ),
-            ("@http.status_code:500 env:*", Dataset::Spans),
-            ("version:>2 retries:[1 TO 3]", Dataset::Logs),
-        ] {
-            let f = compile(&parse(q).unwrap(), ds);
-            assert_eq!(f.sql.matches('?').count(), f.params.len(), "{q}: {}", f.sql);
-        }
+    fn tags() {
+        assert_eq!(
+            sql("env:prod", Dataset::Logs),
+            r"tags LIKE '%,env:prod,%' ESCAPE '\'"
+        );
+        assert_eq!(
+            sql("env:*", Dataset::Logs),
+            r"tags LIKE '%,env:%' ESCAPE '\'"
+        );
+        assert_eq!(
+            sql("env:pr*d", Dataset::Logs),
+            "regexp_like(tags, ',env:pr[^,]*d,')"
+        );
+        assert_eq!(
+            sql("team:a_b", Dataset::Metrics),
+            r"tags LIKE '%,team:a\_b,%' ESCAPE '\'"
+        );
+        assert_eq!(sql("host:h1", Dataset::Metrics), "host = 'h1'");
+    }
+
+    #[test]
+    fn quotes_never_escape() {
+        let s = sql(r#"service:"x' OR 1=1 --""#, Dataset::Logs);
+        assert_eq!(s, "service = 'x'' OR 1=1 --'");
+        let s = sql(r#"@a\.b:"it's""#, Dataset::Logs);
+        assert!(s.contains("'it''s'"), "{s}");
+    }
+
+    #[test]
+    fn negation_and_numbers() {
+        assert_eq!(
+            sql("-service:a @n:[1 TO 5]", Dataset::Logs),
+            r#"(NOT COALESCE(service = 'a', false) AND (json_get_float(attributes, '$["n"]') >= 1.0 AND json_get_float(attributes, '$["n"]') <= 5.0))"#
+        );
+        assert_eq!(
+            sql("@duration:>1.5s", Dataset::Spans),
+            "duration > 1500000000.0"
+        );
     }
 }

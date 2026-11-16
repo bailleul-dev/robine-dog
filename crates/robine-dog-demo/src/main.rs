@@ -1,7 +1,8 @@
 //! Demo traffic for robine-dog: a small e-commerce system (storefront, API,
 //! cart, payments, Postgres, Redis, Stripe) emitting traces in the ddtrace
-//! v0.4 msgpack format to the trace-agent port, and correlated JSON logs to the
-//! Datadog logs intake — exactly what real instrumented services would send.
+//! v0.4 msgpack format to the trace-agent port, correlated JSON logs to the
+//! Datadog logs intake, and DogStatsD metrics (UDP, `DD_DOGSTATSD_URL`) —
+//! exactly what real instrumented services would send.
 //!
 //! Usage: robine-dog-demo [--backfill-minutes 60] [--rate 3] [--no-live]
 
@@ -821,6 +822,66 @@ impl Client {
     }
 }
 
+/// DogStatsD, as an instrumented app sends it: host metrics, business
+/// counters and a distribution, timestamped (`|T`) for the backfill.
+struct Statsd {
+    sock: std::net::UdpSocket,
+    addr: String,
+}
+
+const HOSTS: &[(&str, &str)] = &[
+    ("web-store-7d9f8-p9wzt", "web-store"),
+    ("shop-api-5c6b9-x2kq4", "shop-api"),
+    ("shop-api-5c6b9-m8d1z", "shop-api"),
+    ("payment-service-8d4e1-w5n7b", "payment-service"),
+    ("db-primary-01", "postgres"),
+];
+
+impl Statsd {
+    fn tick(&self, rng: &mut impl Rng, ts_s: i64) {
+        let mut lines = Vec::new();
+        let hour = (ts_s / 3600) % 24;
+        let load = 0.6 + 0.4 * ((ts_s as f64 / 900.0).sin().abs());
+        for (host, service) in HOSTS {
+            let cpu = (load * 40.0 + rng.random_range(-6.0..6.0)).clamp(1.0, 99.0);
+            lines.push(format!(
+                "system.cpu.user:{cpu:.1}|g|#env:prod,service:{service},host:{host}|T{ts_s}"
+            ));
+            let mem = 1.6e9 + load * 4e8 + rng.random_range(0.0..5e7);
+            lines.push(format!(
+                "system.mem.used:{mem:.0}|g|#env:prod,service:{service},host:{host}|T{ts_s}"
+            ));
+            lines.push(format!(
+                "system.load.1:{:.2}|g|#env:prod,host:{host}|T{ts_s}",
+                load * 2.0 + rng.random_range(0.0..0.4)
+            ));
+        }
+        for (method, weight) in [("card", 6.0), ("paypal", 2.0), ("apple_pay", 1.0)] {
+            let n = (weight * load * rng.random_range(0.5..1.5)).round();
+            lines.push(format!(
+                "shop.orders.placed:{n}|c|#env:prod,payment_method:{method}|T{ts_s}"
+            ));
+        }
+        for _ in 0..8 {
+            let v: f64 = 15.0 + rng.random_range(0.0..1.0f64).powi(3) * 400.0;
+            lines.push(format!(
+                "shop.cart.value:{v:.2}|d|#env:prod,currency:eur|T{ts_s}"
+            ));
+        }
+        let depth = if (9..11).contains(&hour) {
+            rng.random_range(20..80)
+        } else {
+            rng.random_range(0..12)
+        };
+        lines.push(format!(
+            "shop.queue.depth:{depth}|g|#env:prod,queue:orders|T{ts_s}"
+        ));
+        for chunk in lines.chunks(20) {
+            let _ = self.sock.send_to(chunk.join("\n").as_bytes(), &self.addr);
+        }
+    }
+}
+
 fn generate(rng: &mut impl Rng, start_ns: i64, env: &str, out: &mut Out) {
     let mut hosts = HashMap::new();
     let root = if rng.random_bool(0.03) {
@@ -861,8 +922,23 @@ fn main() -> anyhow::Result<()> {
             .unwrap_or_default(),
     };
     let mut rng = rand::rng();
+    let statsd = Statsd {
+        sock: std::net::UdpSocket::bind("0.0.0.0:0")?,
+        addr: std::env::var("DD_DOGSTATSD_URL")
+            .unwrap_or_else(|_| "udp://127.0.0.1:8125".into())
+            .trim_start_matches("udp://")
+            .to_string(),
+    };
 
     if backfill_min > 0 {
+        let end_s = now_ns() / 1_000_000_000;
+        let mut t = end_s - backfill_min * 60;
+        while t < end_s {
+            statsd.tick(&mut rng, t);
+            t += 10;
+            // UDP: pace the backfill so the receiver's socket buffer keeps up.
+            std::thread::sleep(Duration::from_millis(1));
+        }
         let end = now_ns();
         let begin = end - backfill_min * 60 * 1_000_000_000;
         let total = (backfill_min as f64 * 60.0 * rate) as i64;
@@ -894,7 +970,13 @@ fn main() -> anyhow::Result<()> {
     }
     if live {
         println!("sending live traffic at ~{rate} req/s (Ctrl-C to stop)");
+        let mut last_tick = 0;
         loop {
+            let now_s = now_ns() / 1_000_000_000;
+            if now_s - last_tick >= 10 {
+                statsd.tick(&mut rng, now_s);
+                last_tick = now_s;
+            }
             let mut out = Out {
                 spans: Vec::new(),
                 logs: Vec::new(),

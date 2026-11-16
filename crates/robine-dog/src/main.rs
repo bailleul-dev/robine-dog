@@ -1,15 +1,19 @@
 //! robine-dog: a personal, self-hosted Datadog-like log and trace explorer.
 //!
-//! Two listeners:
-//! - the main one (UI, UI API, Robine ID sign-in, logs intake `/api/v2/logs`);
-//! - the trace-agent one (default 127.0.0.1:8126) that `ddtrace` libraries report to.
+//! Three listeners:
+//! - the main one (UI, UI API, Robine ID sign-in, logs and metrics intakes);
+//! - the trace-agent one (default 127.0.0.1:8126) that `ddtrace` libraries report to;
+//! - DogStatsD over UDP (default 127.0.0.1:8125).
+//!
+//! Telemetry is stored in GreptimeDB, the application's state in PostgreSQL.
 
 mod api;
 mod auth;
 mod config;
-mod db;
 mod intake;
+mod metrics;
 mod query;
+mod store;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -20,7 +24,8 @@ use tower_http::services::{ServeDir, ServeFile};
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: Arc<db::Db>,
+    pub store: Arc<store::Store>,
+    pub aggregator: Arc<metrics::Aggregator>,
     pub cfg: Arc<config::Config>,
     pub auth: Arc<auth::Auth>,
 }
@@ -40,6 +45,12 @@ fn ui_api(st: AppState) -> Router<AppState> {
         .route("/apm/services", get(api::apm::services))
         .route("/apm/services/{name}", get(api::apm::service))
         .route("/apm/envs", get(api::apm::envs))
+        .route("/metrics", get(api::metrics::list))
+        .route("/metrics/query", post(api::metrics::query))
+        .route(
+            "/metrics/{name}",
+            get(api::metrics::detail).patch(api::metrics::update),
+        )
         .layer(axum::middleware::from_fn_with_state(st, auth::require))
 }
 
@@ -50,6 +61,9 @@ fn app(st: AppState) -> Router {
         .route("/api/v2/logs", post(intake::logs::intake))
         .route("/v1/input", post(intake::logs::intake))
         .route("/v1/input/{key}", post(intake::logs::intake))
+        .route("/api/v1/series", post(intake::series::v1))
+        .route("/api/v2/series", post(intake::series::v2))
+        .route("/api/v1/validate", get(intake::series::validate))
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024));
     Router::new()
         .merge(intake)
@@ -57,10 +71,18 @@ fn app(st: AppState) -> Router {
         .route("/auth/login", get(auth::login))
         .route("/auth/callback", get(auth::callback))
         .route("/auth/logout", post(auth::logout).get(auth::logout))
-        .route("/health", get(|| async { "ok" }))
+        .route("/health", get(health))
         .fallback_service(spa)
         .layer(CompressionLayer::new())
         .with_state(st)
+}
+
+/// Liveness, and the deployed version (`ROBINE_DOG_VERSION`, set by the image build).
+async fn health() -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({
+        "status": "ok",
+        "version": option_env!("ROBINE_DOG_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
+    }))
 }
 
 fn trace_app(st: AppState) -> Router {
@@ -69,25 +91,24 @@ fn trace_app(st: AppState) -> Router {
         .with_state(st)
 }
 
-async fn retention(st: AppState) {
-    let mut tick = tokio::time::interval(std::time::Duration::from_secs(600));
-    loop {
-        tick.tick().await;
-        let cutoff_ms = intake::logs::now_ms() - st.cfg.retention_days * 86_400_000;
-        let res = st
-            .db
-            .write(move |c| {
-                let logs = c.execute("DELETE FROM logs WHERE ts < ?", [cutoff_ms])?;
-                let spans =
-                    c.execute("DELETE FROM spans WHERE start < ?", [cutoff_ms * 1_000_000])?;
-                Ok((logs, spans))
-            })
-            .await;
-        match res {
-            Ok((0, 0)) => {}
-            Ok((logs, spans)) => tracing::info!(logs, spans, "retention purge"),
-            Err(e) => tracing::error!(error = %e, "retention purge failed"),
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.ok();
+    };
+    #[cfg(unix)]
+    let term = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
         }
+    };
+    #[cfg(not(unix))]
+    let term = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = term => {},
     }
 }
 
@@ -102,8 +123,13 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cfg = Arc::new(config::Config::from_env()?);
+    let store = Arc::new(store::Store::open(&cfg).await?);
+    tracing::info!(greptime = %cfg.greptime_url, db = %cfg.greptime_db, "storage ready");
+    let aggregator = Arc::new(metrics::Aggregator::default());
+    aggregator.spawn_flusher(store.clone());
     let st = AppState {
-        db: db::Db::open(&cfg.db_path)?,
+        store: store.clone(),
+        aggregator: aggregator.clone(),
         cfg: cfg.clone(),
         auth: Arc::new(auth::Auth::new()),
     };
@@ -116,7 +142,14 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!("ROBINE_DOG_API_KEY is not set: the logs intake accepts any API key");
     }
 
-    tokio::spawn(retention(st.clone()));
+    if let Some(addr) = cfg.dogstatsd_listen {
+        let agg = aggregator.clone();
+        tokio::spawn(async move {
+            if let Err(e) = metrics::dogstatsd::listen(addr, agg).await {
+                tracing::error!(error = %e, "DogStatsD listener stopped");
+            }
+        });
+    }
 
     if let Some(addr) = cfg.trace_listen {
         let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -132,9 +165,11 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(cfg.listen).await?;
     tracing::info!(addr = %cfg.listen, base_url = %cfg.base_url, "robine-dog listening");
     axum::serve(listener, app(st))
-        .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c().await.ok();
-        })
+        .with_graceful_shutdown(shutdown_signal())
         .await?;
+    // Nothing buffered is lost on a restart: the aggregator, then the writers.
+    aggregator.flush(&store).await;
+    store.flush().await;
+    tracing::info!("stopped");
     Ok(())
 }

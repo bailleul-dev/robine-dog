@@ -27,6 +27,13 @@ export const ApmIcon = (p: P) => (
   </svg>
 );
 
+export const MetricsIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M3 20h18" />
+    <path d="m4 16 4.5-6 4 3.5L20 5" />
+  </svg>
+);
+
 export const SearchIcon = (p: P) => (
   <svg {...base} {...p}>
     <circle cx="11" cy="11" r="6.5" />

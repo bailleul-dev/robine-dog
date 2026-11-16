@@ -1,12 +1,16 @@
 # robine-dog
 
-A personal, self-hosted log and trace explorer to practise Datadog's Logs and
-APM workflows on real data: the same search syntax, facets, explorers, trace
-views and service pages, fed by the **real Datadog clients** (ddtrace
-libraries, the logs HTTP intake). Sign-in is through Robine ID.
+A personal, self-hosted log, trace and metrics explorer to practise Datadog's
+Logs, APM and Metrics workflows on real data: the same search syntax, facets,
+explorers, trace views, service pages and metric queries, fed by the **real
+Datadog clients** (ddtrace libraries, DogStatsD, the logs and series HTTP
+intakes). Sign-in is through Robine ID.
 
-Rust (axum, SQLite in WAL mode) + React (Vite, TanStack Query). One binary
-serves the UI, the API and both intakes.
+Rust (axum) + React (Vite, TanStack Query). One binary serves the UI, the API
+and every intake. Telemetry (logs, spans, metric points) is stored in
+[GreptimeDB](https://greptime.com) standalone, used only as a SQL store (table
+TTLs, full-text and inverted indexes, JSON columns); the application's own
+state (facets, metric metadata) is in PostgreSQL.
 
 ## What works
 
@@ -21,26 +25,35 @@ serves the UI, the API and both intakes.
 | Search syntax: `AND`/`OR`/`NOT`/`-`, `( )`, `key:value`, `@attr:value`, `key:val*`, `key:*`, `@n:>=500`, `@n:[1 TO 5]`, `@duration:>1.5s`, `key:(a OR b)`, `"phrases"` | everywhere |
 | Logs HTTP intake `POST /api/v2/logs` (JSON, gzip/deflate, `DD-API-KEY`), status/host/service/date remapping, JSON messages parsed | port 8080 |
 | Trace agent API `/v0.3`, `/v0.4`, `/v0.5/traces` (msgpack/JSON), `/info` | port 8126 |
+| Metrics Explorer: `avg:metric{tag:a,!tag:b} by {host}.as_count()`, `.as_rate()`, `.rollup(max, 60)`, p50…p99 on distributions, several queries, lines/bars | `/metrics/explorer` |
+| Metrics Summary: type, unit, description (editable), tags and hosts per metric | `/metrics/summary` |
+| DogStatsD (`c`, `g`, `s`, `h`/`ms`, `d`, sample rates, `#tags`, `\|T` timestamps), aggregated into 10-second buckets | UDP 8125 |
+| Series intake `POST /api/v1/series`, `/api/v2/series` (JSON), `/api/v1/validate` | port 8080 |
+| Trace metrics `trace.<span>.hits`, `.errors` and `trace.<span>` (distribution, seconds), tagged `service`, `resource_name`, `env`, `version`, `http.status_code` | computed at ingestion |
 
-Not there yet: metrics, monitors, dashboards, log pipelines/patterns, the
+Not there yet: monitors, dashboards, log pipelines/patterns, the
 Datadog Agent's own trace forwarding protocol (`/api/v0.2/traces`, protobuf),
-OTLP.
+protobuf series payloads (set `use_v2_api.series: false` on an Agent), OTLP.
 
 ## Run it
 
-Requirements: Rust 1.85+, Node 22+.
+Requirements: Rust 1.85+, Node 22+, Docker (for the databases).
 
 ```sh
 cp .env.example .env    # then fill in the Robine ID client (see below)
-make dev                # server :8080 + :8126, UI http://localhost:5173
+make dev                # databases (docker compose), server :8080 + :8126 + udp :8125, UI http://localhost:5173
 make demo               # in another terminal: an hour of history, then live traffic
 ```
+
+`make deps` starts GreptimeDB (`127.0.0.1:14000`) and PostgreSQL
+(`127.0.0.1:15432`) alone; `make deps-down` stops them, keeping their volumes.
 
 Without Robine ID, on loopback only: `make dev-noauth`.
 
 `make demo` simulates a small shop (web-store → shop-api → cart-service /
 payment-service → Postgres, Redis, Stripe) with ~8% declined payments and ~3%
-provider timeouts, using the same wire formats as ddtrace and the Agent.
+provider timeouts, plus host and business metrics over DogStatsD, using the
+same wire formats as ddtrace, the Agent and DogStatsD.
 
 ## Sign-in with Robine ID
 
@@ -49,9 +62,9 @@ and a nonce, `client_secret_post`, ID token RS256-verified against the JWKS,
 then a 12-hour HMAC-signed session cookie. Only the `sub` values listed in
 `ROBINE_DOG_OIDC_SUBJECTS` are let in.
 
-Declare the clients in silo01's `robine_id_applications` (ready-made entries in
-[`deploy/robine-id-clients.yml`](deploy/robine-id-clients.yml)), run
-`make robine-id` there, and put the secret in `.env`. The callback is
+The clients `robine-dog` and `robine-dog-dev` are declared in silo01's
+`robine_id_applications`; production deployment is described in
+[`deploy/README.md`](deploy/README.md). The callback is
 `<ROBINE_DOG_BASE_URL>/auth/callback` (`http://localhost:5173/auth/callback` in
 development).
 
@@ -82,22 +95,48 @@ From a Datadog Agent: `DD_LOGS_CONFIG_USE_HTTP=true`,
 With `DD_LOGS_INJECTION=true`, the ddtrace log integrations add
 `dd.trace_id`/`dd.span_id` to every log, which links logs and traces both ways.
 
+**Metrics** — any DogStatsD client, robine-dog plays the Agent's DogStatsD
+server:
+
+```sh
+DD_DOGSTATSD_URL=udp://localhost:8125     # or DD_AGENT_HOST + DD_DOGSTATSD_PORT
+echo -n 'shop.orders:1|c|#env:dev,payment_method:card' | nc -u -w0 localhost 8125
+```
+
+Or the series API, as the Agent or a script posts it:
+
+```sh
+curl -X POST http://localhost:8080/api/v2/series -H "DD-API-KEY: $ROBINE_DOG_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d "{\"series\":[{\"metric\":\"queue.depth\",\"type\":3,\"points\":[{\"timestamp\":$(date +%s),\"value\":12}],
+        \"tags\":[\"env:dev\"],\"resources\":[{\"type\":\"host\",\"name\":\"worker-1\"}]}]}"
+```
+
 ## Configuration
 
-All in the environment (see [`.env.example`](.env.example)): listen addresses,
-`ROBINE_DOG_DB`, `ROBINE_DOG_RETENTION_DAYS` (default 15, purged every 10
-minutes), `ROBINE_DOG_API_KEY`, `ROBINE_DOG_TRACE_REQUIRE_KEY`, the OIDC
-client, `ROBINE_DOG_SESSION_SECRET`.
+All in the environment (see [`.env.example`](.env.example)): listen addresses
+(`ROBINE_DOG_DOGSTATSD_LISTEN=off` disables DogStatsD),
+`ROBINE_DOG_GREPTIME_URL` / `_DB` (optional `_USER` / `_PASSWORD`),
+`ROBINE_DOG_POSTGRES_URL`, `ROBINE_DOG_RETENTION_DAYS` (logs and spans,
+default 15) and `ROBINE_DOG_METRICS_RETENTION_DAYS` (default 455, i.e. 15
+months) applied as table TTLs, `ROBINE_DOG_API_KEY`,
+`ROBINE_DOG_TRACE_REQUIRE_KEY`, the OIDC client, `ROBINE_DOG_SESSION_SECRET`.
+
+Rows are written in batches (every 200 ms or 5,000 rows) and metric buckets
+every 10 seconds; on SIGTERM both are flushed before exiting.
 
 ## Layout
 
 ```text
 crates/robine-dog/src
-  main.rs            listeners, routes, retention
-  query/             Datadog search syntax: parser → SQL
+  main.rs            listeners, routes, graceful shutdown
+  store/             GreptimeDB (HTTP SQL, schema, batched writers), PostgreSQL (migrations)
+  query/             Datadog search syntax: parser → GreptimeDB SQL
   intake/logs.rs     /api/v2/logs (remapping, JSON messages, tags, trace ids)
-  intake/traces.rs   trace-agent API (v0.4/v0.5 msgpack), service entry spans
-  api/               UI API: logs, spans, facets, APM
+  intake/traces.rs   trace-agent API (v0.4/v0.5 msgpack), service entry spans, trace metrics
+  intake/series.rs   /api/v1/series, /api/v2/series
+  metrics/           DogStatsD, 10 s aggregator, metric query language → SQL
+  api/               UI API: logs, spans, facets, APM, metrics
   auth.rs            Robine ID OIDC + session
 crates/robine-dog-demo  demo traffic generator
 web/src                React UI (pages/, components/, lib/)

@@ -3,6 +3,8 @@
 //! configured with `DD_AGENT_HOST`/`DD_TRACE_AGENT_URL` reports here directly.
 
 use crate::AppState;
+use crate::store::greptime::{lit, opt_lit};
+use crate::store::writer::{Insertable, next_id};
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -336,41 +338,35 @@ pub fn decode_v05(body: &[u8]) -> anyhow::Result<Vec<Vec<SpanRow>>> {
     Ok(out)
 }
 
-pub fn insert(conn: &mut rusqlite::Connection, chunks: Vec<Vec<SpanRow>>) -> anyhow::Result<usize> {
-    let tx = conn.transaction()?;
-    let mut n = 0;
-    {
-        let mut stmt = tx.prepare_cached(
-            "INSERT INTO spans (trace_id, span_id, parent_id, service, name, resource, type, env, version,
-                                start, duration, error, top_level, meta, metrics)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )?;
-        for mut chunk in chunks {
-            mark_top_level(&mut chunk);
-            for s in chunk {
-                stmt.execute(rusqlite::params![
-                    s.trace_id,
-                    s.span_id,
-                    s.parent_id,
-                    s.service,
-                    s.name,
-                    s.resource,
-                    s.typ,
-                    s.env,
-                    s.version,
-                    s.start,
-                    s.duration,
-                    s.error,
-                    s.top_level,
-                    serde_json::to_string(&s.meta)?,
-                    serde_json::to_string(&s.metrics)?,
-                ])?;
-                n += 1;
-            }
-        }
+impl Insertable for SpanRow {
+    const TABLE: &'static str = "spans";
+    const COLUMNS: &'static str = r#"("ts", "id", "trace_id", "span_id", "parent_id", "service", "name", "resource", "type", "env", "version", "duration", "error", "top_level", "meta", "metrics")"#;
+
+    fn values(&self, out: &mut String) {
+        use std::fmt::Write;
+        let meta = serde_json::to_string(&self.meta).unwrap_or_else(|_| "{}".into());
+        let metrics = serde_json::to_string(&self.metrics).unwrap_or_else(|_| "{}".into());
+        let _ = write!(
+            out,
+            "({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
+            self.start,
+            next_id(),
+            lit(&self.trace_id),
+            lit(&self.span_id),
+            lit(&self.parent_id),
+            lit(&self.service),
+            lit(&self.name),
+            lit(&self.resource),
+            opt_lit(self.typ.as_deref()),
+            opt_lit(self.env.as_deref()),
+            opt_lit(self.version.as_deref()),
+            self.duration,
+            self.error,
+            self.top_level,
+            lit(&meta),
+            lit(&metrics),
+        );
     }
-    tx.commit()?;
-    Ok(n)
 }
 
 async fn store(st: AppState, decoded: anyhow::Result<Vec<Vec<SpanRow>>>) -> Response {
@@ -381,8 +377,17 @@ async fn store(st: AppState, decoded: anyhow::Result<Vec<Vec<SpanRow>>>) -> Resp
             return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
         }
     };
-    match st.db.write(move |c| insert(c, chunks)).await {
-        Ok(n) => {
+    let mut spans = Vec::new();
+    for mut chunk in chunks {
+        mark_top_level(&mut chunk);
+        for s in &chunk {
+            crate::metrics::trace_metrics(&st.aggregator, s);
+        }
+        spans.extend(chunk);
+    }
+    let n = spans.len();
+    match st.store.spans.send(spans).await {
+        Ok(()) => {
             tracing::debug!(spans = n, "traces received");
             rate_response()
         }

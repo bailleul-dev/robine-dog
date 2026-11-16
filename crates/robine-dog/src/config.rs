@@ -15,10 +15,17 @@ pub struct Oidc {
 pub struct Config {
     pub listen: SocketAddr,
     pub trace_listen: Option<SocketAddr>,
-    pub db_path: PathBuf,
+    /// DogStatsD (UDP), as a local Datadog Agent's port 8125.
+    pub dogstatsd_listen: Option<SocketAddr>,
+    pub greptime_url: String,
+    pub greptime_db: String,
+    pub greptime_auth: Option<(String, String)>,
+    pub postgres_url: String,
     pub static_dir: PathBuf,
     pub base_url: String,
+    /// Logs and spans.
     pub retention_days: i64,
+    pub metrics_retention_days: i64,
     pub api_key: Option<String>,
     pub trace_require_key: bool,
     pub session_secret: Vec<u8>,
@@ -42,6 +49,11 @@ impl Config {
             Some("off") => None,
             Some(v) => Some(v.parse()?),
             None => Some("127.0.0.1:8126".parse()?),
+        };
+        let dogstatsd_listen = match var("ROBINE_DOG_DOGSTATSD_LISTEN").as_deref() {
+            Some("off") => None,
+            Some(v) => Some(v.parse()?),
+            None => Some("127.0.0.1:8125".parse()?),
         };
         let auth_disabled = var("ROBINE_DOG_AUTH").as_deref() == Some("disabled");
         if auth_disabled && !listen.ip().is_loopback() {
@@ -82,9 +94,15 @@ impl Config {
         Ok(Self {
             listen,
             trace_listen,
-            db_path: var("ROBINE_DOG_DB")
-                .unwrap_or_else(|| "data/robine-dog.db".into())
-                .into(),
+            dogstatsd_listen,
+            greptime_url: var("ROBINE_DOG_GREPTIME_URL")
+                .unwrap_or_else(|| "http://127.0.0.1:14000".into()),
+            greptime_db: var("ROBINE_DOG_GREPTIME_DB").unwrap_or_else(|| "robine_dog".into()),
+            greptime_auth: var("ROBINE_DOG_GREPTIME_USER")
+                .map(|u| (u, var("ROBINE_DOG_GREPTIME_PASSWORD").unwrap_or_default())),
+            postgres_url: var("ROBINE_DOG_POSTGRES_URL").unwrap_or_else(|| {
+                "postgres://robine_dog:robine_dog@127.0.0.1:15432/robine_dog".into()
+            }),
             static_dir: var("ROBINE_DOG_STATIC_DIR")
                 .unwrap_or_else(|| "web/dist".into())
                 .into(),
@@ -95,6 +113,9 @@ impl Config {
             retention_days: var("ROBINE_DOG_RETENTION_DAYS")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15),
+            metrics_retention_days: var("ROBINE_DOG_METRICS_RETENTION_DAYS")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(455),
             api_key: var("ROBINE_DOG_API_KEY"),
             trace_require_key: var("ROBINE_DOG_TRACE_REQUIRE_KEY")
                 .is_some_and(|v| v == "1" || v == "true"),
