@@ -24,22 +24,26 @@ pub struct Point {
     /// Sorted, deduplicated `key:value` tags.
     pub tags: Vec<String>,
     pub value: f64,
+    /// How many samples `value` stands for: 1, except for distributions,
+    /// where equal samples (and the bins of an Agent sketch) are merged.
+    pub weight: f64,
 }
 
 impl Insertable for Point {
     const TABLE: &'static str = "metric_points";
-    const COLUMNS: &'static str = r#"("ts", "metric", "host", "tags", "value")"#;
+    const COLUMNS: &'static str = r#"("ts", "metric", "host", "tags", "value", "weight")"#;
 
     fn values(&self, out: &mut String) {
         use std::fmt::Write;
         let _ = write!(
             out,
-            "({}, {}, {}, {}, {})",
+            "({}, {}, {}, {}, {}, {})",
             self.ts,
             lit(&self.metric),
             opt_lit(self.host.as_deref()),
             lit(&tags_column(&self.tags)),
             num(self.value),
+            num(self.weight),
         );
     }
 }
@@ -161,7 +165,7 @@ impl Aggregator {
         let mut points = Vec::new();
         let mut kinds = HashMap::new();
         for (k, acc) in map {
-            let mut emit = |name: String, kind: Kind, value: f64| {
+            let mut emit_weighted = |name: String, kind: Kind, value: f64, weight: f64| {
                 kinds.insert(name.clone(), kind);
                 points.push(Point {
                     ts: k.bucket,
@@ -169,8 +173,10 @@ impl Aggregator {
                     host: k.host.clone(),
                     tags: k.tags.clone(),
                     value,
+                    weight,
                 });
             };
+            let mut emit = |name: String, kind: Kind, value: f64| emit_weighted(name, kind, value, 1.0);
             match acc {
                 Acc::Count(c) => emit(k.name.clone(), Kind::Count, c),
                 Acc::Gauge(g) => emit(k.name.clone(), Kind::Gauge, g),
@@ -194,8 +200,12 @@ impl Aggregator {
                     emit(format!("{}.max", k.name), Kind::Gauge, h[h.len() - 1]);
                 }
                 Acc::Distribution(d) => {
+                    let mut same: HashMap<u64, f64> = HashMap::new();
                     for v in d {
-                        emit(k.name.clone(), Kind::Distribution, v);
+                        *same.entry(v.to_bits()).or_default() += 1.0;
+                    }
+                    for (bits, n) in same {
+                        emit_weighted(k.name.clone(), Kind::Distribution, f64::from_bits(bits), n);
                     }
                 }
             }

@@ -343,6 +343,10 @@ pub fn decompress(headers: &HeaderMap, body: Bytes) -> std::io::Result<Vec<u8>> 
         "deflate" => {
             flate2::read::ZlibDecoder::new(&body[..]).read_to_end(&mut out)?;
         }
+        // What recent Agents send by default.
+        "zstd" => {
+            zstd::stream::read::Decoder::new(&body[..])?.read_to_end(&mut out)?;
+        }
         _ => out = body.to_vec(),
     }
     Ok(out)

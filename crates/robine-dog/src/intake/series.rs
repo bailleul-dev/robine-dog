@@ -1,6 +1,7 @@
 //! Metric submission over HTTP, as Datadog's API takes it:
-//! `POST /api/v1/series` and `POST /api/v2/series` (JSON), authenticated by
-//! `DD-API-KEY`. Points are stored as sent, without aggregation.
+//! `POST /api/v1/series` and `POST /api/v2/series` (JSON, or the Agent's
+//! protobuf), authenticated by `DD-API-KEY`. Points are stored as sent,
+//! without aggregation.
 
 use super::logs::{api_key_ok, decompress};
 use crate::AppState;
@@ -121,14 +122,14 @@ pub fn parse_v2(body: &[u8]) -> anyhow::Result<Vec<Series>> {
         .collect())
 }
 
-fn valid_name(m: &str) -> bool {
+pub fn valid_name(m: &str) -> bool {
     !m.is_empty()
         && m.len() <= 200
         && m.chars()
             .all(|c| c.is_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
-async fn store(st: &AppState, series: Vec<Series>) -> anyhow::Result<usize> {
+pub async fn store(st: &AppState, series: Vec<Series>) -> anyhow::Result<usize> {
     let mut kinds: HashMap<String, String> = HashMap::new();
     let mut points = Vec::new();
     for s in series.into_iter().filter(|s| valid_name(&s.metric)) {
@@ -141,6 +142,7 @@ async fn store(st: &AppState, series: Vec<Series>) -> anyhow::Result<usize> {
                     host: s.host.clone(),
                     tags: s.tags.clone(),
                     value: v,
+                    weight: 1.0,
                 });
             }
         }
@@ -168,17 +170,16 @@ async fn handle(
         )
             .into_response();
     }
-    if headers
+    // The Agent sends protobuf (`MetricPayload`); scripts and libraries JSON.
+    let parse = if headers
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .is_some_and(|c| c.contains("protobuf"))
     {
-        return (
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            Json(json!({"errors": ["protobuf series are not supported: send JSON (Agent: use_v2_api.series: false)"]})),
-        )
-            .into_response();
-    }
+        super::agent::parse_series
+    } else {
+        parse
+    };
     let body = match decompress(&headers, body) {
         Ok(b) => b,
         Err(e) => {

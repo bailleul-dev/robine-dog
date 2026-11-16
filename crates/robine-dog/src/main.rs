@@ -17,7 +17,7 @@ mod store;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{delete, get, post};
+use axum::routing::{any, delete, get, post};
 use std::sync::Arc;
 use tower_http::compression::CompressionLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -64,7 +64,13 @@ fn app(st: AppState) -> Router {
         .route("/api/v1/series", post(intake::series::v1))
         .route("/api/v2/series", post(intake::series::v2))
         .route("/api/v1/validate", get(intake::series::validate))
-        .layer(DefaultBodyLimit::max(16 * 1024 * 1024));
+        .route("/api/v2/validate", get(intake::series::validate))
+        // A Datadog Agent's forwarders.
+        .route("/api/v0.2/traces", post(intake::agent::traces))
+        .route("/api/beta/sketches", post(intake::agent::sketches))
+        .route("/intake/", post(intake::agent::acknowledge))
+        .route("/api/{*rest}", any(intake::agent::acknowledge))
+        .layer(DefaultBodyLimit::max(64 * 1024 * 1024));
     Router::new()
         .merge(intake)
         .nest("/api/ui", ui_api(st.clone()))

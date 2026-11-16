@@ -172,7 +172,7 @@ pub fn span_from_map(m: &Map<String, Value>) -> SpanRow {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn build(
+pub fn build(
     trace_id: String,
     span_id: String,
     parent_id: String,
@@ -369,14 +369,8 @@ impl Insertable for SpanRow {
     }
 }
 
-async fn store(st: AppState, decoded: anyhow::Result<Vec<Vec<SpanRow>>>) -> Response {
-    let chunks = match decoded {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!(error = %e, "undecodable trace payload");
-            return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
-        }
-    };
+/// Stores trace chunks: service entry spans marked, trace metrics derived.
+pub async fn ingest(st: &AppState, chunks: Vec<Vec<SpanRow>>) -> anyhow::Result<usize> {
     let mut spans = Vec::new();
     for mut chunk in chunks {
         mark_top_level(&mut chunk);
@@ -386,8 +380,20 @@ async fn store(st: AppState, decoded: anyhow::Result<Vec<Vec<SpanRow>>>) -> Resp
         spans.extend(chunk);
     }
     let n = spans.len();
-    match st.store.spans.send(spans).await {
-        Ok(()) => {
+    st.store.spans.send(spans).await?;
+    Ok(n)
+}
+
+async fn store(st: AppState, decoded: anyhow::Result<Vec<Vec<SpanRow>>>) -> Response {
+    let chunks = match decoded {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "undecodable trace payload");
+            return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        }
+    };
+    match ingest(&st, chunks).await {
+        Ok(n) => {
             tracing::debug!(spans = n, "traces received");
             rate_response()
         }

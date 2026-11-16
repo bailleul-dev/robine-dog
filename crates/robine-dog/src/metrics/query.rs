@@ -38,6 +38,18 @@ impl Agg {
         })
     }
 
+    /// Over distribution samples, each standing for `weight` samples.
+    fn weighted_sql(self) -> String {
+        match self {
+            Agg::Avg => "sum(value * weight) / sum(weight)".into(),
+            Agg::Sum => "sum(value * weight)".into(),
+            Agg::Min => "min(value)".into(),
+            Agg::Max => "max(value)".into(),
+            Agg::Count => "sum(weight)".into(),
+            Agg::Pct(p) => format!("approx_percentile_cont_with_weight(value, weight, {p})"),
+        }
+    }
+
     fn sql(self, col: &str) -> String {
         match self {
             Agg::Avg => format!("avg({col})"),
@@ -232,7 +244,7 @@ pub fn build_sql(q: &MetricQuery, kind: Kind, from: i64, to: i64, interval: i64)
     let secs = interval as f64 / 1000.0;
 
     if kind == Kind::Distribution {
-        select.push(format!("{} AS v", q.space.sql("value")));
+        select.push(format!("{} AS v", q.space.weighted_sql()));
         return format!(
             "SELECT {} FROM metric_points WHERE {where_} GROUP BY {group_by} ORDER BY b",
             select.join(", ")
@@ -318,7 +330,10 @@ mod tests {
 
         let q = parse("p99:lat{*}").unwrap();
         let sql = build_sql(&q, Kind::Distribution, 0, 60_000, 10_000);
-        assert!(sql.contains("approx_percentile_cont(value, 0.99)"), "{sql}");
+        assert!(
+            sql.contains("approx_percentile_cont_with_weight(value, weight, 0.99)"),
+            "{sql}"
+        );
 
         let q = parse("sum:hits{*}.as_rate()").unwrap();
         assert!(build_sql(&q, Kind::Count, 0, 1, 10_000).contains("sum(value) / 10.0 AS v"));

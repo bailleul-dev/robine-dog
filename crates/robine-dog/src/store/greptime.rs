@@ -76,7 +76,7 @@ impl Greptime {
             &format!("CREATE DATABASE IF NOT EXISTS {}", ident(&self.db)),
         )
         .await?;
-        for ddl in SCHEMA {
+        for ddl in SCHEMA.iter().chain(UPGRADES) {
             self.exec(ddl).await?;
         }
         for (table, days) in [
@@ -130,9 +130,14 @@ const SCHEMA: &[&str] = &[
         "host" STRING,
         "tags" STRING,
         "value" DOUBLE,
+        "weight" DOUBLE DEFAULT 1,
         PRIMARY KEY ("metric", "host", "tags")
     ) WITH ('append_mode' = 'true')"#,
 ];
+
+/// Columns added after a table was first created; each statement is idempotent.
+const UPGRADES: &[&str] =
+    &[r#"ALTER TABLE "metric_points" ADD COLUMN IF NOT EXISTS "weight" DOUBLE DEFAULT 1"#];
 
 /// A string literal: `it's` → `'it''s'`. NUL bytes are dropped.
 pub fn lit(s: &str) -> String {
