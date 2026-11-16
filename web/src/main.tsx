@@ -9,6 +9,7 @@ import { LiveTail } from "./pages/LiveTail";
 import { Login } from "./pages/Login";
 import { LogsExplorer } from "./pages/LogsExplorer";
 import { MetricsExplorer, MetricsSummary } from "./pages/Metrics";
+import { Pipelines } from "./pages/Pipelines";
 import { TraceExplorer } from "./pages/TraceExplorer";
 import "./styles.css";
 
@@ -41,6 +42,7 @@ function App() {
       <Route element={<Layout me={me.data} />}>
         <Route path="/logs" element={<LogsExplorer />} />
         <Route path="/logs/livetail" element={<LiveTail />} />
+        <Route path="/logs/pipelines" element={<Pipelines />} />
         <Route path="/apm/services" element={<ServiceCatalog />} />
         <Route path="/apm/services/:name" element={<ServicePage />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />

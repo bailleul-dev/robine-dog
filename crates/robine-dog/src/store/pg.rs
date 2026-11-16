@@ -39,7 +39,38 @@ const MIGRATIONS: &[&str] = &[
         last_seen    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     "#,
+    // Configuration objects (pipelines, monitors, dashboards…), one JSON
+    // document each, in a user-defined order within their kind.
+    r#"
+    CREATE TABLE documents (
+        kind        TEXT NOT NULL,
+        id          TEXT NOT NULL,
+        position    INT NOT NULL DEFAULT 0,
+        body        JSONB NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (kind, id)
+    );
+    "#,
 ];
+
+/// A stored configuration document.
+#[derive(Debug, Clone, Serialize)]
+pub struct Doc {
+    pub id: String,
+    pub position: i32,
+    pub body: serde_json::Value,
+    /// Epoch milliseconds.
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A random id like Datadog's (22 URL-safe characters).
+pub fn new_id() -> String {
+    use base64::Engine;
+    let bytes: [u8; 16] = rand::random();
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
 
 #[derive(Clone)]
 pub struct Pg {
@@ -203,6 +234,74 @@ impl Pg {
 
     pub async fn metric(&self, name: &str) -> Result<Option<MetricMeta>> {
         Ok(self.select_metrics(Some(name)).await?.pop())
+    }
+
+    pub async fn docs(&self, kind: &str) -> Result<Vec<Doc>> {
+        self.select_docs(kind, None).await
+    }
+
+    pub async fn doc(&self, kind: &str, id: &str) -> Result<Option<Doc>> {
+        Ok(self.select_docs(kind, Some(id)).await?.pop())
+    }
+
+    async fn select_docs(&self, kind: &str, id: Option<&str>) -> Result<Vec<Doc>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT id, position, body,
+                        (extract(epoch FROM created_at) * 1000)::bigint,
+                        (extract(epoch FROM updated_at) * 1000)::bigint
+                 FROM documents WHERE kind = $1 AND ($2::text IS NULL OR id = $2)
+                 ORDER BY position, created_at",
+                &[&kind, &id],
+            )
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| Doc {
+                id: r.get(0),
+                position: r.get(1),
+                body: r.get(2),
+                created_at: r.get(3),
+                updated_at: r.get(4),
+            })
+            .collect())
+    }
+
+    /// Creates or replaces a document; a new one goes last.
+    pub async fn put_doc(&self, kind: &str, id: &str, body: &serde_json::Value) -> Result<Doc> {
+        let c = self.pool.get().await?;
+        c.execute(
+            "INSERT INTO documents (kind, id, body, position)
+             VALUES ($1, $2, $3, (SELECT coalesce(max(position) + 1, 0) FROM documents WHERE kind = $1))
+             ON CONFLICT (kind, id) DO UPDATE SET body = excluded.body, updated_at = now()",
+            &[&kind, &id, body],
+        )
+        .await?;
+        drop(c);
+        self.doc(kind, id)
+            .await?
+            .context("document vanished after being written")
+    }
+
+    pub async fn delete_doc(&self, kind: &str, id: &str) -> Result<bool> {
+        let c = self.pool.get().await?;
+        Ok(c.execute("DELETE FROM documents WHERE kind = $1 AND id = $2", &[&kind, &id])
+            .await?
+            > 0)
+    }
+
+    /// Puts the listed documents first, in that order.
+    pub async fn reorder_docs(&self, kind: &str, ids: &[String]) -> Result<()> {
+        let c = self.pool.get().await?;
+        c.execute(
+            "UPDATE documents d SET position = o.pos - 1
+             FROM unnest($2::text[]) WITH ORDINALITY AS o(id, pos)
+             WHERE d.kind = $1 AND d.id = o.id",
+            &[&kind, &ids],
+        )
+        .await?;
+        Ok(())
     }
 
     pub async fn update_metric(

@@ -24,6 +24,7 @@ export const LOG_CORE_FACETS: CoreFacet[] = [
 export const LOG_TABS = [
   { to: "/logs", label: "Explorer", end: true },
   { to: "/logs/livetail", label: "Live Tail" },
+  { to: "/logs/pipelines", label: "Pipelines" },
 ];
 
 /** Every leaf path of an attributes object, as `@a.b.c`. */

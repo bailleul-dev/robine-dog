@@ -179,13 +179,26 @@ export function ValueMenu({
   );
 }
 
-export function Modal({ onClose, children, title }: { onClose: () => void; children: React.ReactNode; title: string }) {
+export function Modal({
+  onClose,
+  children,
+  title,
+  width = 380,
+}: {
+  onClose: () => void;
+  children: React.ReactNode;
+  title: string;
+  width?: number;
+}) {
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(28,26,41,0.35)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center" }}
       onMouseDown={onClose}
     >
-      <div style={{ background: "var(--bg)", borderRadius: 8, width: 380, boxShadow: "var(--shadow)" }} onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        style={{ background: "var(--bg)", borderRadius: 8, width: `min(${width}px, calc(100vw - 32px))`, maxHeight: "calc(100vh - 48px)", display: "flex", flexDirection: "column", boxShadow: "var(--shadow)" }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--border)", fontWeight: 600 }}>
           {title}
           <div className="spacer" />

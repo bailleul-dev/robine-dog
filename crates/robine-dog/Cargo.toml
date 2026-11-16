@@ -7,6 +7,8 @@ authors.workspace = true
 
 [dependencies]
 anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10"
 axum = "0.8"
 base64 = "0.22"
 deadpool-postgres = "0.14"
@@ -15,14 +17,16 @@ flate2 = "1"
 futures = "0.3"
 hmac = "0.12"
 jsonwebtoken = "9"
+percent-encoding = "2"
 prost = "0.13"
 rand = "0.9"
+regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rmpv = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-tokio-postgres = "0.7"
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
 time = { version = "0.3", features = ["parsing", "formatting", "macros"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["fs", "compression-gzip", "trace", "decompression-gzip"] }

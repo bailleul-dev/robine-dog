@@ -12,6 +12,7 @@ mod auth;
 mod config;
 mod intake;
 mod metrics;
+mod pipelines;
 mod query;
 mod store;
 
@@ -26,6 +27,7 @@ use tower_http::services::{ServeDir, ServeFile};
 pub struct AppState {
     pub store: Arc<store::Store>,
     pub aggregator: Arc<metrics::Aggregator>,
+    pub pipelines: Arc<pipelines::Pipelines>,
     pub cfg: Arc<config::Config>,
     pub auth: Arc<auth::Auth>,
 }
@@ -45,6 +47,22 @@ fn ui_api(st: AppState) -> Router<AppState> {
         .route("/apm/services", get(api::apm::services))
         .route("/apm/services/{name}", get(api::apm::service))
         .route("/apm/envs", get(api::apm::envs))
+        .route(
+            "/pipelines",
+            get(api::pipelines::list).post(api::pipelines::create),
+        )
+        .route(
+            "/pipelines/order",
+            get(api::pipelines::order).put(api::pipelines::set_order),
+        )
+        .route("/pipelines/grok-test", post(api::pipelines::grok_test))
+        .route(
+            "/pipelines/{id}",
+            get(api::pipelines::get)
+                .put(api::pipelines::update)
+                .delete(api::pipelines::delete),
+        )
+        .route("/pipelines/{id}/clone", post(api::pipelines::clone))
         .route("/metrics", get(api::metrics::list))
         .route("/metrics/query", post(api::metrics::query))
         .route(
@@ -52,6 +70,29 @@ fn ui_api(st: AppState) -> Router<AppState> {
             get(api::metrics::detail).patch(api::metrics::update),
         )
         .layer(axum::middleware::from_fn_with_state(st, auth::require))
+}
+
+/// Datadog's public API, for its clients and Terraform: `DD-API-KEY` auth.
+fn public_api(st: AppState) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/api/v1/logs/config/pipelines",
+            get(api::pipelines::list).post(api::pipelines::create),
+        )
+        .route(
+            "/api/v1/logs/config/pipelines/{id}",
+            get(api::pipelines::get)
+                .put(api::pipelines::update)
+                .delete(api::pipelines::delete),
+        )
+        .route(
+            "/api/v1/logs/config/pipeline-order",
+            get(api::pipelines::order).put(api::pipelines::set_order),
+        )
+        .layer(axum::middleware::from_fn_with_state(
+            st,
+            intake::logs::require_api_key,
+        ))
 }
 
 fn app(st: AppState) -> Router {
@@ -72,6 +113,7 @@ fn app(st: AppState) -> Router {
         .route("/api/{*rest}", any(intake::agent::acknowledge))
         .layer(DefaultBodyLimit::max(64 * 1024 * 1024));
     Router::new()
+        .merge(public_api(st.clone()))
         .merge(intake)
         .nest("/api/ui", ui_api(st.clone()))
         .route("/auth/login", get(auth::login))
@@ -133,9 +175,13 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(greptime = %cfg.greptime_url, db = %cfg.greptime_db, "storage ready");
     let aggregator = Arc::new(metrics::Aggregator::default());
     aggregator.spawn_flusher(store.clone());
+    api::pipelines::ensure_integrations(&store.pg).await?;
+    let pipelines = Arc::new(pipelines::Pipelines::default());
+    pipelines.load(&api::pipelines::stored(&store.pg).await?);
     let st = AppState {
         store: store.clone(),
         aggregator: aggregator.clone(),
+        pipelines,
         cfg: cfg.clone(),
         auth: Arc::new(auth::Auth::new()),
     };

@@ -21,6 +21,7 @@ const ITEMS: Item[] = [
     links: [
       { to: "/logs", label: "Explorer" },
       { to: "/logs/livetail", label: "Live Tail" },
+      { to: "/logs/pipelines", label: "Pipelines" },
     ],
   },
   {

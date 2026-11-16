@@ -204,6 +204,16 @@ pub fn split_tags(s: &str) -> Vec<String> {
         .collect()
 }
 
+/// Where Datadog's default status remapper looks, in order.
+const STATUS_ATTRIBUTES: &[&str] = &[
+    "status",
+    "level",
+    "severity",
+    "loglevel",
+    "log_level",
+    "levelname",
+];
+
 pub fn process(obj: Map<String, Value>, defaults: &Defaults, now: i64) -> LogRow {
     let mut obj = obj;
 
@@ -214,7 +224,13 @@ pub fn process(obj: Map<String, Value>, defaults: &Defaults, now: i64) -> LogRow
         .map(str::trim_start)
         .filter(|t| t.starts_with('{'))
         .and_then(|t| serde_json::from_str::<Value>(t).ok());
+    // A level inside a JSON message wins over the envelope's `status`, which an
+    // Agent always sets (to `info` for files and containers).
+    let mut inner_status = None;
     if let Some(Value::Object(inner)) = inner {
+        inner_status = STATUS_ATTRIBUTES
+            .iter()
+            .find_map(|k| inner.get(*k).and_then(as_text));
         for (k, v) in inner {
             obj.insert(k, v);
         }
@@ -252,12 +268,12 @@ pub fn process(obj: Map<String, Value>, defaults: &Defaults, now: i64) -> LogRow
         }
     }
 
-    let status_raw = match obj.remove("status") {
-        Some(v) => as_text(&v),
-        None => ["level", "severity", "loglevel", "log_level", "levelname"]
+    let envelope_status = obj.remove("status").and_then(|v| as_text(&v));
+    let status_raw = inner_status.or(envelope_status).or_else(|| {
+        STATUS_ATTRIBUTES[1..]
             .iter()
-            .find_map(|k| obj.get(*k).and_then(as_text)),
-    };
+            .find_map(|k| obj.get(*k).and_then(as_text))
+    });
 
     let attributes = unflatten(obj);
 
@@ -365,6 +381,24 @@ pub fn api_key_ok(st: &AppState, headers: &HeaderMap, q: &HashMap<String, String
     given.as_deref() == Some(expected.as_str())
 }
 
+/// For Datadog's public API routes: a valid `DD-API-KEY` (header or query).
+pub async fn require_api_key(
+    State(st): State<AppState>,
+    Query(q): Query<HashMap<String, String>>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if api_key_ok(&st, req.headers(), &q) {
+        next.run(req).await
+    } else {
+        (
+            StatusCode::FORBIDDEN,
+            Json(json!({"errors": ["Forbidden"]})),
+        )
+            .into_response()
+    }
+}
+
 pub async fn intake(
     State(st): State<AppState>,
     Query(q): Query<HashMap<String, String>>,
@@ -426,7 +460,11 @@ pub async fn intake(
     let now = now_ms();
     let rows: Vec<LogRow> = parsed
         .into_iter()
-        .map(|o| process(o, &defaults, now))
+        .map(|o| {
+            let mut row = process(o, &defaults, now);
+            st.pipelines.apply(&mut row);
+            row
+        })
         .collect();
     let n = rows.len();
     if let Err(e) = st.store.logs.send(rows).await {
@@ -481,6 +519,22 @@ mod tests {
             Value::Object(m),
             json!({"dd": {"trace_id": "1", "span_id": "2"}, "http": {"status_code": 500}})
         );
+    }
+
+    #[test]
+    fn json_level_beats_the_agent_envelope_status() {
+        let r = process(
+            obj(json!({"message": "{\"level\":\"error\",\"msg\":\"boom\"}", "status": "info"})),
+            &Defaults::default(),
+            0,
+        );
+        assert_eq!((r.status.as_str(), r.message.as_str()), ("error", "boom"));
+        let r = process(
+            obj(json!({"message": "plain", "status": "warn", "level": "error"})),
+            &Defaults::default(),
+            0,
+        );
+        assert_eq!(r.status, "warn");
     }
 
     #[test]

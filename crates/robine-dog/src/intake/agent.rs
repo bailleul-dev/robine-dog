@@ -812,6 +812,56 @@ mod tests {
     }
 
     #[test]
+    fn decodes_the_indexed_trace_format() {
+        use idx::{Any, AnyValue};
+        let strings: Vec<String> = ["", "web", "http.request", "GET /", "prod", "h1", "http.status_code", "500", "_top_level", "1.4.0"]
+            .map(String::from)
+            .to_vec();
+        let attr = |v| AnyValue { value: Some(v) };
+        let span = idx::Span {
+            service_ref: 1,
+            name_ref: 2,
+            resource_ref: 3,
+            span_id: 7,
+            start: 1_700_000_000_000_000_000,
+            duration: 5_000,
+            error: true,
+            attributes: HashMap::from([(6, attr(Any::StringRef(7))), (8, attr(Any::Double(1.0)))]),
+            version_ref: 9,
+            kind: 2,
+            ..Default::default()
+        };
+        let mut trace_id = vec![0u8; 16];
+        trace_id[7] = 1; // high 64 bits = 1
+        trace_id[15] = 42; // low 64 bits = 42
+        let payload = AgentPayload {
+            idx_tracer_payloads: vec![idx::TracerPayload {
+                strings,
+                env_ref: 4,
+                hostname_ref: 5,
+                chunks: vec![idx::TraceChunk {
+                    priority: 1,
+                    spans: vec![span],
+                    trace_id,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let chunks = decode_traces(&payload.encode_to_vec()).unwrap();
+        let s = &chunks[0][0];
+        assert_eq!((s.service.as_str(), s.resource.as_str()), ("web", "GET /"));
+        assert_eq!(s.trace_id, "42");
+        assert_eq!(s.meta["_dd.p.tid"], "0000000000000001");
+        assert_eq!((s.env.as_deref(), s.version.as_deref()), (Some("prod"), Some("1.4.0")));
+        assert_eq!(s.meta["http.status_code"], "500");
+        assert_eq!(s.meta["span.kind"], "server");
+        assert_eq!(s.meta["_dd.hostname"], "h1");
+        assert!(s.error && s.top_level);
+    }
+
+    #[test]
     fn decodes_agent_series() {
         let payload = MetricPayload {
             series: vec![MetricSeries {

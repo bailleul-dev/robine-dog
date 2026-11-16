@@ -76,6 +76,19 @@ export type MetricSeries = { query_index: number; group: Record<string, string>;
 export type MetricQueryResult = { query: string; metric: string | null; type: string | null; unit: string | null; error: string | null };
 export type MetricsResponse = { interval_ms: number; results: MetricQueryResult[]; series: MetricSeries[] };
 
+export type Processor = { type: string; name: string; is_enabled: boolean; [k: string]: unknown };
+export type Pipeline = {
+  id?: string;
+  type: "pipeline";
+  name: string;
+  is_enabled: boolean;
+  filter: { query: string };
+  processors: Processor[];
+  is_read_only: boolean;
+  description?: string;
+};
+export type GrokSample = { sample: string; rule: string | null; attributes: Record<string, unknown> };
+
 export type Identity = { sub: string; name: string | null; email: string | null };
 
 export class ApiError extends Error {
@@ -111,6 +124,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 const post = <T>(path: string, body: unknown, signal?: AbortSignal) =>
   call<T>(path, { method: "POST", body: JSON.stringify(body), signal });
+const put = <T>(path: string, body: unknown) => call<T>(path, { method: "PUT", body: JSON.stringify(body) });
+const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
 
@@ -143,4 +158,12 @@ export const api = {
     call<MetricMeta>(`/metrics/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify(body) }),
   queryMetrics: (queries: string[], from: number, to: number, signal?: AbortSignal) =>
     post<MetricsResponse>("/metrics/query", { queries, from, to }, signal),
+  pipelines: () => call<Pipeline[]>("/pipelines"),
+  createPipeline: (p: Pipeline) => post<Pipeline>("/pipelines", p),
+  updatePipeline: (id: string, p: Pipeline) => put<Pipeline>(`/pipelines/${id}`, p),
+  deletePipeline: (id: string) => del<unknown>(`/pipelines/${id}`),
+  clonePipeline: (id: string) => post<Pipeline>(`/pipelines/${id}/clone`, {}),
+  orderPipelines: (pipeline_ids: string[]) => put<{ pipeline_ids: string[] }>("/pipelines/order", { pipeline_ids }),
+  grokTest: (grok: { match_rules: string; support_rules: string }, samples: string[], signal?: AbortSignal) =>
+    post<{ error: string | null; samples: GrokSample[] }>("/pipelines/grok-test", { grok, samples }, signal),
 };

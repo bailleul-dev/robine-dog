@@ -706,18 +706,46 @@ fn emit(
 fn noise_logs(rng: &mut impl Rng, ts_ms: i64, env: &str, out: &mut Out) {
     let r = rng.random::<f64>();
     let (service, source, host, status, message) = if r < 0.3 {
-        (
-            "nginx",
-            "nginx",
-            "edge-lb-01",
-            "info",
+        // Raw nginx lines, as the Agent tails them: the Nginx integration
+        // pipeline parses them (status, URL, user agent, date).
+        let ip = format!("10.0.{}.{}", rng.random_range(0..255), rng.random_range(1..255));
+        let date = time::OffsetDateTime::from_unix_timestamp(ts_ms / 1000)
+            .unwrap_or(time::OffsetDateTime::UNIX_EPOCH)
+            .format(time::macros::format_description!(
+                "[day]/[month repr:short]/[year]:[hour]:[minute]:[second] +0000"
+            ))
+            .unwrap_or_default();
+        let message = if rng.random_bool(0.03) {
+            let d = time::OffsetDateTime::from_unix_timestamp(ts_ms / 1000)
+                .unwrap_or(time::OffsetDateTime::UNIX_EPOCH)
+                .format(time::macros::format_description!(
+                    "[year]/[month]/[day] [hour]:[minute]:[second]"
+                ))
+                .unwrap_or_default();
             format!(
-                "10.0.{}.{} - - \"GET /static/app.{}.js HTTP/1.1\" 200 48211 \"-\" \"Mozilla/5.0\"",
-                rng.random_range(0..255),
-                rng.random_range(0..255),
-                rng.random_range(1000..9999)
-            ),
-        )
+                "{d} [error] 31#31: *{} upstream timed out (110: Connection timed out) while reading response header from upstream, client: {ip}, server: shop, request: \"POST /api/orders HTTP/1.1\", upstream: \"http://10.42.0.17:8080/api/orders\"",
+                rng.random_range(1000..99999)
+            )
+        } else {
+            let (path, code, bytes) = match rng.random_range(0..10) {
+                0..=3 => (format!("/static/app.{}.js", rng.random_range(1000..9999)), 200, 48211),
+                4 => ("/static/logo.svg".to_string(), 304, 0),
+                5 | 6 => (format!("/products/{}", ["espresso-machine", "milk-jug", "scale-v2"][rng.random_range(0..3)]), 200, 18_342),
+                7 => ("/api/cart?u=u-1042".to_string(), 200, 912),
+                8 => ("/wp-login.php".to_string(), 404, 153),
+                _ => ("/api/orders".to_string(), if rng.random_bool(0.2) { 502 } else { 201 }, 211),
+            };
+            let ua = [
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+                "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+                "kube-probe/1.31",
+            ][rng.random_range(0..5)];
+            let method = if path.starts_with("/api/orders") { "POST" } else { "GET" };
+            format!("{ip} - - [{date}] \"{method} {path} HTTP/1.1\" {code} {bytes} \"-\" \"{ua}\"")
+        };
+        ("nginx", "nginx", "edge-lb-01", "info", message)
     } else if r < 0.45 {
         (
             "redis",
@@ -767,11 +795,14 @@ fn noise_logs(rng: &mut impl Rng, ts_ms: i64, env: &str, out: &mut Out) {
     } else {
         ("postgres", "postgresql", "db-primary-01", "error", "FATAL:  remaining connection slots are reserved for non-replication superuser connections".into())
     };
-    out.logs.push(json!({
+    let mut log = json!({
         "ddsource": source, "ddtags": format!("env:{env}"), "hostname": host, "service": service,
         "status": status, "timestamp": ts_ms, "message": message,
-        "pool": if service == "shop-api" { json!({"open": rng.random_range(5..50), "idle": rng.random_range(0..10), "wait_count": rng.random_range(0..3)}) } else { Value::Null },
-    }));
+    });
+    if service == "shop-api" {
+        log["pool"] = json!({"open": rng.random_range(5..50), "idle": rng.random_range(0..10), "wait_count": rng.random_range(0..3)});
+    }
+    out.logs.push(log);
 }
 
 fn now_ns() -> i64 {
@@ -838,34 +869,37 @@ const HOSTS: &[(&str, &str)] = &[
 ];
 
 impl Statsd {
-    fn tick(&self, rng: &mut impl Rng, ts_s: i64) {
+    /// `backfill`: points carry their timestamp (`|T`), which the Agent only
+    /// honors for gauges and counts; live points are sent untimestamped.
+    fn tick(&self, rng: &mut impl Rng, ts_s: i64, backfill: bool) {
+        let t = if backfill { format!("|T{ts_s}") } else { String::new() };
         let mut lines = Vec::new();
         let hour = (ts_s / 3600) % 24;
         let load = 0.6 + 0.4 * ((ts_s as f64 / 900.0).sin().abs());
         for (host, service) in HOSTS {
             let cpu = (load * 40.0 + rng.random_range(-6.0..6.0)).clamp(1.0, 99.0);
             lines.push(format!(
-                "system.cpu.user:{cpu:.1}|g|#env:prod,service:{service},host:{host}|T{ts_s}"
+                "system.cpu.user:{cpu:.1}|g|#env:prod,service:{service},host:{host}{t}"
             ));
             let mem = 1.6e9 + load * 4e8 + rng.random_range(0.0..5e7);
             lines.push(format!(
-                "system.mem.used:{mem:.0}|g|#env:prod,service:{service},host:{host}|T{ts_s}"
+                "system.mem.used:{mem:.0}|g|#env:prod,service:{service},host:{host}{t}"
             ));
             lines.push(format!(
-                "system.load.1:{:.2}|g|#env:prod,host:{host}|T{ts_s}",
+                "system.load.1:{:.2}|g|#env:prod,host:{host}{t}",
                 load * 2.0 + rng.random_range(0.0..0.4)
             ));
         }
         for (method, weight) in [("card", 6.0), ("paypal", 2.0), ("apple_pay", 1.0)] {
             let n = (weight * load * rng.random_range(0.5..1.5)).round();
             lines.push(format!(
-                "shop.orders.placed:{n}|c|#env:prod,payment_method:{method}|T{ts_s}"
+                "shop.orders.placed:{n}|c|#env:prod,payment_method:{method}{t}"
             ));
         }
         for _ in 0..8 {
             let v: f64 = 15.0 + rng.random_range(0.0..1.0f64).powi(3) * 400.0;
             lines.push(format!(
-                "shop.cart.value:{v:.2}|d|#env:prod,currency:eur|T{ts_s}"
+                "shop.cart.value:{v:.2}|d|#env:prod,currency:eur{t}"
             ));
         }
         let depth = if (9..11).contains(&hour) {
@@ -874,7 +908,7 @@ impl Statsd {
             rng.random_range(0..12)
         };
         lines.push(format!(
-            "shop.queue.depth:{depth}|g|#env:prod,queue:orders|T{ts_s}"
+            "shop.queue.depth:{depth}|g|#env:prod,queue:orders{t}"
         ));
         for chunk in lines.chunks(20) {
             let _ = self.sock.send_to(chunk.join("\n").as_bytes(), &self.addr);
@@ -934,7 +968,7 @@ fn main() -> anyhow::Result<()> {
         let end_s = now_ns() / 1_000_000_000;
         let mut t = end_s - backfill_min * 60;
         while t < end_s {
-            statsd.tick(&mut rng, t);
+            statsd.tick(&mut rng, t, true);
             t += 10;
             // UDP: pace the backfill so the receiver's socket buffer keeps up.
             std::thread::sleep(Duration::from_millis(1));
@@ -974,7 +1008,7 @@ fn main() -> anyhow::Result<()> {
         loop {
             let now_s = now_ns() / 1_000_000_000;
             if now_s - last_tick >= 10 {
-                statsd.tick(&mut rng, now_s);
+                statsd.tick(&mut rng, now_s, false);
                 last_tick = now_s;
             }
             let mut out = Out {

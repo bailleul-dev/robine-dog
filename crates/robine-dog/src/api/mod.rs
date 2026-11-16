@@ -4,6 +4,7 @@ pub mod apm;
 pub mod facets;
 pub mod logs;
 pub mod metrics;
+pub mod pipelines;
 pub mod spans;
 
 use crate::query::parser::{self, Expr};
