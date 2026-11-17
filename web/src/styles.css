@@ -86,8 +86,27 @@ a:hover {
 
 .app {
   display: flex;
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Across the top: the logo and the global search. */
+.topbar {
+  flex: none;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  background: var(--nav-bg);
+  color: var(--nav-fg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  z-index: 31;
 }
 
 .nav {
@@ -113,7 +132,8 @@ a:hover {
 }
 
 .nav-logo {
-  height: 52px;
+  height: 44px;
+  width: 208px;
   flex: none;
   display: flex;
   align-items: center;
@@ -143,8 +163,12 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 10px 8px;
-  padding: 6px 8px;
+  width: 520px;
+  max-width: calc(100% - 440px);
+  margin: 0 auto;
+  transform: translateX(-104px);
+  padding: 6px 10px;
+  overflow: hidden;
   border-radius: 5px;
   background: rgba(255, 255, 255, 0.08);
   font-size: 12.5px;
@@ -178,6 +202,10 @@ a:hover {
 .nav-section {
   padding: 6px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.nav-section:first-child {
+  border-top: 0;
 }
 
 .nav-link {
@@ -268,16 +296,8 @@ a:hover {
   text-overflow: ellipsis;
 }
 
-.nav.collapsed .nav-link > span:not(.nav-avatar),
-.nav.collapsed .nav-brand,
-.nav.collapsed .nav-search span,
-.nav.collapsed .nav-search kbd {
+.nav.collapsed .nav-link > span:not(.nav-avatar) {
   display: none;
-}
-
-.nav.collapsed .nav-search {
-  justify-content: center;
-  margin: 0 8px 8px;
 }
 
 .nav.collapsed .nav-collapse svg {

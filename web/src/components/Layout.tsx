@@ -6,6 +6,7 @@ import {
   AiIcon,
   ApmIcon,
   BellIcon,
+  BugIcon,
   CollapseIcon,
   DashboardIcon,
   DeliveryIcon,
@@ -87,13 +88,20 @@ const SECTIONS: Item[][] = [
       to: "/dashboard/lists",
       match: ["/dashboard"],
       links: [
-        { label: "Dashboard List", to: "/dashboard/lists", hint: "Browse, create and import dashboards" },
+        {
+          label: "Dashboard List",
+          to: "/dashboard/lists",
+          hint: "Browse, create and import dashboards",
+        },
         { label: "Notebooks" },
         { label: "Reports" },
         { label: "Sheets" },
       ],
       groups: [
-        { title: "Settings", links: [{ label: "Powerpacks" }, { label: "Datasets" }] },
+        {
+          title: "Settings",
+          links: [{ label: "Powerpacks" }, { label: "Datasets" }],
+        },
       ],
     },
     {
@@ -103,8 +111,16 @@ const SECTIONS: Item[][] = [
       to: "/monitors/manage",
       match: ["/monitors"],
       links: [
-        { label: "Monitor List", to: "/monitors/manage", hint: "Every monitor and its state" },
-        { label: "Triggered Monitors", to: "/monitors/triggered", hint: "What is alerting now" },
+        {
+          label: "Monitor List",
+          to: "/monitors/manage",
+          hint: "Every monitor and its state",
+        },
+        {
+          label: "Triggered Monitors",
+          to: "/monitors/triggered",
+          hint: "What is alerting now",
+        },
         { label: "New Monitor", to: "/monitors/create" },
         { label: "Downtimes" },
         { label: "Monitor Quality" },
@@ -136,7 +152,13 @@ const SECTIONS: Item[][] = [
         { label: "Cloud Cost" },
       ],
       groups: [
-        { title: "Agents", links: [{ label: "Fleet Automation" }, { label: "Remote Configuration" }] },
+        {
+          title: "Agents",
+          links: [
+            { label: "Fleet Automation" },
+            { label: "Remote Configuration" },
+          ],
+        },
       ],
     },
     {
@@ -144,12 +166,28 @@ const SECTIONS: Item[][] = [
       label: "APM",
       icon: <ApmIcon />,
       to: "/apm/services",
-      match: ["/apm", "/error-tracking"],
+      match: ["/apm"],
       links: [
-        { label: "Software Catalog", to: "/apm/services", hint: "Services, their health and owners" },
-        { label: "Traces", to: "/apm/traces", hint: "Search and analyze spans" },
-        { label: "Service Map", to: "/apm/map", hint: "How services call each other" },
-        { label: "Error Tracking", to: "/error-tracking", hint: "Errors grouped into issues" },
+        {
+          label: "Software Catalog",
+          to: "/apm/services",
+          hint: "Services, their health and owners",
+        },
+        {
+          label: "Traces",
+          to: "/apm/traces",
+          hint: "Search and analyze spans",
+        },
+        {
+          label: "Service Map",
+          to: "/apm/map",
+          hint: "How services call each other",
+        },
+        {
+          label: "Error Tracking",
+          to: "/error-tracking",
+          hint: "Errors grouped into issues",
+        },
         { label: "Profiles" },
         { label: "Database Monitoring" },
         { label: "Data Streams Monitoring" },
@@ -224,20 +262,57 @@ const SECTIONS: Item[][] = [
   ],
   [
     {
+      id: "errors",
+      label: "Errors",
+      icon: <BugIcon />,
+      to: "/error-tracking",
+      match: ["/error-tracking"],
+      links: [
+        {
+          label: "Issues",
+          to: "/error-tracking",
+          hint: "Errors grouped into issues",
+        },
+        { label: "Explorer" },
+        { label: "Exception Replay" },
+      ],
+      groups: [
+        {
+          title: "Settings",
+          links: [
+            { label: "Issue Teams" },
+            { label: "Custom Grouping" },
+            { label: "Dynamic Sampling" },
+          ],
+        },
+      ],
+    },
+    {
       id: "metrics",
       label: "Metrics",
       icon: <MetricsIcon />,
       to: "/metrics/explorer",
       match: ["/metrics"],
       links: [
-        { label: "Explorer", to: "/metrics/explorer", hint: "Graph any metric" },
-        { label: "Summary", to: "/metrics/summary", hint: "Every metric, its type, tags and hosts" },
+        {
+          label: "Explorer",
+          to: "/metrics/explorer",
+          hint: "Graph any metric",
+        },
+        {
+          label: "Summary",
+          to: "/metrics/summary",
+          hint: "Every metric, its type, tags and hosts",
+        },
         { label: "Volume" },
       ],
       groups: [
         {
           title: "Settings",
-          links: [{ label: "Metrics without Limits" }, { label: "Reference Tables" }],
+          links: [
+            { label: "Metrics without Limits" },
+            { label: "Reference Tables" },
+          ],
         },
       ],
     },
@@ -248,9 +323,21 @@ const SECTIONS: Item[][] = [
       to: "/logs",
       match: ["/logs"],
       links: [
-        { label: "Explorer", to: "/logs", hint: "Search, analytics and patterns" },
-        { label: "Live Tail", to: "/logs/livetail", hint: "Logs as they arrive" },
-        { label: "Error Tracking", to: "/error-tracking", hint: "Error logs grouped into issues" },
+        {
+          label: "Explorer",
+          to: "/logs",
+          hint: "Search, analytics and patterns",
+        },
+        {
+          label: "Live Tail",
+          to: "/logs/livetail",
+          hint: "Logs as they arrive",
+        },
+        {
+          label: "Error Tracking",
+          to: "/error-tracking",
+          hint: "Error logs grouped into issues",
+        },
       ],
       groups: [
         {
@@ -277,14 +364,22 @@ const SECTIONS: Item[][] = [
       match: ["/monitors/webhooks"],
       links: [
         { label: "Integrations", hint: "Everything Datadog collects from" },
-        { label: "Webhooks", to: "/monitors/webhooks", hint: "Where monitors send their notifications" },
+        {
+          label: "Webhooks",
+          to: "/monitors/webhooks",
+          hint: "Where monitors send their notifications",
+        },
         { label: "APIs" },
         { label: "Marketplace" },
       ],
       groups: [
         {
           title: "Install",
-          links: [{ label: "Agent" }, { label: "OpenTelemetry" }, { label: "Fleet Automation" }],
+          links: [
+            { label: "Agent" },
+            { label: "OpenTelemetry" },
+            { label: "Fleet Automation" },
+          ],
         },
       ],
     },
@@ -304,7 +399,13 @@ function initials(id: Identity): string {
     .join("");
 }
 
-function Entry({ link, onNavigate }: { link: NavEntry; onNavigate: () => void }) {
+function Entry({
+  link,
+  onNavigate,
+}: {
+  link: NavEntry;
+  onNavigate: () => void;
+}) {
   const body = (
     <>
       <span className="nav-entry-label">{link.label}</span>
@@ -316,7 +417,11 @@ function Entry({ link, onNavigate }: { link: NavEntry; onNavigate: () => void })
       {body}
     </NavLink>
   ) : (
-    <span className="nav-entry disabled" aria-disabled="true" title={UNAVAILABLE}>
+    <span
+      className="nav-entry disabled"
+      aria-disabled="true"
+      title={UNAVAILABLE}
+    >
       {body}
     </span>
   );
@@ -332,7 +437,9 @@ function stored(key: string): boolean {
 
 export function Layout({ me }: { me: Identity }) {
   const { pathname } = useLocation();
-  const [collapsed, setCollapsed] = useState(() => stored("robine-dog:nav-collapsed"));
+  const [collapsed, setCollapsed] = useState(() =>
+    stored("robine-dog:nav-collapsed"),
+  );
   // The menu shown beside the bar: an item's id, or "user".
   const [open, setOpen] = useState<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -350,11 +457,12 @@ export function Layout({ me }: { me: Identity }) {
   }, []);
   const pages = useMemo<QuickNavPage[]>(
     () =>
-      SECTIONS.flat().flatMap((it) =>
-        [...it.links, ...(it.groups ?? []).flatMap((g) => g.links)]
-          .filter((l) => l.to)
-          .map((l) => ({ label: l.label, section: it.label, to: l.to! })),
-      )
+      SECTIONS.flat()
+        .flatMap((it) =>
+          [...it.links, ...(it.groups ?? []).flatMap((g) => g.links)]
+            .filter((l) => l.to)
+            .map((l) => ({ label: l.label, section: it.label, to: l.to! })),
+        )
         // Error Tracking is under both APM and Logs: once is enough.
         .filter((p, i, all) => all.findIndex((o) => o.to === p.to) === i),
     [],
@@ -390,129 +498,170 @@ export function Layout({ me }: { me: Identity }) {
 
   return (
     <div className="app">
-      <nav
-        className={`nav${collapsed ? " collapsed" : ""}`}
-        aria-label="Main"
-        onMouseLeave={() => later(null, 250)}
-      >
-        <div className="nav-bar" onMouseEnter={() => window.clearTimeout(timer.current)}>
-          <NavLink to="/logs" className="nav-logo" aria-label="Home">
-            <Logo />
-            <span className="nav-brand">robine-dog</span>
-          </NavLink>
-          <button
-            type="button"
-            className="nav-search"
-            onClick={() => setSearching(true)}
-            onMouseEnter={() => later(null, 120)}
-            title="Search (Ctrl+K)"
+      <header className="topbar">
+        <NavLink to="/logs" className="nav-logo" aria-label="Home">
+          <Logo />
+          <span className="nav-brand">robine-dog</span>
+        </NavLink>
+        <button
+          type="button"
+          className="nav-search"
+          onClick={() => setSearching(true)}
+          title={`Search (${MOD}+K)`}
+        >
+          <SearchIcon />
+          <span>Search pages, dashboards, monitors, services, metrics…</span>
+          <kbd>{MOD} K</kbd>
+        </button>
+      </header>
+      <div className="app-body">
+        <nav
+          className={`nav${collapsed ? " collapsed" : ""}`}
+          aria-label="Main"
+          onMouseLeave={() => later(null, 250)}
+        >
+          <div
+            className="nav-bar"
+            onMouseEnter={() => window.clearTimeout(timer.current)}
           >
-            <SearchIcon />
-            <span>Go to…</span>
-            <kbd>{MOD} K</kbd>
-          </button>
-          <div className="nav-items">
-            {SECTIONS.map((section, i) => (
-              <div className="nav-section" key={i}>
-                {section.map((it) => {
-                  const cls = `nav-link${it.id === current ? " active" : ""}${it.to ? "" : " disabled"}${open === it.id ? " open" : ""}`;
-                  const body = (
-                    <>
-                      {it.icon}
-                      <span>{it.label}</span>
-                    </>
-                  );
-                  const hover = {
-                    onMouseEnter: () => later(it.id, open ? 120 : 60),
-                    onFocus: () => setOpen(it.id),
-                  };
-                  return it.to ? (
-                    <NavLink key={it.id} to={it.to} className={cls} title={collapsed ? it.label : undefined} {...hover}>
-                      {body}
-                    </NavLink>
-                  ) : (
-                    <span key={it.id} className={cls} aria-disabled="true" title={collapsed ? it.label : undefined} {...hover}>
-                      {body}
-                    </span>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-          <div className="nav-bottom">
-            <span className="nav-link disabled" aria-disabled="true" title={UNAVAILABLE} onMouseEnter={() => later(null, 120)}>
-              <HelpIcon />
-              <span>Help</span>
-            </span>
-            <button
-              type="button"
-              className={`nav-link nav-user${open === "user" ? " open" : ""}`}
-              onMouseEnter={() => later("user", open ? 120 : 60)}
-              onClick={() => setOpen(open === "user" ? null : "user")}
-            >
-              <span className="nav-avatar">{initials(me)}</span>
-              <span className="nav-user-name">
-                {me.name ?? me.email ?? "Signed in"}
-                {me.name && me.email && <small>{me.email}</small>}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="nav-link nav-collapse"
-              onClick={toggle}
-              onMouseEnter={() => later(null, 120)}
-              aria-label={collapsed ? "Expand the navigation" : "Collapse the navigation"}
-              title={collapsed ? "Expand" : "Collapse"}
-            >
-              <CollapseIcon />
-              <span>Collapse</span>
-            </button>
-          </div>
-        </div>
-        {shown && (
-          <div className="nav-menu" onMouseEnter={() => window.clearTimeout(timer.current)}>
-            <div className="nav-menu-main">
-              <div className="nav-menu-title">{shown.label}</div>
-              {shown.links.map((l) => (
-                <Entry key={l.label} link={l} onNavigate={close} />
+            <div className="nav-items">
+              {SECTIONS.map((section, i) => (
+                <div className="nav-section" key={i}>
+                  {section.map((it) => {
+                    const cls = `nav-link${it.id === current ? " active" : ""}${it.to ? "" : " disabled"}${open === it.id ? " open" : ""}`;
+                    const body = (
+                      <>
+                        {it.icon}
+                        <span>{it.label}</span>
+                      </>
+                    );
+                    const hover = {
+                      onMouseEnter: () => later(it.id, open ? 120 : 60),
+                      onFocus: () => setOpen(it.id),
+                    };
+                    return it.to ? (
+                      <NavLink
+                        key={it.id}
+                        to={it.to}
+                        className={cls}
+                        title={collapsed ? it.label : undefined}
+                        {...hover}
+                      >
+                        {body}
+                      </NavLink>
+                    ) : (
+                      <span
+                        key={it.id}
+                        className={cls}
+                        aria-disabled="true"
+                        title={collapsed ? it.label : undefined}
+                        {...hover}
+                      >
+                        {body}
+                      </span>
+                    );
+                  })}
+                </div>
               ))}
             </div>
-            {shown.groups && (
-              <div className="nav-menu-side">
-                {shown.groups.map((g) => (
-                  <div className="nav-menu-group" key={g.title}>
-                    <div className="nav-menu-heading">{g.title}</div>
-                    {g.links.map((l) => (
-                      <Entry key={l.label} link={l} onNavigate={close} />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {open === "user" && (
-          <div className="nav-menu nav-menu-user" onMouseEnter={() => window.clearTimeout(timer.current)}>
-            <div className="nav-menu-main">
-              <div className="nav-menu-title">{me.name ?? "Signed in"}</div>
-              {me.email && <div className="nav-menu-note">{me.email}</div>}
-              <Entry link={{ label: "Personal Settings" }} onNavigate={close} />
-              <Entry link={{ label: "Organization Settings" }} onNavigate={close} />
-              <Entry link={{ label: "API Keys" }} onNavigate={close} />
-              <Entry link={{ label: "Plan & Usage" }} onNavigate={close} />
-              <a href="/auth/logout" className="nav-entry nav-signout">
-                <span className="nav-entry-label">
-                  <SignOutIcon width={14} height={14} /> Sign out
+            <div className="nav-bottom">
+              <span
+                className="nav-link disabled"
+                aria-disabled="true"
+                title={UNAVAILABLE}
+                onMouseEnter={() => later(null, 120)}
+              >
+                <HelpIcon />
+                <span>Help</span>
+              </span>
+              <button
+                type="button"
+                className={`nav-link nav-user${open === "user" ? " open" : ""}`}
+                onMouseEnter={() => later("user", open ? 120 : 60)}
+                onClick={() => setOpen(open === "user" ? null : "user")}
+              >
+                <span className="nav-avatar">{initials(me)}</span>
+                <span className="nav-user-name">
+                  {me.name ?? me.email ?? "Signed in"}
+                  {me.name && me.email && <small>{me.email}</small>}
                 </span>
-              </a>
+              </button>
+              <button
+                type="button"
+                className="nav-link nav-collapse"
+                onClick={toggle}
+                onMouseEnter={() => later(null, 120)}
+                aria-label={
+                  collapsed
+                    ? "Expand the navigation"
+                    : "Collapse the navigation"
+                }
+                title={collapsed ? "Expand" : "Collapse"}
+              >
+                <CollapseIcon />
+                <span>Collapse</span>
+              </button>
             </div>
           </div>
+          {shown && (
+            <div
+              className="nav-menu"
+              onMouseEnter={() => window.clearTimeout(timer.current)}
+            >
+              <div className="nav-menu-main">
+                <div className="nav-menu-title">{shown.label}</div>
+                {shown.links.map((l) => (
+                  <Entry key={l.label} link={l} onNavigate={close} />
+                ))}
+              </div>
+              {shown.groups && (
+                <div className="nav-menu-side">
+                  {shown.groups.map((g) => (
+                    <div className="nav-menu-group" key={g.title}>
+                      <div className="nav-menu-heading">{g.title}</div>
+                      {g.links.map((l) => (
+                        <Entry key={l.label} link={l} onNavigate={close} />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {open === "user" && (
+            <div
+              className="nav-menu nav-menu-user"
+              onMouseEnter={() => window.clearTimeout(timer.current)}
+            >
+              <div className="nav-menu-main">
+                <div className="nav-menu-title">{me.name ?? "Signed in"}</div>
+                {me.email && <div className="nav-menu-note">{me.email}</div>}
+                <Entry
+                  link={{ label: "Personal Settings" }}
+                  onNavigate={close}
+                />
+                <Entry
+                  link={{ label: "Organization Settings" }}
+                  onNavigate={close}
+                />
+                <Entry link={{ label: "API Keys" }} onNavigate={close} />
+                <Entry link={{ label: "Plan & Usage" }} onNavigate={close} />
+                <a href="/auth/logout" className="nav-entry nav-signout">
+                  <span className="nav-entry-label">
+                    <SignOutIcon width={14} height={14} /> Sign out
+                  </span>
+                </a>
+              </div>
+            </div>
+          )}
+        </nav>
+        {searching && (
+          <QuickNav pages={pages} onClose={() => setSearching(false)} />
         )}
-      </nav>
-      {searching && <QuickNav pages={pages} onClose={() => setSearching(false)} />}
-      <main className="main">
-        <Outlet />
-      </main>
+        <main className="main">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }
