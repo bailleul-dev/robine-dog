@@ -1,5 +1,6 @@
 import { Integrations } from "./pages/Integrations";
-import { EventsExplorer } from "./pages/Events";
+import { EventsExplorer, RumExplorer } from "./pages/Events";
+import { RumPerformancePage } from "./pages/Rum";
 import { Slos } from "./pages/Slos";
 import { Synthetics } from "./pages/Synthetics";
 import { Downtimes } from "./pages/Downtimes";
@@ -77,6 +78,9 @@ function App() {
         <Route path="/slo/manage" element={<Slos />} />
         <Route path="/event/explorer" element={<EventsExplorer />} />
         <Route path="/integrations" element={<Integrations />} />
+        <Route path="/rum" element={<Navigate to="/rum/performance-monitoring" replace />} />
+        <Route path="/rum/performance-monitoring" element={<RumPerformancePage />} />
+        <Route path="/rum/explorer" element={<RumExplorer />} />
         <Route path="/infrastructure" element={<Hosts />} />
         <Route path="/containers" element={<Containers />} />
         <Route path="/orchestration" element={<Navigate to="/orchestration/overview/pod" replace />} />

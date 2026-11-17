@@ -132,6 +132,18 @@ export type Slo = {
   thresholds: { timeframe: string; target: number; warning?: number | null }[];
   tags: string[];
 };
+export type RumPage = {
+  service: string | null;
+  name: string;
+  views: number;
+  loading_time: number | null;
+  largest_contentful_paint: number | null;
+  first_contentful_paint: number | null;
+  interaction_to_next_paint: number | null;
+  cumulative_layout_shift: number | null;
+  errors: number;
+};
+export type RumPerformance = { sessions: number; views: number; errors: number; actions: number; pages: RumPage[] };
 export type Downtime = {
   id: string;
   scope: string;
@@ -592,6 +604,10 @@ export const api = {
   searchEvents: (s: Scope & { limit?: number; cursor?: string }, signal?: AbortSignal) =>
     post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/events/search", s, signal),
   eventsHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/events/histogram", s, signal),
+  searchRum: (s: Scope & { limit?: number; cursor?: string }, signal?: AbortSignal) =>
+    post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/rum/search", s, signal),
+  rumHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/rum/histogram", s, signal),
+  rumPerformance: (s: Scope, signal?: AbortSignal) => post<RumPerformance>("/rum/performance", s, signal),
   postEvent: (e: Record<string, unknown>) => post<unknown>("/events", e),
   downtimes: () => call<Downtime[]>("/downtimes"),
   createDowntime: (d: Partial<Downtime>) => post<Downtime>("/downtimes", d),

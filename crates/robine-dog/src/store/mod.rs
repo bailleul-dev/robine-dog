@@ -20,6 +20,7 @@ pub struct Store {
     pub pg: Pg,
     pub logs: Writer<LogRow>,
     pub events: Writer<crate::events::EventRow>,
+    pub rum: Writer<crate::rum::RumRow>,
     pub spans: Writer<SpanRow>,
     pub points: Writer<Point>,
 }
@@ -61,6 +62,7 @@ impl Store {
         Ok(Self {
             logs: Writer::spawn(gt.clone()),
             events: Writer::spawn(gt.clone()),
+            rum: Writer::spawn(gt.clone()),
             spans: Writer::spawn(gt.clone()),
             points: Writer::spawn(gt.clone()),
             gt,
@@ -73,6 +75,7 @@ impl Store {
         tokio::join!(
             self.logs.flush(),
             self.events.flush(),
+            self.rum.flush(),
             self.spans.flush(),
             self.points.flush()
         );

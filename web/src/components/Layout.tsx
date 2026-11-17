@@ -212,10 +212,10 @@ const SECTIONS: Item[][] = [
       label: "Digital Experience",
       icon: <DigitalExperienceIcon />,
       to: "/synthetics/tests",
-      match: ["/synthetics"],
+      match: ["/synthetics", "/rum"],
       links: [
         { label: "Synthetic Monitoring", to: "/synthetics/tests", hint: "HTTP tests run on a schedule" },
-        { label: "Real User Monitoring", hint: "Browser and mobile sessions" },
+        { label: "Real User Monitoring", to: "/rum/performance-monitoring", hint: "Page performance, sessions and browser errors" },
         { label: "Session Replay" },
         { label: "Product Analytics" },
         { label: "Mobile App Testing" },

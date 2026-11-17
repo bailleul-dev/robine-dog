@@ -78,8 +78,19 @@ function PostModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function EventsExplorer() {
-  const time = useTimeRange("1d");
+export const RUM_TABS = [
+  { to: "/rum/performance-monitoring", label: "Performance" },
+  { to: "/rum/explorer", label: "Sessions & Events" },
+];
+const RUM_TYPES = ["view", "action", "error", "resource", "long_task"];
+
+export const EventsExplorer = () => <Explorer mode="events" />;
+export const RumExplorer = () => <Explorer mode="rum" />;
+
+/** The explorer of events, and of RUM events: both are stored like logs. */
+function Explorer({ mode }: { mode: "events" | "rum" }) {
+  const rum = mode === "rum";
+  const time = useTimeRange(rum ? "1h" : "1d");
   const [query, setQuery] = useQueryParam("query");
   const [draft, setDraft] = useState(query);
   useEffect(() => setDraft(query), [query]);
@@ -88,13 +99,13 @@ export function EventsExplorer() {
   const scope = { query, from: time.from, to: time.to };
 
   const histogram = useQuery({
-    queryKey: ["events", "histogram", scope],
-    queryFn: ({ signal }) => api.eventsHistogram(scope, signal),
+    queryKey: [mode, "histogram", scope],
+    queryFn: ({ signal }) => (rum ? api.rumHistogram : api.eventsHistogram)(scope, signal),
     placeholderData: keepPreviousData,
   });
   const list = useInfiniteQuery({
-    queryKey: ["events", "list", scope],
-    queryFn: ({ pageParam, signal }) => api.searchEvents({ ...scope, limit: 100, cursor: pageParam ?? undefined }, signal),
+    queryKey: [mode, "list", scope],
+    queryFn: ({ pageParam, signal }) => (rum ? api.searchRum : api.searchEvents)({ ...scope, limit: 100, cursor: pageParam ?? undefined }, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
     placeholderData: keepPreviousData,
@@ -106,10 +117,12 @@ export function EventsExplorer() {
 
   return (
     <>
-      <PageHeader title="Events">
-        <button className="btn" onClick={() => setPosting(true)}>
-          <PlusIcon /> Post Event
-        </button>
+      <PageHeader title={rum ? "Real User Monitoring" : "Events"} tabs={rum ? RUM_TABS : undefined}>
+        {!rum && (
+          <button className="btn" onClick={() => setPosting(true)}>
+            <PlusIcon /> Post Event
+          </button>
+        )}
         <TimePicker time={time} />
       </PageHeader>
       <form
@@ -124,7 +137,11 @@ export function EventsExplorer() {
           style={{ flex: 1 }}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Search events: source:alert status:error service:shop @monitor.id:12"
+          placeholder={
+            rum
+              ? "Search RUM events: source:error service:shop-web @view.url_path:/cart @session.id:…"
+              : "Search events: source:alert status:error service:shop @monitor.id:12"
+          }
           aria-label="Search events"
         />
       </form>
@@ -148,14 +165,29 @@ export function EventsExplorer() {
           </div>
         )}
         <div className="filters-row">
+          {rum &&
+            RUM_TYPES.map((t) => (
+              <button
+                key={t}
+                className={`btn small${query.includes(`source:${t}`) ? " selected" : ""}`}
+                onClick={() => {
+                  const rest = query.replace(/\s*source:\w+/g, "").trim();
+                  setQuery(query.includes(`source:${t}`) ? rest : `source:${t} ${rest}`.trim());
+                }}
+              >
+                {t.replace("_", " ")}s
+              </button>
+            ))}
+          <div className="spacer" />
           <span className="muted">{total ?? events.length} events</span>
         </div>
         <table className="list infra-table">
           <thead>
             <tr>
               <th style={{ width: 150 }}>Date</th>
-              <th style={{ width: 80 }}>Type</th>
-              <th style={{ width: 130 }}>Source</th>
+              <th style={{ width: 80 }}>{rum ? "Status" : "Type"}</th>
+              <th style={{ width: 130 }}>{rum ? "Type" : "Source"}</th>
+              {rum && <th style={{ width: 150 }}>Service</th>}
               <th>Event</th>
               <th style={{ width: "24%" }}>Tags</th>
             </tr>
@@ -168,6 +200,7 @@ export function EventsExplorer() {
                   <StatusPill status={e.status} />
                 </td>
                 <td className="muted ellipsis">{e.source}</td>
+                {rum && <td className="muted ellipsis">{e.service}</td>}
                 <td className="ellipsis">
                   <strong>{title(e)}</strong> <span className="muted">{body(e).replace(/\s+/g, " ").slice(0, 200)}</span>
                 </td>
@@ -179,8 +212,17 @@ export function EventsExplorer() {
         {list.data && events.length === 0 && (
           <div className="empty-state">
             <h3>No events in this time range</h3>
-            Monitors post one when they change state, Agents when something happens on a host, and anything can through{" "}
-            <code>POST /api/v1/events</code>.
+            {rum ? (
+              <>
+                Point Datadog's browser SDK here: <code>proxy: "{window.location.origin}/rum/proxy"</code> in{" "}
+                <code>datadogRum.init</code>, with the client token.
+              </>
+            ) : (
+              <>
+                Monitors post one when they change state, Agents when something happens on a host, and anything can
+                through <code>POST /api/v1/events</code>.
+              </>
+            )}
           </div>
         )}
         {list.hasNextPage && (
@@ -214,6 +256,18 @@ export function EventsExplorer() {
                 </span>
               ))}
             </div>
+            {rum && typeof (selected.attributes.session as { id?: string } | undefined)?.id === "string" && (
+              <button
+                className="btn small"
+                style={{ marginBottom: 12 }}
+                onClick={() => {
+                  setQuery(`@session.id:${(selected.attributes.session as { id: string }).id}`);
+                  setSelected(null);
+                }}
+              >
+                Show the whole session
+              </button>
+            )}
             <div className="section-title">Attributes</div>
             <JsonTree data={selected.attributes} />
           </div>

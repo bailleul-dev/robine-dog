@@ -17,6 +17,7 @@ mod metrics;
 mod monitors;
 mod pipelines;
 mod query;
+mod rum;
 mod store;
 mod synthetics;
 
@@ -106,6 +107,9 @@ fn ui_api(st: AppState) -> Router<AppState> {
                 .delete(api::monitors::delete_webhook),
         )
         .route("/webhooks/{name}/test", post(api::monitors::test_webhook))
+        .route("/rum/search", post(rum::search))
+        .route("/rum/histogram", post(rum::histogram))
+        .route("/rum/performance", post(rum::performance))
         .route("/events/search", post(api::events::search))
         .route("/events/histogram", post(api::events::histogram))
         .route("/events", post(api::events::create))
@@ -305,6 +309,14 @@ fn app(st: AppState) -> Router {
         .route("/v1/logs", post(intake::otlp::logs_handler))
         .route("/v1/metrics", post(intake::otlp::metrics_handler))
         .route("/api/v1/events", post(api::events::intake))
+        .route(
+            "/api/v2/rum",
+            post(rum::intake).options(intake::sentry::preflight),
+        )
+        .route(
+            "/rum/proxy",
+            post(rum::proxy).options(intake::sentry::preflight),
+        )
         .route("/api/v1/series", post(intake::series::v1))
         .route("/api/v2/series", post(intake::series::v2))
         .route("/api/v1/validate", get(intake::series::validate))

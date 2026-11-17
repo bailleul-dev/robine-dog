@@ -32,7 +32,7 @@ use std::collections::HashMap;
 const MAX_BREADCRUMBS: usize = 50;
 
 /// Browsers post from any origin.
-fn cors(mut r: Response) -> Response {
+pub fn cors(mut r: Response) -> Response {
     let h = r.headers_mut();
     h.insert(
         header::ACCESS_CONTROL_ALLOW_ORIGIN,
@@ -40,7 +40,9 @@ fn cors(mut r: Response) -> Response {
     );
     h.insert(
         header::ACCESS_CONTROL_ALLOW_HEADERS,
-        HeaderValue::from_static("content-type, x-sentry-auth, sentry-trace, baggage"),
+        HeaderValue::from_static(
+            "content-type, content-encoding, x-sentry-auth, sentry-trace, baggage, dd-api-key",
+        ),
     );
     h.insert(
         header::ACCESS_CONTROL_ALLOW_METHODS,
@@ -79,7 +81,7 @@ fn sentry_key(
     Some(user.split(':').next().unwrap_or(user).to_string())
 }
 
-fn authorized(st: &AppState, key: Option<&str>) -> bool {
+pub fn authorized(st: &AppState, key: Option<&str>) -> bool {
     let known = [&st.cfg.client_token, &st.cfg.api_key];
     if known.iter().all(|k| k.is_none()) {
         return true;
