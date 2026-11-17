@@ -40,6 +40,7 @@ state (facets, metric metadata) is in PostgreSQL.
 | OpenTelemetry: OTLP/HTTP traces, logs and metrics (protobuf and JSON, gzip), with Datadog's OTLP mapping | `/v1/traces`, `/v1/logs`, `/v1/metrics` |
 | Service Map: services laid out by call depth, edges from real parent / child spans across services (calls, error rate, latency), health colors, neighbors on hover, details panel | `/apm/map` |
 | Error Tracking: error spans (`error.type`, `error.message`, `error.stack`) and error logs (`error.kind`, `error.stack`) grouped into issues by service, type, masked message and top stack frame; volume, first / last seen, stack trace with app frames highlighted, breakdown by version, env, host and resource, links to the trace or log; For Review / Reviewed / Ignored / Resolved, with regressions | `/error-tracking` |
+| Sentry SDKs: envelope and store endpoints, the DSN's key being a client token; events become error logs (`error.kind`, `error.message`, `error.stack`, `usr.*`, `http.*`, trace ids) and Error Tracking issues | `/api/<project>/envelope/`, `/sentry/<service>/api/<project>/envelope/` |
 | Monitors: metric (`avg(last_5m):avg:system.cpu.user{*} by {host} > 80`), logs (`logs("…").rollup(…).by(…).last("5m") > 10`) and APM (`trace-analytics(…)`) queries, evaluated every minute per group, OK / Warn / Alert / No Data, recovery thresholds, renotify, mute by scope, priority, event history and value graph, Manage / Triggered Monitors pages, an editor with live evaluation | `/monitors` |
 | Notifications: Datadog message templates (`{{#is_alert}}`, `{{value}}`, `{{host.name}}`, `{{#is_match}}`…) to `@webhook-<name>` (Webhooks integration format: `$EVENT_TITLE`… payloads, custom headers, JSON or form) | `/monitors/webhooks` |
 | Monitors and webhooks APIs `/api/v1/monitor` (CRUD, partial update, validate, mute/unmute), `/api/v1/integration/webhooks/configuration/webhooks` | port 8080 |
@@ -169,6 +170,19 @@ opentelemetry-instrument python app.py
 
 Traces, logs and metrics go to `/v1/traces`, `/v1/logs` and `/v1/metrics`.
 
+**Errors from a Sentry SDK** — keep the SDK, change the DSN; the path names
+the service, the key is `ROBINE_DOG_CLIENT_TOKEN` (or the API key):
+
+```python
+sentry_sdk.init(dsn="http://<client token>@localhost:8080/sentry/my-api/1",
+                environment="dev", release="my-api@1.4.2")
+```
+
+Each error is an error log (`source` is the SDK's platform) and an issue in
+Error Tracking; `environment` and `release` are `env` and `version`. With a
+plain DSN (`…@host/1`) the service is the event's `service` tag, or
+`sentry-<project>`. Transactions, sessions and attachments are dropped.
+
 **Log pipelines** — raw lines (nginx, PostgreSQL…) are parsed by the
 pipelines of `/logs/pipelines`, in Datadog's grok syntax; Terraform's
 `datadog_logs_custom_pipeline` and the API clients work against
@@ -179,7 +193,8 @@ pipelines of `/logs/pipelines`, in Datadog's grok syntax; Terraform's
 All in the environment (see [`.env.example`](.env.example)): listen addresses
 (`ROBINE_DOG_DOGSTATSD_LISTEN=off` disables DogStatsD),
 `ROBINE_DOG_GREPTIME_URL` / `_DB` (optional `_USER` / `_PASSWORD`),
-`ROBINE_DOG_POSTGRES_URL`, `ROBINE_DOG_RETENTION_DAYS` (logs and spans,
+`ROBINE_DOG_POSTGRES_URL`, `ROBINE_DOG_CLIENT_TOKEN` (the key of Sentry DSNs),
+`ROBINE_DOG_RETENTION_DAYS` (logs and spans,
 default 15) and `ROBINE_DOG_METRICS_RETENTION_DAYS` (default 455, i.e. 15
 months) applied as table TTLs, `ROBINE_DOG_API_KEY`,
 `ROBINE_DOG_TRACE_REQUIRE_KEY`, the OIDC client, `ROBINE_DOG_SESSION_SECRET`,
@@ -198,6 +213,7 @@ crates/robine-dog/src
   intake/logs.rs     /api/v2/logs (remapping, JSON messages, tags, trace ids)
   intake/traces.rs   trace-agent API (v0.4/v0.5 msgpack), service entry spans, trace metrics
   intake/series.rs   /api/v1/series, /api/v2/series
+  intake/sentry.rs   Sentry SDK envelopes and events → error logs
   intake/agent.rs    Datadog Agent protobuf: traces (v0.2), series, sketches
   hosts.rs           host tags and aliases from the Agent's metadata, applied at ingestion
   pipelines/         log pipelines: processors, grok engine, user-agent parser

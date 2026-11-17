@@ -789,7 +789,23 @@ pub async fn acknowledge(
     OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
     Query(q): Query<HashMap<String, String>>,
+    body: Bytes,
 ) -> Response {
+    // A Sentry SDK whose DSN has no path prefix: `/api/<project>/envelope/`.
+    let sentry = uri
+        .path()
+        .strip_prefix("/api/")
+        .and_then(|p| p.strip_suffix('/'))
+        .and_then(|p| p.split_once('/'))
+        .filter(|(project, kind)| !project.is_empty() && matches!(*kind, "envelope" | "store"));
+    if let Some((project, kind)) = sentry {
+        if method == Method::OPTIONS {
+            return super::sentry::preflight().await;
+        }
+        let envelope = kind == "envelope";
+        return super::sentry::ingest(st, project.to_string(), None, q, headers, body, envelope)
+            .await;
+    }
     if !api_key_ok(&st, &headers, &q) {
         return forbidden();
     }

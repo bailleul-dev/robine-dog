@@ -27,6 +27,8 @@ pub struct Config {
     pub retention_days: i64,
     pub metrics_retention_days: i64,
     pub api_key: Option<String>,
+    /// The key of Sentry DSNs: public, as Datadog's client tokens are.
+    pub client_token: Option<String>,
     pub trace_require_key: bool,
     pub session_secret: Vec<u8>,
     pub oidc: Option<Oidc>,
@@ -117,6 +119,7 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(455),
             api_key: var("ROBINE_DOG_API_KEY"),
+            client_token: var("ROBINE_DOG_CLIENT_TOKEN"),
             trace_require_key: var("ROBINE_DOG_TRACE_REQUIRE_KEY")
                 .is_some_and(|v| v == "1" || v == "true"),
             session_secret,

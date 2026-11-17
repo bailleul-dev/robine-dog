@@ -251,6 +251,17 @@ fn app(st: AppState) -> Router {
         .route("/api/v2/series", post(intake::series::v2))
         .route("/api/v1/validate", get(intake::series::validate))
         .route("/api/v2/validate", get(intake::series::validate))
+        // Sentry SDKs (Error Tracking).
+        // (`/api/{project}/envelope/` and `/store/`, the paths of a DSN
+        // without a prefix, are told apart in `agent::acknowledge`.)
+        .route(
+            "/sentry/{service}/api/{project}/envelope/",
+            post(intake::sentry::service_envelope).options(intake::sentry::preflight),
+        )
+        .route(
+            "/sentry/{service}/api/{project}/store/",
+            post(intake::sentry::service_store).options(intake::sentry::preflight),
+        )
         // A Datadog Agent's forwarders.
         .route("/api/v0.2/traces", post(intake::agent::traces))
         .route("/api/beta/sketches", post(intake::agent::sketches))

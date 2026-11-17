@@ -185,3 +185,73 @@ export const BugIcon = (p: P) => (
     <path d="M12 8v12M9 5l1.5 3M15 5l-1.5 3M3 13h4M17 13h4M4 8l3 2M20 8l-3 2M4 19l3-2M20 19l-3-2" />
   </svg>
 );
+
+export const WatchdogIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <circle cx="7" cy="15" r="4" />
+    <circle cx="17" cy="15" r="4" />
+    <path d="M11 15h2M7 11V6.5A1.5 1.5 0 0 1 8.5 5h0A1.5 1.5 0 0 1 10 6.5V9M17 11V6.5A1.5 1.5 0 0 0 15.5 5h0A1.5 1.5 0 0 0 14 6.5V9" />
+  </svg>
+);
+
+export const ServiceMgmtIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M12 3 4 6v6c0 4.5 3.3 7.8 8 9 4.7-1.2 8-4.5 8-9V6z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+);
+
+export const InfraIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" />
+    <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
+  </svg>
+);
+
+export const DigitalExperienceIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <rect x="3" y="4" width="18" height="13" rx="2" />
+    <path d="M8 21h8M12 17v4M10 8.5v4l3.5-2z" />
+  </svg>
+);
+
+export const DeliveryIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <circle cx="6" cy="6" r="2.5" />
+    <circle cx="6" cy="18" r="2.5" />
+    <circle cx="18" cy="12" r="2.5" />
+    <path d="M6 8.5v7M8.5 6H12a3.5 3.5 0 0 1 3.5 3.5M8.5 18H12a3.5 3.5 0 0 0 3.5-3.5" />
+  </svg>
+);
+
+export const SecurityIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3M12 15v2" />
+  </svg>
+);
+
+export const AiIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M12 3v3M12 18v3M3 12h3M18 12h3M12 8l1.3 2.7L16 12l-2.7 1.3L12 16l-1.3-2.7L8 12l2.7-1.3z" />
+  </svg>
+);
+
+export const IntegrationsIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5" />
+  </svg>
+);
+
+export const HelpIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7M12 17v.01" />
+  </svg>
+);
+
+export const CollapseIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="m11 7-5 5 5 5M18 7l-5 5 5 5" />
+  </svg>
+);
