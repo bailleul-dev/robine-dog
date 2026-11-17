@@ -31,6 +31,6 @@ time = { version = "0.3", features = ["parsing", "formatting", "macros"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["fs", "compression-gzip", "trace", "decompression-gzip"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"
 zstd = "0.13"

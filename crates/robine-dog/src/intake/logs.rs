@@ -460,8 +460,11 @@ pub async fn intake(
     let now = now_ms();
     let rows: Vec<LogRow> = parsed
         .into_iter()
+        // An Agent checks that the intake answers with an empty object.
+        .filter(|o| !o.is_empty())
         .map(|o| {
             let mut row = process(o, &defaults, now);
+            st.hosts.apply(&mut row.host, &mut row.tags);
             st.pipelines.apply(&mut row);
             st.generated.on_log(&st.aggregator, &row);
             row

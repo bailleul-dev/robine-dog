@@ -14,3 +14,8 @@ The Robine ID clients `robine-dog` and `robine-dog-dev` are declared in silo01
 intake key (`robine_dog_api_key`) live in silo01's `all.sops.yml`. The role
 also runs GreptimeDB and PostgreSQL in the `robine-dog` namespace; see
 silo01's `roles/robine_dog/README.md`.
+
+The cluster's applications are connected through the Datadog Agent silo01
+deploys next to it (`make datadog-agent`, `roles/datadog_agent`): container
+logs namespace by namespace, cluster and host metrics, Traefik's access
+logs, traces and metrics.

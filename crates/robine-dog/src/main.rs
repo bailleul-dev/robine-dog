@@ -10,6 +10,7 @@
 mod api;
 mod auth;
 mod config;
+mod hosts;
 mod intake;
 mod metrics;
 mod monitors;
@@ -30,6 +31,7 @@ pub struct AppState {
     pub aggregator: Arc<metrics::Aggregator>,
     pub pipelines: Arc<pipelines::Pipelines>,
     pub generated: Arc<metrics::generated::Generated>,
+    pub hosts: Arc<hosts::Hosts>,
     pub cfg: Arc<config::Config>,
     pub auth: Arc<auth::Auth>,
 }
@@ -252,7 +254,7 @@ fn app(st: AppState) -> Router {
         // A Datadog Agent's forwarders.
         .route("/api/v0.2/traces", post(intake::agent::traces))
         .route("/api/beta/sketches", post(intake::agent::sketches))
-        .route("/intake/", post(intake::agent::acknowledge))
+        .route("/intake/", post(intake::agent::metadata))
         .route("/api/{*rest}", any(intake::agent::acknowledge))
         .layer(DefaultBodyLimit::max(64 * 1024 * 1024));
     Router::new()
@@ -306,12 +308,19 @@ async fn shutdown_signal() {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "robine_dog=info,tower_http=warn".into()),
-        )
-        .init();
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "robine_dog=info,tower_http=warn".into());
+    // JSON, one object per line with `level` and `message` at the top: what
+    // a log collector (robine-dog's own intake included) parses unaided.
+    if std::env::var("ROBINE_DOG_LOG_FORMAT").as_deref() == Ok("json") {
+        tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .with_env_filter(filter)
+            .init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
 
     let cfg = Arc::new(config::Config::from_env()?);
     let store = Arc::new(store::Store::open(&cfg).await?);
@@ -326,6 +335,7 @@ async fn main() -> anyhow::Result<()> {
         aggregator: aggregator.clone(),
         pipelines,
         generated: Arc::new(metrics::generated::Generated::default()),
+        hosts: Arc::new(hosts::Hosts::load(&store.pg).await?),
         cfg: cfg.clone(),
         auth: Arc::new(auth::Auth::new()),
     };

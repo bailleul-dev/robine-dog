@@ -794,6 +794,21 @@ fn s(v: &[&str]) -> Vec<String> {
     v.iter().map(|x| x.to_string()).collect()
 }
 
+fn remap(source: &str, target: &str) -> ProcessorDef {
+    processor(
+        &format!("Map `{source}` to `{target}`"),
+        Kind::AttributeRemapper {
+            sources: s(&[source]),
+            source_type: attribute_type(),
+            target: target.into(),
+            target_type: attribute_type(),
+            target_format: None,
+            preserve_source: false,
+            override_on_conflict: false,
+        },
+    )
+}
+
 fn status_category() -> ProcessorDef {
     processor(
         "Categorise status code",
@@ -886,21 +901,41 @@ pub fn integration_pipelines() -> Vec<PipelineDef> {
                     Kind::GrokParser {
                         source: "message".into(),
                         samples: s(&[
-                            "duration: 12.345 ms  statement: SELECT count(*) FROM orders",
+                            r#"2026-11-17 10:14:23.259 UTC [78] ERROR:  relation "schema_version" does not exist at character 21"#,
+                            "2026-11-17 10:14:15.027 UTC [1] LOG:  duration: 12.345 ms  statement: SELECT count(*) FROM orders",
                             "FATAL:  remaining connection slots are reserved for non-replication superuser connections",
                         ]),
                         grok: GrokRules {
-                            support_rules: String::new(),
+                            // `log_line_prefix`: the image's default (`%m [%p] `), or none.
+                            support_rules: [
+                                r#"_prefix (?:%{regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)? \\S+"):db.timestamp} \[%{integer:db.pid}\]\s+)?"#,
+                                r#"_severity %{regex("[A-Z]+[0-9]?"):db.severity}:\s+"#,
+                            ]
+                            .join("\n"),
                             match_rules: [
-                                r#"postgresql.duration duration: %{number:db.duration_ms} ms\s+statement: %{data:db.statement}"#,
-                                r#"postgresql.severity %{regex("[A-Z]+"):db.severity}:\s+%{data:msg}"#,
+                                r#"postgresql.duration %{_prefix}(?:%{_severity})?duration: %{number:db.duration_ms} ms\s+(?:statement|parse \S+|bind \S+|execute \S+): %{data:db.statement}"#,
+                                r#"postgresql.severity %{_prefix}%{_severity}%{data:db.message}"#,
                             ]
                             .join("\n"),
                         },
                     },
                 ),
                 processor("Duration in nanoseconds", Kind::ArithmeticProcessor { expression: "db.duration_ms * 1000000".into(), target: "duration".into(), is_replace_missing: false }),
-                processor("Define `db.severity` as the official status of the log", Kind::StatusRemapper { sources: s(&["db.severity"]) }),
+                // PostgreSQL writes everything to stderr; LOG, STATEMENT, DETAIL… are not errors.
+                processor(
+                    "Map `db.severity` to a status",
+                    Kind::LookupProcessor {
+                        source: "db.severity".into(),
+                        target: "level".into(),
+                        lookup_table: s(&[
+                            "LOG,info", "INFO,info", "STATEMENT,info", "DETAIL,info", "HINT,info",
+                            "CONTEXT,info", "QUERY,info", "LOCATION,info", "NOTICE,notice",
+                            "WARNING,warn", "ERROR,error", "FATAL,critical", "PANIC,emergency",
+                        ]),
+                        default_lookup: Some("debug".into()),
+                    },
+                ),
+                processor("Define `level` as the official status of the log", Kind::StatusRemapper { sources: s(&["level"]) }),
             ],
         ),
         pipeline(
@@ -917,6 +952,145 @@ pub fn integration_pipelines() -> Vec<PipelineDef> {
                     },
                 },
             )],
+        ),
+        pipeline(
+            "Traefik",
+            "source:traefik",
+            vec![
+                // JSON access logs (`--accesslog.format=json`): Traefik's field names to the standard attributes.
+                remap("RequestMethod", "http.method"),
+                remap("DownstreamStatus", "http.status_code"),
+                remap("RequestPath", "http.url"),
+                remap("RequestHost", "http.host"),
+                remap("ClientHost", "network.client.ip"),
+                remap("request_User-Agent", "http.useragent"),
+                remap("request_Referer", "http.referer"),
+                remap("DownstreamContentSize", "network.bytes_written"),
+                remap("Duration", "duration"),
+                // Set when tracing is on: the access log opens its trace.
+                processor("Define `TraceId` as the official trace id of the log", Kind::TraceIdRemapper { sources: s(&["TraceId"]) }),
+                processor("Define `SpanId` as the official span id of the log", Kind::SpanIdRemapper { sources: s(&["SpanId"]) }),
+                status_category(),
+                processor("Define `http.status_category` as the official status of the log", Kind::StatusRemapper { sources: s(&["http.status_category"]) }),
+                processor("Access log message", Kind::StringBuilderProcessor { template: "%{http.method} %{http.host}%{http.url} %{http.status_code}".into(), target: "traefik.request".into(), is_replace_missing: false }),
+                processor("Define `traefik.request` as the official message of the log", Kind::MessageRemapper { sources: s(&["traefik.request"]) }),
+                processor("URL parser", Kind::UrlParser { sources: s(&["http.url"]), target: "http.url_details".into(), normalize_ending_slashes: false }),
+                processor("User-Agent parser", Kind::UserAgentParser { sources: s(&["http.useragent"]), target: "http.useragent_details".into(), is_encoded: false }),
+            ],
+        ),
+        pipeline(
+            "CoreDNS",
+            "source:coredns",
+            vec![
+                processor(
+                    "Parsing CoreDNS logs",
+                    Kind::GrokParser {
+                        source: "message".into(),
+                        samples: s(&[
+                            r#"[INFO] 10.42.0.9:40212 - 5012 "A IN id.bailleul.dev. udp 33 false 512" NOERROR qr,rd,ra 64 0.004211s"#,
+                            "[WARNING] No files matching import glob pattern: /etc/coredns/custom/*.server",
+                        ]),
+                        grok: GrokRules {
+                            support_rules: String::new(),
+                            match_rules: [
+                                r#"coredns.query \[%{word:level}\] %{ip:network.client.ip}:%{port:network.client.port} - %{integer:dns.id} "%{word:dns.question.type} %{word:dns.question.class} %{notSpace:dns.question.name} %{word:network.transport} %{integer:dns.question.size} %{word:dns.do} %{integer:dns.bufsize}" %{word:dns.response_code} %{notSpace:dns.flags} %{integer:network.bytes_written} %{number:dns.duration_s}s"#,
+                                r#"coredns.level \[%{word:level}\] %{data}"#,
+                            ]
+                            .join("\n"),
+                        },
+                    },
+                ),
+                processor("Duration in nanoseconds", Kind::ArithmeticProcessor { expression: "dns.duration_s * 1000000000".into(), target: "duration".into(), is_replace_missing: false }),
+                processor("Define `level` as the official status of the log", Kind::StatusRemapper { sources: s(&["level"]) }),
+            ],
+        ),
+        pipeline(
+            "Redis",
+            "source:redis",
+            vec![
+                processor(
+                    "Parsing Redis logs",
+                    Kind::GrokParser {
+                        source: "message".into(),
+                        samples: s(&["1:M 17 Nov 2026 10:14:15.027 * Ready to accept connections tcp"]),
+                        grok: GrokRules {
+                            support_rules: String::new(),
+                            match_rules: r#"redis.log %{integer:pid}:%{regex("[A-Z]"):redis.role} %{regex("\\d{1,2} \\w+ \\d{4} [\\d:.]+"):redis.timestamp} %{regex("[.*#-]"):redis.severity} %{data}"#.into(),
+                        },
+                    },
+                ),
+                processor(
+                    "Map `redis.severity` to a status",
+                    Kind::LookupProcessor {
+                        source: "redis.severity".into(),
+                        target: "level".into(),
+                        lookup_table: s(&[".,debug", "-,info", "*,notice", "#,warn"]),
+                        default_lookup: None,
+                    },
+                ),
+                processor("Define `level` as the official status of the log", Kind::StatusRemapper { sources: s(&["level"]) }),
+            ],
+        ),
+        pipeline(
+            "Datadog Agent",
+            "source:agent",
+            vec![
+                processor(
+                    "Parsing Datadog Agent logs",
+                    Kind::GrokParser {
+                        source: "message".into(),
+                        samples: s(&["2026-11-17 10:15:26 UTC | CORE | INFO | (pkg/collector/worker/check_logger.go:59 in CheckFinished) | check:kubelet | Done running check"]),
+                        grok: GrokRules {
+                            support_rules: String::new(),
+                            match_rules: r#"agent.log %{regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} \\S+"):agent.timestamp} \| %{notSpace:agent.component} \| %{word:level} \| \(%{data:logger.name}\) \| %{data:agent.message}"#.into(),
+                        },
+                    },
+                ),
+                processor("Define `level` as the official status of the log", Kind::StatusRemapper { sources: s(&["level"]) }),
+                processor("Define `agent.message` as the official message of the log", Kind::MessageRemapper { sources: s(&["agent.message"]) }),
+            ],
+        ),
+        // Not tied to a source: what Go programs commonly write (logrus and
+        // slog text, klog), whatever the application. A line of another
+        // shape matches no rule and is left as it is.
+        pipeline(
+            "Go (logfmt, klog)",
+            "",
+            vec![
+                processor(
+                    "Parsing logfmt and klog lines",
+                    Kind::GrokParser {
+                        source: "message".into(),
+                        samples: s(&[
+                            r#"level=INFO msg="Created new admin user" username=guillaume user_id=1"#,
+                            r#"time="2026-11-17T10:13:59Z" level=info msg="Volume pvc-7fc64f33 has been created""#,
+                            r#"I1117 10:13:59.888380       1 event.go:389] "Event occurred" object="miniflux/data-miniflux-postgres-0""#,
+                        ]),
+                        grok: GrokRules {
+                            support_rules: String::new(),
+                            match_rules: [
+                                r#"logfmt %{regex("(?:time|ts|t|level|lvl)=\\S.*"):logfmt:keyvalue("=")}"#,
+                                r#"klog %{regex("[IWEF]"):klog.severity}%{regex("\\d{4} [\\d:.]+"):klog.timestamp}\s+%{integer:pid} %{notSpace:logger.name}\] %{data:klog.message}"#,
+                            ]
+                            .join("\n"),
+                        },
+                    },
+                ),
+                processor(
+                    "Map `klog.severity` to a level",
+                    Kind::LookupProcessor {
+                        source: "klog.severity".into(),
+                        target: "klog.level".into(),
+                        lookup_table: s(&["I,info", "W,warn", "E,error", "F,critical"]),
+                        default_lookup: None,
+                    },
+                ),
+                // Only what the parser above extracted: a `level` attribute
+                // another pipeline or a JSON log left is not this one's.
+                processor("Define the parsed level as the official status of the log", Kind::StatusRemapper { sources: s(&["logfmt.level", "logfmt.lvl", "klog.level"]) }),
+                processor("Define the parsed message as the official message of the log", Kind::MessageRemapper { sources: s(&["logfmt.msg", "klog.message"]) }),
+                processor("Define the parsed time as the official date of the log", Kind::DateRemapper { sources: s(&["logfmt.time", "logfmt.ts", "logfmt.t"]) }),
+            ],
         ),
     ]
 }
@@ -974,6 +1148,145 @@ mod tests {
         assert_eq!(a["server"], "shop");
         assert_eq!(a["request"], "POST /api/orders HTTP/1.1");
         assert_eq!(a["upstream"], "http://10.42.0.17:8080/api/orders");
+    }
+
+    #[test]
+    fn postgresql_container_logs() {
+        let run = |m: &str| {
+            let mut l = log(json!({"ddsource": "postgresql", "status": "error", "message": m}));
+            preview(&integration_pipelines(), &mut l);
+            l
+        };
+        let l = run(
+            r#"2026-11-17 10:14:23.259 UTC [78] ERROR:  relation "schema_version" does not exist at character 21"#,
+        );
+        assert_eq!(l.status, "error");
+        assert_eq!(l.attributes["db"]["pid"], 78);
+        assert_eq!(
+            l.attributes["db"]["message"],
+            r#"relation "schema_version" does not exist at character 21"#
+        );
+        let l = run(
+            "2026-11-17 10:14:15.027 UTC [1] LOG:  database system is ready to accept connections",
+        );
+        assert_eq!(l.status, "info");
+        assert!(l.message.starts_with("2026-11-17"));
+        let l = run(
+            "2026-11-17 10:14:23.259 UTC [78] STATEMENT:  SELECT version\n\tFROM schema_version",
+        );
+        assert_eq!(l.status, "info");
+        let l = run("2026-11-17 10:14:15.027 UTC [1] LOG:  duration: 12.5 ms  statement: SELECT 1");
+        assert_eq!(l.attributes["db"]["statement"], "SELECT 1");
+        assert_eq!(l.attributes["duration"], 12500000.0);
+        let l = run("FATAL:  remaining connection slots are reserved");
+        assert_eq!(l.status, "critical");
+    }
+
+    #[test]
+    fn traefik_json_access_log() {
+        let mut l = log(json!({
+            "ddsource": "traefik",
+            "status": "info",
+            "message": r#"{"ClientHost":"203.0.113.7","DownstreamStatus":502,"Duration":1234567,"RequestHost":"miniflux.bailleul.dev","RequestMethod":"GET","RequestPath":"/feeds?x=1","RouterName":"miniflux@kubernetes","TraceId":"e205b806eba1583b23aa4a49b3cf6933","SpanId":"840db9e96fbf9bdd","request_User-Agent":"curl/8.5.0","level":"info","msg":"","time":"2026-11-17T10:14:30Z"}"#,
+        }));
+        preview(&integration_pipelines(), &mut l);
+        let a = &l.attributes;
+        assert_eq!(l.status, "error");
+        assert_eq!(l.message, "GET miniflux.bailleul.dev/feeds?x=1 502");
+        assert_eq!(a["http"]["status_code"], 502);
+        assert_eq!(a["http"]["url_details"]["path"], "/feeds");
+        assert_eq!(a["network"]["client"]["ip"], "203.0.113.7");
+        assert_eq!(a["duration"], 1234567);
+        assert_eq!(a["RouterName"], "miniflux@kubernetes");
+        assert_eq!(l.trace_id.as_deref(), Some("2569948217778071859"));
+        assert_eq!(l.span_id.as_deref(), Some("9515465999957072861"));
+        assert_eq!(l.ts, 1794910470000);
+
+        // Traefik's own logs, in JSON too, are left alone.
+        let mut l = log(json!({
+            "ddsource": "traefik",
+            "status": "info",
+            "message": r#"{"level":"error","error":"secret miniflux/miniflux-tls does not exist","message":"Error configuring TLS","time":"2026-11-17T10:14:30Z"}"#,
+        }));
+        preview(&integration_pipelines(), &mut l);
+        assert_eq!(
+            (l.status.as_str(), l.message.as_str()),
+            ("error", "Error configuring TLS")
+        );
+    }
+
+    #[test]
+    fn coredns_redis_and_agent_logs() {
+        let run = |source: &str, m: &str| {
+            let mut l = log(json!({"ddsource": source, "status": "info", "message": m}));
+            preview(&integration_pipelines(), &mut l);
+            l
+        };
+        let l = run(
+            "coredns",
+            "[WARNING] No files matching import glob pattern: /etc/coredns/custom/*.server",
+        );
+        assert_eq!(l.status, "warn");
+        let l = run(
+            "coredns",
+            r#"[INFO] 10.42.0.9:40212 - 5012 "A IN id.bailleul.dev. udp 33 false 512" NOERROR qr,rd,ra 64 0.004211s"#,
+        );
+        assert_eq!(l.attributes["dns"]["question"]["name"], "id.bailleul.dev.");
+        assert_eq!(l.attributes["dns"]["response_code"], "NOERROR");
+        let l = run(
+            "redis",
+            "1:M 17 Nov 2026 10:14:15.027 # WARNING Memory overcommit must be enabled!",
+        );
+        assert_eq!(l.status, "warn");
+        let l = run(
+            "redis",
+            "1:M 17 Nov 2026 10:14:15.027 * Ready to accept connections tcp",
+        );
+        assert_eq!(l.status, "notice");
+        let l = run(
+            "agent",
+            "2026-11-17 10:14:47 UTC | CORE | WARN | (comp/core/remoteagentregistry/impl/services.go:136 in func2) | Failed to collect telemetry | really",
+        );
+        assert_eq!(l.status, "warn");
+        assert_eq!(l.message, "Failed to collect telemetry | really");
+        assert_eq!(l.attributes["agent"]["component"], "CORE");
+    }
+
+    #[test]
+    fn go_logfmt_and_klog() {
+        let run = |m: &str| {
+            // What an Agent sends for a line read from stderr.
+            let mut l = log(json!({"ddsource": "miniflux", "status": "error", "message": m}));
+            preview(&integration_pipelines(), &mut l);
+            l
+        };
+        let l = run(r#"level=INFO msg="Created new admin user" username=guillaume user_id=1"#);
+        assert_eq!(
+            (l.status.as_str(), l.message.as_str()),
+            ("info", "Created new admin user")
+        );
+        assert_eq!(l.attributes["logfmt"]["username"], "guillaume");
+        let l = run(
+            r#"time="2026-11-17T10:13:59Z" level=warning msg="Volume pvc-7fc64f33 has been created""#,
+        );
+        assert_eq!(
+            (l.status.as_str(), l.message.as_str()),
+            ("warn", "Volume pvc-7fc64f33 has been created")
+        );
+        assert_eq!(l.ts, 1794910439000);
+        let l = run(
+            r#"E1117 10:13:59.888380       1 event.go:389] "Event occurred" object="miniflux/data""#,
+        );
+        assert_eq!(l.status, "error");
+        assert_eq!(l.attributes["logger"]["name"], "event.go:389");
+        assert_eq!(l.message, r#""Event occurred" object="miniflux/data""#);
+        // Anything else is left as it was.
+        let l = run("the level=3 is not at the start");
+        assert_eq!(
+            (l.status.as_str(), l.message.as_str()),
+            ("error", "the level=3 is not at the start")
+        );
+        assert!(l.attributes.is_empty());
     }
 
     #[test]

@@ -132,7 +132,8 @@ pub fn valid_name(m: &str) -> bool {
 pub async fn store(st: &AppState, series: Vec<Series>) -> anyhow::Result<usize> {
     let mut kinds: HashMap<String, String> = HashMap::new();
     let mut points = Vec::new();
-    for s in series.into_iter().filter(|s| valid_name(&s.metric)) {
+    for mut s in series.into_iter().filter(|s| valid_name(&s.metric)) {
+        st.hosts.apply(&mut s.host, &mut s.tags);
         kinds.insert(s.metric.clone(), s.kind.as_str().to_string());
         for (t, v) in s.points {
             if v.is_finite() {

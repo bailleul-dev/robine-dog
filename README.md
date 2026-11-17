@@ -43,8 +43,9 @@ state (facets, metric metadata) is in PostgreSQL.
 | Monitors: metric (`avg(last_5m):avg:system.cpu.user{*} by {host} > 80`), logs (`logs("…").rollup(…).by(…).last("5m") > 10`) and APM (`trace-analytics(…)`) queries, evaluated every minute per group, OK / Warn / Alert / No Data, recovery thresholds, renotify, mute by scope, priority, event history and value graph, Manage / Triggered Monitors pages, an editor with live evaluation | `/monitors` |
 | Notifications: Datadog message templates (`{{#is_alert}}`, `{{value}}`, `{{host.name}}`, `{{#is_match}}`…) to `@webhook-<name>` (Webhooks integration format: `$EVENT_TITLE`… payloads, custom headers, JSON or form) | `/monitors/webhooks` |
 | Monitors and webhooks APIs `/api/v1/monitor` (CRUD, partial update, validate, mute/unmute), `/api/v1/integration/webhooks/configuration/webhooks` | port 8080 |
-| Log Pipelines: grok parser (Datadog matchers and filters, helper rules, live sample preview), date / status / service / message / trace id / span id remappers, attribute remapper, URL and user-agent parsers, category, arithmetic, string builder and lookup processors, nested pipelines; read-only Nginx, PostgreSQL and Kubernetes integration pipelines | `/logs/pipelines`, applied at intake |
+| Log Pipelines: grok parser (Datadog matchers and filters, helper rules, live sample preview), date / status / service / message / trace id / span id remappers, attribute remapper, URL and user-agent parsers, category, arithmetic, string builder and lookup processors, nested pipelines; read-only integration pipelines (Nginx, PostgreSQL, Kubernetes, Traefik, CoreDNS, Redis, Datadog Agent, Go logfmt / klog) | `/logs/pipelines`, applied at intake |
 | Logs pipelines API `/api/v1/logs/config/pipelines`, `/pipeline-order` (Datadog's JSON, `DD-API-KEY`) | port 8080 |
+| Host tags and host aliases from the Agent's metadata (`env`, `kube_cluster_name`, `DD_TAGS`…), joined to the logs and metrics of that host as Datadog does | `/intake/`, applied at ingestion |
 | Datadog Agent: protobuf traces `/api/v0.2/traces` (classic and indexed formats), protobuf series, sketches `/api/beta/sketches`, logs, zstd | port 8080 |
 | Trace metrics `trace.<span>.hits`, `.errors` and `trace.<span>` (distribution, seconds), tagged `service`, `resource_name`, `env`, `version`, `http.status_code` | computed at ingestion |
 
@@ -144,6 +145,11 @@ docker run -d --name dd-agent \
   -p 8126:8126 -p 8125:8125/udp datadog/agent:7
 ```
 
+In Kubernetes, the same Agent as a DaemonSet connects a whole cluster:
+silo01's `datadog_agent` role is one (container logs by namespace, kubelet
+and kube-state metrics, unified service tagging labels, OTLP), and what
+robine-dog runs against in production.
+
 Applications then talk to the Agent as usual (APM on 8126, DogStatsD on 8125);
 it forwards traces, series, sketches and logs to robine-dog. Endpoints
 robine-dog doesn't use (`/intake/`, check runs, metadata…) are acknowledged.
@@ -176,7 +182,8 @@ All in the environment (see [`.env.example`](.env.example)): listen addresses
 `ROBINE_DOG_POSTGRES_URL`, `ROBINE_DOG_RETENTION_DAYS` (logs and spans,
 default 15) and `ROBINE_DOG_METRICS_RETENTION_DAYS` (default 455, i.e. 15
 months) applied as table TTLs, `ROBINE_DOG_API_KEY`,
-`ROBINE_DOG_TRACE_REQUIRE_KEY`, the OIDC client, `ROBINE_DOG_SESSION_SECRET`.
+`ROBINE_DOG_TRACE_REQUIRE_KEY`, the OIDC client, `ROBINE_DOG_SESSION_SECRET`,
+`ROBINE_DOG_LOG_FORMAT=json` (robine-dog's own logs, one JSON object per line).
 
 Rows are written in batches (every 200 ms or 5,000 rows) and metric buckets
 every 10 seconds; on SIGTERM both are flushed before exiting.
@@ -192,6 +199,7 @@ crates/robine-dog/src
   intake/traces.rs   trace-agent API (v0.4/v0.5 msgpack), service entry spans, trace metrics
   intake/series.rs   /api/v1/series, /api/v2/series
   intake/agent.rs    Datadog Agent protobuf: traces (v0.2), series, sketches
+  hosts.rs           host tags and aliases from the Agent's metadata, applied at ingestion
   pipelines/         log pipelines: processors, grok engine, user-agent parser
   monitors/          monitor queries, evaluation loop, message templates, webhooks
   metrics/           DogStatsD, 10 s aggregator, metric query language → SQL

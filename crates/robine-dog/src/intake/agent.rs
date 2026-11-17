@@ -729,7 +729,10 @@ pub async fn sketches(
         Ok(p) => p,
         Err(e) => return bad_request(e),
     };
-    let (points, names) = sketch_points(payload);
+    let (mut points, names) = sketch_points(payload);
+    for p in &mut points {
+        st.hosts.apply(&mut p.host, &mut p.tags);
+    }
     let kinds: Vec<(String, String)> = names
         .into_iter()
         .collect::<HashSet<_>>()
@@ -747,6 +750,31 @@ pub async fn sketches(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+// --- host metadata -----------------------------------------------------------
+
+/// `POST /intake/`: the Agent's metadata payload, sent at start and every few
+/// minutes. Its host tags and host aliases are kept (see [`crate::hosts`]).
+pub async fn metadata(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<HashMap<String, String>>,
+    body: Bytes,
+) -> Response {
+    if !api_key_ok(&st, &headers, &q) {
+        return forbidden();
+    }
+    let payload = decompress(&headers, body)
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+    if let Some(h) = payload.as_ref().and_then(|p| st.hosts.update(p)) {
+        tracing::info!(host = %h.name, tags = ?h.tags, aliases = ?h.aliases, "host metadata");
+        if let Err(e) = crate::hosts::Hosts::save(&st.store.pg, &h).await {
+            tracing::warn!(error = %format!("{e:#}"), "saving host metadata");
+        }
+    }
+    (StatusCode::ACCEPTED, Json(json!({"status": "ok"}))).into_response()
 }
 
 // --- the rest --------------------------------------------------------------
