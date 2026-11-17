@@ -63,6 +63,9 @@ pub struct TestOptions {
     /// Seconds between two runs.
     #[serde(default)]
     pub tick_every: Option<i64>,
+    /// Seconds a test must have been failing before it alerts (0: at once).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_failure_duration: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -84,6 +87,9 @@ pub struct Test {
     pub message: String,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Whether it is alerting; computed.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub monitor_status: Option<String>,
     /// The latest run; computed.
     #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub last_result: Option<RunResult>,
@@ -304,7 +310,123 @@ pub async fn run_and_record(st: &AppState, t: &Test) -> RunResult {
     if let Err(e) = st.store.logs.send(vec![row]).await {
         tracing::warn!(error = %e, "storing a synthetic result");
     }
+    alert(st, t, &id, &res).await;
     res
+}
+
+/// Where a test stands between its runs: since when it fails, and whether
+/// that was announced.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct AlertState {
+    pub failing_since: Option<i64>,
+    pub alerting: bool,
+}
+
+const ALERT_KIND: &str = "synthetic_alert";
+static ALERTS: LazyLock<Mutex<HashMap<String, AlertState>>> = LazyLock::new(Default::default);
+
+/// The state after a run, and what to announce: `Some(true)` an alert,
+/// `Some(false)` a recovery.
+pub fn next_alert(
+    prev: AlertState,
+    passed: bool,
+    ts: i64,
+    min_failure_ms: i64,
+) -> (AlertState, Option<bool>) {
+    if passed {
+        return (AlertState::default(), prev.alerting.then_some(false));
+    }
+    let since = prev.failing_since.unwrap_or(ts);
+    let due = !prev.alerting && ts - since >= min_failure_ms;
+    (
+        AlertState {
+            failing_since: Some(since),
+            alerting: prev.alerting || due,
+        },
+        due.then_some(true),
+    )
+}
+
+/// A test alerts by itself, as Datadog's do: an event, and its message sent
+/// to the `@webhook-…` handles it names, when it starts failing and when
+/// it recovers.
+async fn alert(st: &AppState, t: &Test, id: &str, res: &RunResult) {
+    let known = ALERTS.lock().ok().and_then(|a| a.get(id).copied());
+    let prev = match known {
+        Some(p) => p,
+        // After a restart: what was announced is in the database.
+        None => st
+            .store
+            .pg
+            .doc(ALERT_KIND, id)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|d| serde_json::from_value(d.body).ok())
+            .unwrap_or_default(),
+    };
+    let min = t.options.min_failure_duration.unwrap_or(0).max(0) * 1000;
+    let (next, news) = next_alert(prev, res.passed, res.ts, min);
+    if let Ok(mut a) = ALERTS.lock() {
+        a.insert(id.to_string(), next);
+    }
+    let Some(triggered) = news else { return };
+    if let Ok(body) = serde_json::to_value(next)
+        && let Err(e) = st.store.pg.put_doc(ALERT_KIND, id, &body).await
+    {
+        tracing::warn!(error = %e, "storing a synthetic alert state");
+    }
+    let title = if triggered {
+        format!("[Triggered] Synthetic test failed: {}", t.name)
+    } else {
+        format!("[Recovered] Synthetic test passes again: {}", t.name)
+    };
+    let detail = match (&res.failure, triggered) {
+        (Some(f), true) => format!("{} {}: {f}", t.config.request.method, t.config.request.url),
+        _ => format!("{} {}", t.config.request.method, t.config.request.url),
+    };
+    let text = if t.message.trim().is_empty() {
+        detail.clone()
+    } else {
+        format!("{detail}\n\n{}", t.message)
+    };
+    let link = format!("{}/synthetics/tests", st.cfg.base_url.trim_end_matches('/'));
+    let mut tags = t.tags.clone();
+    tags.push(format!("check_id:{id}"));
+    let notified =
+        crate::monitors::webhooks::notify_plain(st, id, &title, &text, !triggered, &link, &tags)
+            .await;
+    tracing::info!(test = %t.name, triggered, ?notified, "synthetic test alert");
+    let mut attributes = Map::new();
+    attributes.insert("evt".into(), json!({"title": title, "text": text}));
+    attributes.insert(
+        "synthetics".into(),
+        json!({"check_id": id, "test_name": t.name, "notified": notified}),
+    );
+    crate::events::emit(
+        st,
+        vec![LogRow {
+            ts: res.ts,
+            status: if triggered { "error" } else { "ok" }.into(),
+            service: Some("synthetics".into()),
+            host: None,
+            source: Some("synthetics".into()),
+            message: format!("{title}\n{text}"),
+            tags,
+            attributes,
+            trace_id: None,
+            span_id: None,
+        }],
+    )
+    .await;
+}
+
+/// Whether a test is alerting, if it ran since this server started.
+pub fn alerting(public_id: &str) -> Option<bool> {
+    ALERTS
+        .lock()
+        .ok()
+        .and_then(|a| a.get(public_id).map(|s| s.alerting))
 }
 
 async fn stored(st: &AppState) -> anyhow::Result<Vec<Test>> {
@@ -389,6 +511,7 @@ pub fn last_result(public_id: &str) -> Option<RunResult> {
 fn with_last(mut t: Test) -> Test {
     let id = t.public_id.clone().unwrap_or_default();
     t.last_result = LAST.lock().ok().and_then(|l| l.get(&id).cloned());
+    t.monitor_status = alerting(&id).map(|a| if a { "Alert" } else { "OK" }.to_string());
     t
 }
 
@@ -472,6 +595,27 @@ pub async fn trigger(State(st): State<AppState>, Path(id): Path<String>) -> ApiR
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn alerts_once_and_recovers() {
+        let s0 = AlertState::default();
+        // At once without a minimum duration, and only once.
+        let (s1, n1) = next_alert(s0, false, 1_000, 0);
+        assert_eq!((s1.alerting, n1), (true, Some(true)));
+        let (s2, n2) = next_alert(s1, false, 2_000, 0);
+        assert_eq!((s2.alerting, n2), (true, None));
+        let (s3, n3) = next_alert(s2, true, 3_000, 0);
+        assert_eq!((s3, n3), (AlertState::default(), Some(false)));
+        // A blip shorter than the minimum says nothing, either way.
+        let (b1, m1) = next_alert(s0, false, 1_000, 120_000);
+        assert_eq!((b1.alerting, m1), (false, None));
+        assert_eq!(
+            next_alert(b1, true, 61_000, 120_000),
+            (AlertState::default(), None)
+        );
+        let (b2, _) = next_alert(b1, false, 61_000, 120_000);
+        assert_eq!(next_alert(b2, false, 121_000, 120_000).1, Some(true));
+    }
 
     #[test]
     fn assertions() {

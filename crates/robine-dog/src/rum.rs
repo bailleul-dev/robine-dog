@@ -385,6 +385,63 @@ pub async fn performance(
     }))
 }
 
+#[derive(Serialize)]
+pub struct Session {
+    id: String,
+    /// Epoch milliseconds.
+    start: i64,
+    end: i64,
+    service: Option<String>,
+    user: Option<String>,
+    views: i64,
+    actions: i64,
+    errors: i64,
+    /// The page it entered at.
+    first_view: Option<String>,
+}
+
+/// The sessions of the time range, latest first: the events sharing a
+/// `session.id`.
+pub async fn sessions(State(st): State<AppState>, Json(s): Json<Scope>) -> ApiResult<Value> {
+    let filter = compile(&s.query, Dataset::Logs)?;
+    let time = time_clause(Dataset::Logs, s.from, s.to);
+    let at = |path: &str| format!("json_get(attributes, '{path}')");
+    let count =
+        |typ: &str| format!("CAST(sum(CASE WHEN source = '{typ}' THEN 1 ELSE 0 END) AS BIGINT)");
+    let sql = format!(
+        r#"SELECT {sid} AS sid, CAST(min(ts) AS BIGINT) AS started, CAST(max(ts) AS BIGINT), max(service),
+             max(coalesce({name}, {email}, {uid})), count(DISTINCT {vid}), {actions}, {errors},
+             first_value(CASE WHEN source = 'view' THEN message END ORDER BY ts)
+           FROM {TABLE} WHERE {time} AND {filter} AND {sid} IS NOT NULL
+           GROUP BY sid ORDER BY started DESC LIMIT 200"#,
+        sid = at(r#"$["session"]["id"]"#),
+        name = at(r#"$["usr"]["name"]"#),
+        email = at(r#"$["usr"]["email"]"#),
+        uid = at(r#"$["usr"]["id"]"#),
+        vid = at(r#"$["view"]["id"]"#),
+        actions = count("action"),
+        errors = count("error"),
+    );
+    let rows = st.store.gt.query(&sql).await?;
+    let sessions: Vec<Session> = rows
+        .iter()
+        .filter_map(|r| {
+            Some(Session {
+                id: str_at(r, 0)?,
+                start: i64_at(r, 1),
+                end: i64_at(r, 2),
+                service: str_at(r, 3),
+                user: str_at(r, 4),
+                views: i64_at(r, 5),
+                actions: i64_at(r, 6),
+                errors: i64_at(r, 7),
+                first_view: str_at(r, 8),
+            })
+        })
+        .collect();
+    Ok(Json(json!({"sessions": sessions})))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

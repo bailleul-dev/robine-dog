@@ -386,7 +386,7 @@ impl Args<'_> {
 }
 
 /// A call to the API of the UI, without going through the network.
-async fn ui(
+pub(crate) async fn ui(
     st: &AppState,
     method: Method,
     path: &str,
@@ -425,7 +425,7 @@ async fn ui(
     Ok(serde_json::from_slice(&bytes).unwrap_or(Value::Null))
 }
 
-fn enc(s: &str) -> String {
+pub(crate) fn enc(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {

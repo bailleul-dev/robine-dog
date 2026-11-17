@@ -3,7 +3,7 @@ import { Watchdog } from "./pages/Watchdog";
 import { NotebookList, NotebookPage } from "./pages/Notebooks";
 import { Integrations } from "./pages/Integrations";
 import { EventsExplorer, RumExplorer } from "./pages/Events";
-import { RumPerformancePage } from "./pages/Rum";
+import { RumPerformancePage, RumSessions } from "./pages/Rum";
 import { Slos } from "./pages/Slos";
 import { Synthetics } from "./pages/Synthetics";
 import { Downtimes } from "./pages/Downtimes";
@@ -115,6 +115,7 @@ function App() {
         <Route path="/rum" element={<Navigate to="/rum/performance-monitoring" replace />} />
         <Route path="/rum/performance-monitoring" element={<RumPerformancePage />} />
         <Route path="/rum/explorer" element={<RumExplorer />} />
+        <Route path="/rum/sessions" element={<RumSessions />} />
         <Route path="/watchdog" element={<Watchdog />} />
         <Route path="/incidents" element={<IncidentList />} />
         <Route path="/incidents/:id" element={<IncidentPage />} />

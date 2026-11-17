@@ -3,7 +3,6 @@
 
 use super::{ApiError, ApiResult};
 use crate::AppState;
-use crate::store::pg::new_id;
 use axum::Json;
 use axum::extract::{Path, State};
 use serde_json::{Value, json};
@@ -56,7 +55,8 @@ pub async fn get(State(st): State<AppState>, Path(id): Path<String>) -> ApiResul
 
 pub async fn create(State(st): State<AppState>, Json(v): Json<Value>) -> ApiResult<Value> {
     let mut v = checked(v)?;
-    let id = new_id();
+    // A number, as Datadog's notebook ids are.
+    let id = crate::intake::logs::now_ms().to_string();
     v["id"] = json!(id);
     st.store.pg.put_doc(KIND, &id, &v).await?;
     Ok(Json(v))

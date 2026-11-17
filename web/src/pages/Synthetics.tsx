@@ -46,6 +46,8 @@ function TestModal({ test, onClose }: { test: SyntheticTest; onClose: () => void
   const [contains, setContains] = useState(String(target(test, "body", "contains") ?? ""));
   const [every, setEvery] = useState(test.options.tick_every ?? 60);
   const [tags, setTags] = useState(test.tags.join(", "));
+  const [message, setMessage] = useState(test.message);
+  const [minFailure, setMinFailure] = useState(test.options.min_failure_duration ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -76,7 +78,8 @@ function TestModal({ test, onClose }: { test: SyntheticTest; onClose: () => void
         },
         assertions,
       },
-      options: { ...test.options, tick_every: every },
+      options: { ...test.options, tick_every: every, min_failure_duration: minFailure },
+      message,
       tags: tags
         .split(",")
         .map((t) => t.trim())
@@ -154,6 +157,31 @@ function TestModal({ test, onClose }: { test: SyntheticTest; onClose: () => void
             <span className="form-label">Tags</span>
             <input className="input mono" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="env:prod, team:shop" />
           </label>
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          <label className="form-field" style={{ width: 180 }}>
+            <span className="form-label">Alert after failing for</span>
+            <select className="input" value={minFailure} onChange={(e) => setMinFailure(Number(e.target.value))}>
+              {[
+                ["The first failure", 0],
+                ["1 minute", 60],
+                ["5 minutes", 300],
+                ["15 minutes", 900],
+              ].map(([label, v]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-field" style={{ flex: 1 }}>
+            <span className="form-label">Notify</span>
+            <input className="input" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="The shop is down @webhook-zulip" />
+          </label>
+        </div>
+        <div className="form-hint">
+          When the test starts failing and when it recovers, an event is posted and this message is sent to the{" "}
+          <code>@webhook-…</code> it names.
         </div>
         {error && <div className="form-error">{error}</div>}
       </div>

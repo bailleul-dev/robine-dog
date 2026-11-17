@@ -345,6 +345,7 @@ export function StatusPageSettings() {
               <span className={`synth-state ${DOT[c.status ?? "unknown"] ?? "paused"}`} title={c.status}>
                 {c.status ?? "new"}
               </span>
+              {c.uptime != null && <span className="muted">{c.uptime.toFixed(2)}%</span>}
               <input className="input" style={{ flex: 1 }} placeholder="Name shown" value={c.name} onChange={(e) => component(i, { name: e.target.value })} />
               <select
                 className="input"

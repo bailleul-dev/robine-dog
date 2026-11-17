@@ -144,6 +144,7 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/rum/search", post(rum::search))
         .route("/rum/histogram", post(rum::histogram))
         .route("/rum/performance", post(rum::performance))
+        .route("/rum/sessions", post(rum::sessions))
         .route("/events/search", post(api::events::search))
         .route("/events/histogram", post(api::events::histogram))
         .route("/events", post(api::events::create))
@@ -320,6 +321,51 @@ fn public_api(st: AppState) -> Router<AppState> {
         .route(
             "/api/v2/spans/analytics/aggregate",
             post(api::analytics::spans_public),
+        )
+        .route(
+            "/api/v2/logs/events/search",
+            post(api::datadog::logs_search),
+        )
+        .route("/api/v2/logs/events", get(api::datadog::logs_list))
+        .route(
+            "/api/v2/spans/events/search",
+            post(api::datadog::spans_search),
+        )
+        .route("/api/v2/spans/events", get(api::datadog::spans_list))
+        .route("/api/v2/rum/events/search", post(api::datadog::rum_search))
+        .route("/api/v2/rum/events", get(api::datadog::rum_list))
+        .route("/api/v2/events/search", post(api::datadog::events_search))
+        .route("/api/v2/events", get(api::datadog::events_list))
+        .route("/api/v1/events", get(api::datadog::events_v1))
+        .route("/api/v1/query", get(api::datadog::query_v1))
+        .route("/api/v1/metrics", get(api::datadog::metrics_v1))
+        .route(
+            "/api/v1/metrics/{name}",
+            get(api::datadog::metric_get).put(api::datadog::metric_put),
+        )
+        .route("/api/v2/metrics", get(api::datadog::metrics_v2))
+        .route("/api/v1/search", get(api::datadog::search_v1))
+        .route("/api/v1/hosts", get(api::datadog::hosts))
+        .route("/api/v1/hosts/totals", get(api::datadog::hosts_totals))
+        .route(
+            "/api/v2/incidents",
+            get(api::datadog::incidents).post(api::datadog::incident_create),
+        )
+        .route(
+            "/api/v2/incidents/{id}",
+            get(api::datadog::incident)
+                .patch(api::datadog::incident)
+                .delete(api::datadog::incident),
+        )
+        .route(
+            "/api/v1/notebooks",
+            get(api::datadog::notebooks).post(api::datadog::notebook_create),
+        )
+        .route(
+            "/api/v1/notebooks/{id}",
+            get(api::datadog::notebook)
+                .put(api::datadog::notebook)
+                .delete(api::datadog::notebook),
         )
         .route(
             "/api/v1/logs/config/pipeline-order",

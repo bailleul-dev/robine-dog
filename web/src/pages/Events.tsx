@@ -80,7 +80,8 @@ function PostModal({ onClose }: { onClose: () => void }) {
 
 export const RUM_TABS = [
   { to: "/rum/performance-monitoring", label: "Performance" },
-  { to: "/rum/explorer", label: "Sessions & Events" },
+  { to: "/rum/sessions", label: "Sessions" },
+  { to: "/rum/explorer", label: "Events" },
 ];
 const RUM_TYPES = ["view", "action", "error", "resource", "long_task"];
 

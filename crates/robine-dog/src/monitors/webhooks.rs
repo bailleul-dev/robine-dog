@@ -231,6 +231,67 @@ pub async fn load(st: &AppState, name: &str) -> anyhow::Result<Option<WebhookDef
         .and_then(|d| serde_json::from_value(d.body).ok()))
 }
 
+/// For what alerts without being a monitor (a synthetic test): sends
+/// `message` to its `@webhook-…` handles, with the variables that make
+/// sense there. Returns the handles reached (failures are marked).
+pub async fn notify_plain(
+    st: &AppState,
+    id: &str,
+    title: &str,
+    message: &str,
+    recovered: bool,
+    link: &str,
+    tags: &[String],
+) -> Vec<String> {
+    let now = crate::intake::logs::now_ms();
+    let transition = if recovered { "Recovered" } else { "Triggered" };
+    let vars: Vec<(&str, String)> = vec![
+        ("ALERT_ID", id.to_string()),
+        ("ALERT_TITLE", title.to_string()),
+        (
+            "ALERT_TYPE",
+            if recovered { "success" } else { "error" }.to_string(),
+        ),
+        ("ALERT_TRANSITION", transition.to_string()),
+        ("ALERT_STATUS", transition.to_string()),
+        ("ALERT_CYCLE_KEY", id.to_string()),
+        ("EVENT_TITLE", title.to_string()),
+        ("EVENT_MSG", message.to_string()),
+        ("TEXT_ONLY_MSG", message.to_string()),
+        ("EVENT_TYPE", "synthetics_alert".into()),
+        ("DATE", now.to_string()),
+        ("LAST_UPDATED", now.to_string()),
+        ("ID", now.to_string()),
+        ("AGGREG_KEY", id.to_string()),
+        ("LINK", link.to_string()),
+        ("TAGS", tags.join(",")),
+        ("PRIORITY", "normal".into()),
+        ("ORG_ID", "1".into()),
+        ("ORG_NAME", "robine-dog".into()),
+    ];
+    let mut names: Vec<String> = HANDLE
+        .captures_iter(message)
+        .map(|c| c[1].to_string())
+        .collect();
+    names.dedup();
+    let mut out = Vec::new();
+    for name in names {
+        let result = match load(st, &name).await {
+            Ok(Some(hook)) => send(&hook, &vars).await.map(|_| ()),
+            Ok(None) => Err(anyhow::anyhow!("no webhook named {name}")),
+            Err(e) => Err(e),
+        };
+        match result {
+            Ok(()) => out.push(format!("@webhook-{name}")),
+            Err(e) => {
+                tracing::warn!(webhook = %name, error = %e, "webhook failed");
+                out.push(format!("@webhook-{name} (failed: {e})"));
+            }
+        }
+    }
+    out
+}
+
 /// Sends the notification to every `@webhook-…` handle of the message;
 /// returns the handles reached (failures are marked).
 pub async fn notify(st: &AppState, ctx: &Context<'_>, title: &str, message: &str) -> Vec<String> {

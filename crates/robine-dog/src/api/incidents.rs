@@ -330,6 +330,43 @@ pub struct Component {
     /// `operational`, `degraded`, `outage` or `unknown`; computed.
     #[serde(default, skip_deserializing)]
     pub status: String,
+    /// Per day over the past 30, oldest first: the runs that passed and
+    /// those that failed (synthetic tests only); computed.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<[f64; 2]>,
+    /// Percent of the runs that passed over those days; computed.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub uptime: Option<f64>,
+}
+
+const DAY_MS: i64 = 86_400_000;
+const DAYS: i64 = 30;
+
+/// The runs of a synthetic test per day: `[passed, failed]`.
+async fn history(st: &AppState, check_id: &str, now: i64) -> Vec<[f64; 2]> {
+    let to = (now / DAY_MS + 1) * DAY_MS;
+    let from = to - DAYS * DAY_MS;
+    let query = |status: &str| {
+        format!(
+            "sum:synthetics.test_runs{{check_id:{check_id},status:{status}}}.as_count().rollup(sum, 86400)"
+        )
+    };
+    let body = json!({"queries": [query("passed"), query("failed")], "from": from, "to": to});
+    let mut days = vec![[0.0; 2]; DAYS as usize];
+    let Ok(v) = crate::mcp::ui(st, axum::http::Method::POST, "/metrics/query", Some(body)).await
+    else {
+        return days;
+    };
+    for s in v["series"].as_array().into_iter().flatten() {
+        let which = s["query_index"].as_u64().unwrap_or(0).min(1) as usize;
+        for p in s["points"].as_array().into_iter().flatten() {
+            let day = (p[0].as_f64().unwrap_or(0.0) as i64 - from) / DAY_MS;
+            if let (true, Some(n)) = ((0..DAYS).contains(&day), p[1].as_f64()) {
+                days[day as usize][which] += n;
+            }
+        }
+    }
+    days
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -378,6 +415,14 @@ async fn page(st: &AppState) -> Result<StatusPage, ApiError> {
             _ => "unknown",
         }
         .to_string();
+        if c.kind == "synthetic" {
+            c.history = history(st, &c.reference, now_ms()).await;
+            let (passed, failed) = c
+                .history
+                .iter()
+                .fold((0.0, 0.0), |(p, f), d| (p + d[0], f + d[1]));
+            c.uptime = (passed + failed > 0.0).then(|| 100.0 * passed / (passed + failed));
+        }
     }
     Ok(page)
 }
@@ -459,6 +504,8 @@ pub fn render(page: &StatusPage, incidents: &[Incident], now: i64) -> String {
          .operational{{background:var(--ok)}}.degraded{{background:var(--warn)}}.outage{{background:var(--bad)}}.unknown{{background:var(--muted)}}\
          .card{{background:var(--card);border:1px solid var(--line);border-radius:8px}}\
          .row{{display:flex;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid var(--line)}}.row:first-child{{border-top:0}}\
+         .days{{display:flex;gap:2px;padding:0 16px}}.days i{{flex:1;height:26px;border-radius:2px}}.nodata{{background:var(--line)}}\
+         .under{{display:flex;justify-content:space-between;padding:4px 16px 12px;font-size:12px}}\
          .dot{{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}}\
          .inc{{padding:14px 16px;margin-bottom:10px}}.inc h3{{margin:0 0 2px;font-size:15px}}.inc ul{{margin:8px 0 0;padding-left:18px}}.inc li{{margin:3px 0}}\
          </style></head><body><main><h1>{t}</h1><div class=\"muted\">{d}</div><div class=\"banner {class}\">{banner}</div>",
@@ -503,6 +550,26 @@ pub fn render(page: &StatusPage, incidents: &[Incident], now: i64) -> String {
                 c.status,
                 label(&c.status)
             ));
+            if !c.history.is_empty() {
+                h.push_str("<div class=\"days\">");
+                for d in &c.history {
+                    let (total, failed) = (d[0] + d[1], d[1]);
+                    let class = if total == 0.0 {
+                        "nodata"
+                    } else if failed == 0.0 {
+                        "operational"
+                    } else if failed / total < 0.05 {
+                        "degraded"
+                    } else {
+                        "outage"
+                    };
+                    h.push_str(&format!("<i class=\"{class}\"></i>"));
+                }
+                h.push_str(&format!(
+                    "</div><div class=\"muted under\"><span>{DAYS} days ago</span><span>{}</span><span>Today</span></div>",
+                    c.uptime.map(|u| format!("{u:.2}% uptime")).unwrap_or_default()
+                ));
+            }
         }
         h.push_str("</div>");
     }
@@ -605,11 +672,17 @@ mod tests {
                 kind: "synthetic".into(),
                 reference: "x".into(),
                 status: "outage".into(),
+                history: vec![[10.0, 0.0], [0.0, 0.0], [5.0, 5.0]],
+                uptime: Some(75.0),
             }],
         };
         let html = render(&page, &[incident()], 2_000);
         assert!(html.contains("Some systems are down") && html.contains("API &lt;down&gt;"));
         assert!(html.contains("Ongoing incidents") && html.contains("No incident."));
+        assert!(html.contains(
+            r#"<i class="operational"></i><i class="nodata"></i><i class="outage"></i>"#
+        ));
+        assert!(html.contains("75.00% uptime"));
         let calm = StatusPage {
             components: vec![],
             ..page

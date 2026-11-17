@@ -1,8 +1,9 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { PageHeader } from "../components/Layout";
 import { TimePicker } from "../components/TimePicker";
 import { api, type RumPage } from "../lib/api";
+import { ago } from "../lib/format";
 import { thousands } from "../lib/format";
 import { useQueryParam, useTimeRange } from "../lib/time";
 import { RUM_TABS } from "./Events";
@@ -114,6 +115,86 @@ export function RumPerformancePage() {
   })
 </script>`}
               </pre>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function length(ms: number) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ${s % 60} s`;
+  return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+}
+
+/** What each visitor did: a session is the events sharing a `session.id`. */
+export function RumSessions() {
+  const navigate = useNavigate();
+  const time = useTimeRange("1d");
+  const [query] = useQueryParam("query");
+  const scope = { query, from: time.from, to: time.to };
+  const q = useQuery({
+    queryKey: ["rum", "sessions", scope],
+    queryFn: ({ signal }) => api.rumSessions(scope, signal),
+    placeholderData: keepPreviousData,
+  });
+  const rows = q.data?.sessions ?? [];
+  const open = (id: string, start: number, end: number) =>
+    `/rum/explorer?query=${encodeURIComponent(`@session.id:${id}`)}&from_ts=${start - 60_000}&to_ts=${end + 60_000}&live=false`;
+  return (
+    <>
+      <PageHeader title="Real User Monitoring" tabs={RUM_TABS}>
+        <TimePicker time={time} />
+      </PageHeader>
+      <div className="page-scroll page-padding">
+        <div className="card" style={{ padding: 0 }}>
+          <table className="list infra-table">
+            <thead>
+              <tr>
+                <th style={{ width: 130 }}>Started</th>
+                <th style={{ width: 170 }}>Service</th>
+                <th>Entered at</th>
+                <th style={{ width: 170 }}>User</th>
+                <th className="num" style={{ width: 110 }}>
+                  Duration
+                </th>
+                <th className="num" style={{ width: 70 }}>
+                  Views
+                </th>
+                <th className="num" style={{ width: 80 }}>
+                  Actions
+                </th>
+                <th className="num" style={{ width: 70 }}>
+                  Errors
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((s) => (
+                <tr key={s.id} onClick={() => navigate(open(s.id, s.start, s.end))}>
+                  <td className="muted" title={new Date(s.start).toLocaleString()}>
+                    {ago(s.start)}
+                  </td>
+                  <td className="ellipsis">{s.service}</td>
+                  <td className="mono ellipsis">
+                    <Link to={open(s.id, s.start, s.end)}>{s.first_view ?? "–"}</Link>
+                  </td>
+                  <td className="muted ellipsis">{s.user ?? "anonymous"}</td>
+                  <td className="num">{length(s.end - s.start)}</td>
+                  <td className="num">{s.views}</td>
+                  <td className="num">{s.actions}</td>
+                  <td className={`num${s.errors > 0 ? " infra-bad" : ""}`}>{s.errors}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {q.data && rows.length === 0 && (
+            <div className="empty-state">
+              <h3>No session in this time range</h3>
+              Sessions appear as soon as a site with Datadog's browser SDK is visited.
             </div>
           )}
         </div>

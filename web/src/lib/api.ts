@@ -118,7 +118,8 @@ export type SyntheticTest = {
     request: { method: string; url: string; headers?: Record<string, string>; body?: string | null; timeout?: number | null };
     assertions: SyntheticAssertion[];
   };
-  options: { tick_every?: number | null };
+  options: { tick_every?: number | null; min_failure_duration?: number | null };
+  monitor_status?: string;
   message: string;
   tags: string[];
   last_result?: { ts: number; passed: boolean; status_code: number | null; duration_ms: number; failure: string | null };
@@ -143,6 +144,17 @@ export type RumPage = {
   cumulative_layout_shift: number | null;
   errors: number;
 };
+export type RumSession = {
+  id: string;
+  start: number;
+  end: number;
+  service: string | null;
+  user: string | null;
+  views: number;
+  actions: number;
+  errors: number;
+  first_view: string | null;
+};
 export type RumPerformance = { sessions: number; views: number; errors: number; actions: number; pages: RumPage[] };
 export type Incident = {
   id: string;
@@ -159,7 +171,7 @@ export type Incident = {
   public: boolean;
   timeline: { ts: number; kind: "declared" | "note" | "state" | "severity"; text: string; by: string | null }[];
 };
-export type StatusComponent = { name: string; kind: "synthetic" | "monitor"; ref: string; status?: string };
+export type StatusComponent = { name: string; kind: "synthetic" | "monitor"; ref: string; status?: string; uptime?: number | null };
 export type StatusPage = { enabled: boolean; title: string; description: string; components: StatusComponent[] };
 export type WatchdogStory = {
   id: string;
@@ -638,6 +650,7 @@ export const api = {
   searchRum: (s: Scope & { limit?: number; cursor?: string }, signal?: AbortSignal) =>
     post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/rum/search", s, signal),
   rumHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/rum/histogram", s, signal),
+  rumSessions: (s: Scope, signal?: AbortSignal) => post<{ sessions: RumSession[] }>("/rum/sessions", s, signal),
   rumPerformance: (s: Scope, signal?: AbortSignal) => post<RumPerformance>("/rum/performance", s, signal),
   incidents: () => call<{ incidents: Incident[] }>("/incidents"),
   incident: (id: string) => call<Incident>(`/incidents/${id}`),

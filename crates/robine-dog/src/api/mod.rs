@@ -3,6 +3,7 @@
 pub mod analytics;
 pub mod apm;
 pub mod dashboards;
+pub mod datadog;
 pub mod downtimes;
 pub mod errors;
 pub mod events;
