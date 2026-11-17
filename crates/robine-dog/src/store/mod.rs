@@ -19,6 +19,7 @@ pub struct Store {
     pub gt: Greptime,
     pub pg: Pg,
     pub logs: Writer<LogRow>,
+    pub events: Writer<crate::events::EventRow>,
     pub spans: Writer<SpanRow>,
     pub points: Writer<Point>,
 }
@@ -59,6 +60,7 @@ impl Store {
         let pg = patiently("PostgreSQL", || Pg::connect(&cfg.postgres_url)).await?;
         Ok(Self {
             logs: Writer::spawn(gt.clone()),
+            events: Writer::spawn(gt.clone()),
             spans: Writer::spawn(gt.clone()),
             points: Writer::spawn(gt.clone()),
             gt,
@@ -68,6 +70,11 @@ impl Store {
 
     /// Writes out every buffered row (on shutdown).
     pub async fn flush(&self) {
-        tokio::join!(self.logs.flush(), self.spans.flush(), self.points.flush());
+        tokio::join!(
+            self.logs.flush(),
+            self.events.flush(),
+            self.spans.flush(),
+            self.points.flush()
+        );
     }
 }

@@ -578,6 +578,8 @@ export const api = {
     maxSeries?: number,
   ) => post<MetricsResponse>("/metrics/query", { queries, from, to, max_series: maxSeries }, signal),
   hosts: () => call<HostInfo[]>("/hosts"),
+  metricsVolume: (from: number, to: number) =>
+    call<{ metric: string; points: number; series: number }[]>(`/metrics-volume?from=${from}&to=${to}`),
   synthetics: () => call<{ tests: SyntheticTest[] }>("/synthetics/tests"),
   createSynthetic: (t: SyntheticTest) => post<SyntheticTest>("/synthetics/tests", t),
   updateSynthetic: (id: string, t: SyntheticTest) => put<SyntheticTest>(`/synthetics/tests/${id}`, t),
@@ -587,6 +589,10 @@ export const api = {
   createSlo: (s: Slo) => post<unknown>("/slos", s),
   updateSlo: (id: string, s: Slo) => put<unknown>(`/slos/${id}`, s),
   deleteSlo: (id: string) => del<unknown>(`/slos/${id}`),
+  searchEvents: (s: Scope & { limit?: number; cursor?: string }, signal?: AbortSignal) =>
+    post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/events/search", s, signal),
+  eventsHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/events/histogram", s, signal),
+  postEvent: (e: Record<string, unknown>) => post<unknown>("/events", e),
   downtimes: () => call<Downtime[]>("/downtimes"),
   createDowntime: (d: Partial<Downtime>) => post<Downtime>("/downtimes", d),
   cancelDowntime: (id: string) => del<unknown>(`/downtimes/${id}`),

@@ -5,6 +5,7 @@ pub mod apm;
 pub mod dashboards;
 pub mod downtimes;
 pub mod errors;
+pub mod events;
 pub mod facets;
 pub mod generated_metrics;
 pub mod logs;

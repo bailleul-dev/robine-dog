@@ -60,9 +60,15 @@ pub struct SearchResp {
     total: Option<i64>,
 }
 
-pub async fn search(
+pub async fn search(st: State<AppState>, req: Json<SearchReq>) -> ApiResult<SearchResp> {
+    search_table(st, req, "logs").await
+}
+
+/// Events have the columns of logs, in their own table.
+pub async fn search_table(
     State(st): State<AppState>,
     Json(req): Json<SearchReq>,
+    table: &str,
 ) -> ApiResult<SearchResp> {
     let filter = compile(&req.scope.query, Dataset::Logs)?;
     let limit = req.limit.unwrap_or(100).clamp(1, 1000);
@@ -70,7 +76,7 @@ pub async fn search(
         "{} AND {filter}",
         time_clause(Dataset::Logs, req.scope.from, req.scope.to)
     );
-    let mut sql = format!("SELECT {COLUMNS} FROM logs WHERE {where_}");
+    let mut sql = format!("SELECT {COLUMNS} FROM {table} WHERE {where_}");
     if let Some((ts, id)) = req.cursor.as_deref().and_then(|c| c.split_once(':')) {
         let ts: i64 = ts.parse().unwrap_or(0);
         let id: i64 = id.parse().unwrap_or(0);
@@ -81,7 +87,7 @@ pub async fn search(
     }
     sql.push_str(&format!(" ORDER BY ts DESC, id DESC LIMIT {limit}"));
     let want_total = req.cursor.is_none() && req.after_id.is_none();
-    let count_sql = format!("SELECT count(*) FROM logs WHERE {where_}");
+    let count_sql = format!("SELECT count(*) FROM {table} WHERE {where_}");
     let (rows, total) = tokio::try_join!(st.store.gt.query(&sql), async {
         if want_total {
             Ok(Some(st.store.gt.query(&count_sql).await?))
@@ -147,9 +153,14 @@ pub fn fill(from: i64, to: i64, interval: i64, rows: Vec<(i64, String, i64)>) ->
         .collect()
 }
 
-pub async fn histogram(
+pub async fn histogram(st: State<AppState>, req: Json<HistogramReq>) -> ApiResult<HistogramResp> {
+    histogram_table(st, req, "logs").await
+}
+
+pub async fn histogram_table(
     State(st): State<AppState>,
     Json(req): Json<HistogramReq>,
+    table: &str,
 ) -> ApiResult<HistogramResp> {
     let filter = compile(&req.scope.query, Dataset::Logs)?;
     let (from, to) = (req.scope.from, req.scope.to);
@@ -159,7 +170,7 @@ pub async fn histogram(
         .gt
         .query(&format!(
             "SELECT CAST(date_bin(INTERVAL '{interval} milliseconds', ts) AS BIGINT) AS b, status, count(*)
-             FROM logs WHERE {} AND {filter} GROUP BY b, status",
+             FROM {table} WHERE {} AND {filter} GROUP BY b, status",
             time_clause(Dataset::Logs, from, to)
         ))
         .await?;

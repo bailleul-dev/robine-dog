@@ -10,6 +10,7 @@
 mod api;
 mod auth;
 mod config;
+mod events;
 mod hosts;
 mod intake;
 mod metrics;
@@ -105,6 +106,9 @@ fn ui_api(st: AppState) -> Router<AppState> {
                 .delete(api::monitors::delete_webhook),
         )
         .route("/webhooks/{name}/test", post(api::monitors::test_webhook))
+        .route("/events/search", post(api::events::search))
+        .route("/events/histogram", post(api::events::histogram))
+        .route("/events", post(api::events::create))
         .route("/logs/aggregate", post(api::analytics::logs))
         .route("/logs/patterns", post(api::patterns::patterns))
         .route("/spans/aggregate", post(api::analytics::spans))
@@ -169,6 +173,7 @@ fn ui_api(st: AppState) -> Router<AppState> {
         .route("/pipelines/{id}/clone", post(api::pipelines::clone))
         .route("/metrics", get(api::metrics::list))
         .route("/hosts", get(api::metrics::hosts))
+        .route("/metrics-volume", get(api::metrics::volume))
         .route("/metrics/query", post(api::metrics::query))
         .route(
             "/metrics/{name}",
@@ -299,6 +304,7 @@ fn app(st: AppState) -> Router {
         .route("/v1/traces", post(intake::otlp::traces_handler))
         .route("/v1/logs", post(intake::otlp::logs_handler))
         .route("/v1/metrics", post(intake::otlp::metrics_handler))
+        .route("/api/v1/events", post(api::events::intake))
         .route("/api/v1/series", post(intake::series::v1))
         .route("/api/v2/series", post(intake::series::v2))
         .route("/api/v1/validate", get(intake::series::validate))

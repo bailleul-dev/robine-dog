@@ -81,6 +81,7 @@ impl Greptime {
         }
         for (table, days) in [
             ("logs", logs_ttl_days),
+            ("events", metrics_ttl_days),
             ("spans", logs_ttl_days),
             ("metric_points", metrics_ttl_days),
             ("monitor_values", metrics_ttl_days),
@@ -95,6 +96,20 @@ impl Greptime {
 /// Telemetry tables. Rows only ever get appended; the TTL drops expired data.
 const SCHEMA: &[&str] = &[
     r#"CREATE TABLE IF NOT EXISTS "logs" (
+        "ts" TIMESTAMP(3) TIME INDEX,
+        "id" BIGINT SKIPPING INDEX WITH (type = 'BLOOM', granularity = 1024),
+        "status" STRING INVERTED INDEX,
+        "service" STRING INVERTED INDEX,
+        "host" STRING INVERTED INDEX,
+        "source" STRING INVERTED INDEX,
+        "message" STRING FULLTEXT INDEX WITH (backend = 'bloom', analyzer = 'English', case_sensitive = 'false'),
+        "tags" STRING,
+        "attributes" JSON2,
+        "trace_id" STRING SKIPPING INDEX WITH (type = 'BLOOM', granularity = 1024),
+        "span_id" STRING
+    ) WITH ('append_mode' = 'true')"#,
+    // Events: the columns of logs, so the same queries apply.
+    r#"CREATE TABLE IF NOT EXISTS "events" (
         "ts" TIMESTAMP(3) TIME INDEX,
         "id" BIGINT SKIPPING INDEX WITH (type = 'BLOOM', granularity = 1024),
         "status" STRING INVERTED INDEX,

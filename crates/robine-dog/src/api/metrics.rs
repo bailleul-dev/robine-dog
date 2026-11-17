@@ -22,6 +22,37 @@ pub struct Window {
 }
 
 #[derive(Serialize)]
+pub struct Volume {
+    metric: String,
+    /// Points stored over the window.
+    points: i64,
+    /// Distinct host and tag combinations.
+    series: i64,
+}
+
+/// What each metric costs: the points and series it stored over the window.
+pub async fn volume(State(st): State<AppState>, Query(w): Query<Window>) -> ApiResult<Vec<Volume>> {
+    let rows = st
+        .store
+        .gt
+        .query(&format!(
+            "SELECT metric, count(*) AS n, count(DISTINCT concat(coalesce(host, ''), tags)) \
+             FROM metric_points WHERE ts >= {} AND ts <= {} GROUP BY metric ORDER BY n DESC LIMIT 5000",
+            w.from, w.to
+        ))
+        .await?;
+    Ok(Json(
+        rows.iter()
+            .map(|r| Volume {
+                metric: str_at(r, 0).unwrap_or_default(),
+                points: i64_at(r, 1),
+                series: i64_at(r, 2),
+            })
+            .collect(),
+    ))
+}
+
+#[derive(Serialize)]
 pub struct MetricDetail {
     #[serde(flatten)]
     meta: MetricMeta,

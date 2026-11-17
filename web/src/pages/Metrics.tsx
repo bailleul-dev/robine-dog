@@ -23,6 +23,7 @@ import { useTimeRange } from "../lib/time";
 const METRICS_TABS = [
   { to: "/metrics/explorer", label: "Explorer" },
   { to: "/metrics/summary", label: "Summary" },
+  { to: "/metrics/volume", label: "Volume" },
 ];
 
 const LETTERS = "abcdefghij";
@@ -523,6 +524,111 @@ export function MetricsSummary() {
         </table>
       </div>
       {current && <MetricPanel meta={current} onClose={() => setSelected(null)} />}
+    </>
+  );
+}
+
+const VOLUME_WINDOWS: [string, number][] = [
+  ["Past hour", 3_600_000],
+  ["Past 4 hours", 14_400_000],
+  ["Past day", 86_400_000],
+];
+
+/** Which metrics fill the storage: points and series per metric, and per prefix. */
+export function MetricsVolume() {
+  const [windowMs, setWindowMs] = useState(3_600_000);
+  const [filter, setFilter] = useState("");
+  const [byPrefix, setByPrefix] = useState(false);
+  const q = useQuery({
+    queryKey: ["metricsVolume", windowMs],
+    queryFn: () => {
+      const to = Date.now();
+      return api.metricsVolume(to - windowMs, to);
+    },
+    placeholderData: keepPreviousData,
+  });
+  const all = q.data ?? [];
+  const total = all.reduce((a, m) => a + m.points, 0);
+  const rows = useMemo(() => {
+    let list = all;
+    if (byPrefix) {
+      const groups = new Map<string, { metric: string; points: number; series: number }>();
+      for (const m of all) {
+        const prefix = `${m.metric.split(".")[0]}.*`;
+        const g = groups.get(prefix) ?? { metric: prefix, points: 0, series: 0 };
+        g.points += m.points;
+        g.series += m.series;
+        groups.set(prefix, g);
+      }
+      list = [...groups.values()].sort((a, b) => b.points - a.points);
+    }
+    const f = filter.trim().toLowerCase();
+    return f ? list.filter((m) => m.metric.toLowerCase().includes(f)) : list;
+  }, [all, byPrefix, filter]);
+  const perDay = (n: number) => formatValue((n * 86_400_000) / windowMs);
+  return (
+    <>
+      <PageHeader title="Metrics" tabs={METRICS_TABS} />
+      <div className="filters-row">
+        <input className="input" placeholder="Search metrics" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: 280 }} />
+        <select className="input" value={windowMs} onChange={(e) => setWindowMs(Number(e.target.value))} aria-label="Window">
+          {VOLUME_WINDOWS.map(([label, ms]) => (
+            <option key={ms} value={ms}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <div className="btn-group">
+          <button className={`btn small${byPrefix ? "" : " selected"}`} onClick={() => setByPrefix(false)}>
+            By metric
+          </button>
+          <button className={`btn small${byPrefix ? " selected" : ""}`} onClick={() => setByPrefix(true)}>
+            By prefix
+          </button>
+        </div>
+        <div className="spacer" />
+        <span className="muted">
+          {formatValue(total)} points stored, about {perDay(total)} a day
+        </span>
+      </div>
+      <div className="page-scroll">
+        <table className="list">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th className="num" style={{ width: 130 }}>
+                Points
+              </th>
+              <th className="num" style={{ width: 130 }}>
+                Per day
+              </th>
+              <th className="num" style={{ width: 110 }}>
+                Series
+              </th>
+              <th style={{ width: "26%" }}>Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 500).map((m) => (
+              <tr key={m.metric}>
+                <td className="mono ellipsis">
+                  {byPrefix ? m.metric : <Link to={`/metrics/explorer?q=${encodeURIComponent(`avg:${m.metric}{*}`)}`}>{m.metric}</Link>}
+                </td>
+                <td className="num">{formatValue(m.points)}</td>
+                <td className="num">{perDay(m.points)}</td>
+                <td className="num">{formatValue(m.series)}</td>
+                <td>
+                  <div className="volume-bar">
+                    <div style={{ width: `${total ? (m.points / total) * 100 : 0}%` }} />
+                    <span>{total ? ((m.points / total) * 100).toFixed(1) : 0} %</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {q.data && rows.length === 0 && <div className="empty-state">No metric stored over this window.</div>}
+      </div>
     </>
   );
 }

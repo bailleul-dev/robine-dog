@@ -65,13 +65,13 @@ const SECTIONS: Item[][] = [
       label: "Service Mgmt",
       icon: <ServiceMgmtIcon />,
       to: "/slo/manage",
-      match: ["/slo"],
+      match: ["/slo", "/event"],
       links: [
         { label: "SLOs", to: "/slo/manage", hint: "Service level objectives and error budgets" },
         { label: "Incidents", hint: "Declare and manage incidents" },
         { label: "On-Call", hint: "Schedules, escalations and pages" },
         { label: "Case Management" },
-        { label: "Event Management" },
+        { label: "Event Management", to: "/event/explorer", hint: "Monitor alerts, Agent and API events" },
         { label: "Workflow Automation" },
         { label: "App Builder" },
       ],
@@ -307,7 +307,7 @@ const SECTIONS: Item[][] = [
           to: "/metrics/summary",
           hint: "Every metric, its type, tags and hosts",
         },
-        { label: "Volume" },
+        { label: "Volume", to: "/metrics/volume", hint: "Points and series stored per metric" },
       ],
       groups: [
         {
@@ -363,10 +363,10 @@ const SECTIONS: Item[][] = [
       id: "integrations",
       label: "Integrations",
       icon: <IntegrationsIcon />,
-      to: "/monitors/webhooks",
-      match: ["/monitors/webhooks"],
+      to: "/integrations",
+      match: ["/integrations", "/monitors/webhooks"],
       links: [
-        { label: "Integrations", hint: "Everything Datadog collects from" },
+        { label: "Integrations", to: "/integrations", hint: "What sends logs and metrics here" },
         {
           label: "Webhooks",
           to: "/monitors/webhooks",

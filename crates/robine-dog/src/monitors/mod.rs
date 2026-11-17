@@ -626,6 +626,37 @@ pub async fn run_monitor(st: &AppState, def: &MonitorDef, now: i64) -> anyhow::R
                 &notified,
             )
             .await?;
+            let mut tags = def.tags.clone();
+            tags.extend(s.tags.iter().map(|(k, v)| format!("{k}:{v}")));
+            tags.push(format!("monitor_id:{id}"));
+            crate::events::emit(
+                st,
+                vec![crate::intake::logs::LogRow {
+                    ts: now,
+                    status: match status {
+                        ALERT => "error",
+                        WARN => "warn",
+                        OK => "ok",
+                        _ => "info",
+                    }
+                    .into(),
+                    service: s.tags.get("service").cloned(),
+                    host: s.tags.get("host").cloned(),
+                    source: Some("alert".into()),
+                    message: format!("{title}\n{message}"),
+                    tags,
+                    attributes: serde_json::Map::from_iter([
+                        ("evt".to_string(), json!({"title": title, "text": message})),
+                        (
+                            "monitor".to_string(),
+                            json!({"id": id, "name": def.name, "group": s.group, "from": prev_status, "to": status, "value": s.value}),
+                        ),
+                    ]),
+                    trace_id: None,
+                    span_id: None,
+                }],
+            )
+            .await;
             tracing::info!(monitor = id, group = %s.group, from = prev_status, to = status, value = %fmt_value(s.value), "monitor state");
         }
         pg.put_monitor_group(id, &state).await?;

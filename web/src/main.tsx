@@ -1,3 +1,5 @@
+import { Integrations } from "./pages/Integrations";
+import { EventsExplorer } from "./pages/Events";
 import { Slos } from "./pages/Slos";
 import { Synthetics } from "./pages/Synthetics";
 import { Downtimes } from "./pages/Downtimes";
@@ -12,7 +14,7 @@ import { ServiceCatalog, ServicePage } from "./pages/Apm";
 import { LiveTail } from "./pages/LiveTail";
 import { Login } from "./pages/Login";
 import { LogsExplorer } from "./pages/LogsExplorer";
-import { MetricsExplorer, MetricsSummary } from "./pages/Metrics";
+import { MetricsExplorer, MetricsSummary, MetricsVolume } from "./pages/Metrics";
 import { DashboardList, DashboardPage } from "./pages/Dashboards";
 import { ErrorTracking, IssuePage } from "./pages/ErrorTracking";
 import { ManageMonitors, MonitorEditor, MonitorPage, TriggeredMonitors, Webhooks } from "./pages/Monitors";
@@ -73,6 +75,8 @@ function App() {
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />
         <Route path="/slo/manage" element={<Slos />} />
+        <Route path="/event/explorer" element={<EventsExplorer />} />
+        <Route path="/integrations" element={<Integrations />} />
         <Route path="/infrastructure" element={<Hosts />} />
         <Route path="/containers" element={<Containers />} />
         <Route path="/orchestration" element={<Navigate to="/orchestration/overview/pod" replace />} />
@@ -82,6 +86,7 @@ function App() {
         <Route path="/metrics" element={<Navigate to="/metrics/explorer" replace />} />
         <Route path="/metrics/explorer" element={<MetricsExplorer />} />
         <Route path="/metrics/summary" element={<MetricsSummary />} />
+        <Route path="/metrics/volume" element={<MetricsVolume />} />
         <Route path="*" element={<Navigate to="/logs" replace />} />
       </Route>
     </Routes>

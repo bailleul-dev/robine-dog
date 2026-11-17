@@ -774,6 +774,12 @@ pub async fn metadata(
             tracing::warn!(error = %format!("{e:#}"), "saving host metadata");
         }
     }
+    if let Some(p) = &payload {
+        let events = crate::events::from_agent(p, super::logs::now_ms());
+        if !events.is_empty() {
+            crate::events::emit(&st, events).await;
+        }
+    }
     (StatusCode::ACCEPTED, Json(json!({"status": "ok"}))).into_response()
 }
 
