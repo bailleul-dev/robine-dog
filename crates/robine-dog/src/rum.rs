@@ -98,6 +98,38 @@ fn summary(typ: &str, e: &Value) -> String {
     }
 }
 
+/// The browser, system and device type read from the `User-Agent`, as
+/// Datadog adds them (`@browser.name`, `@os.name`, `@device.type`). What the
+/// SDK already says is kept.
+fn enrich(e: &mut Value, ua: &Value) {
+    let Some(o) = e.as_object_mut() else { return };
+    let mut set = |section: &str, key: &str, v: Option<&Value>| {
+        let Some(v) = v.filter(|v| v.as_str().is_some_and(|s| !s.is_empty() && s != "Other"))
+        else {
+            return;
+        };
+        if let Some(m) = o
+            .entry(section)
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+        {
+            m.entry(key).or_insert(v.clone());
+        }
+    };
+    set("browser", "name", ua.pointer("/browser/family"));
+    set("browser", "version_major", ua.pointer("/browser/major"));
+    set("os", "name", ua.pointer("/os/family"));
+    set("os", "version_major", ua.pointer("/os/major"));
+    let device = match ua.pointer("/device/category").and_then(Value::as_str) {
+        Some("Mobile") => "mobile",
+        Some("Tablet") => "tablet",
+        Some("Bot") => "bot",
+        Some("Desktop") => "desktop",
+        _ => "other",
+    };
+    set("device", "type", Some(&json!(device)));
+}
+
 /// One SDK event as a row, plus the error log an error event also is.
 pub fn rows(mut e: Value, tags: &[String], now: i64) -> Option<(LogRow, Option<LogRow>)> {
     let typ = text(e.get("type"))?;
@@ -187,11 +219,15 @@ fn json_lines(raw: &[u8]) -> impl Iterator<Item = Value> + '_ {
         .filter_map(|l| serde_json::from_slice::<Value>(l).ok())
 }
 
-async fn store_rum(st: &AppState, raw: &[u8], q: &HashMap<String, String>) {
+async fn store_rum(st: &AppState, raw: &[u8], q: &HashMap<String, String>, agent: Option<&str>) {
     let tags = split_tags(q.get("ddtags").map(String::as_str).unwrap_or(""));
     let now = now_ms();
+    let ua = agent.map(crate::pipelines::useragent::parse);
     let (mut events, mut errors) = (Vec::new(), Vec::new());
-    for e in json_lines(raw) {
+    for mut e in json_lines(raw) {
+        if let Some(ua) = &ua {
+            enrich(&mut e, ua);
+        }
         if let Some((row, error)) = rows(e, &tags, now) {
             events.push(RumRow(row));
             errors.extend(error);
@@ -259,7 +295,8 @@ async fn ingest(
         return cors((StatusCode::BAD_REQUEST, "bad compression").into_response());
     };
     if path.ends_with("/rum") {
-        store_rum(&st, &raw, &q).await;
+        let agent = headers.get("user-agent").and_then(|v| v.to_str().ok());
+        store_rum(&st, &raw, &q, agent).await;
     } else if path.ends_with("/logs") {
         store_logs(&st, &raw, &q).await;
     }
@@ -494,5 +531,14 @@ mod tests {
         .unwrap();
         assert_eq!((res.message.as_str(), res.ts), ("POST https://api/x", 9));
         assert_eq!(json_lines(b"{\"a\":1}\n\nnope\n{\"b\":2}").count(), 2);
+
+        let ua = crate::pipelines::useragent::parse(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+        );
+        let mut e = json!({"type": "view", "os": {"name": "iPadOS"}});
+        enrich(&mut e, &ua);
+        assert_eq!(e["browser"]["name"], "Safari");
+        assert_eq!(e["os"]["name"], "iPadOS");
+        assert_eq!(e["device"]["type"], "mobile");
     }
 }

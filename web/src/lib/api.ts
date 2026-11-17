@@ -583,7 +583,7 @@ export const api = {
       `/traces/${encodeURIComponent(traceId)}`,
     ),
   facetValues: (
-    dataset: "logs" | "spans",
+    dataset: "logs" | "spans" | "rum",
     s: Scope,
     facets: string[],
     limit = 10,
@@ -673,7 +673,7 @@ export const api = {
   createDowntime: (d: Partial<Downtime>) => post<Downtime>("/downtimes", d),
   cancelDowntime: (id: string) => del<unknown>(`/downtimes/${id}`),
   aggregate: (
-    dataset: "logs" | "spans",
+    dataset: "logs" | "spans" | "rum",
     req: AggregateRequest,
     signal?: AbortSignal,
   ) => post<AggregateResponse>(`/${dataset}/aggregate`, req, signal),

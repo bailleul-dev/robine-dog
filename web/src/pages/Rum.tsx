@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
+import { TimeChart } from "../components/Charts";
 import { PageHeader } from "../components/Layout";
 import { TimePicker } from "../components/TimePicker";
 import { api, type RumPage } from "../lib/api";
@@ -197,6 +198,120 @@ export function RumSessions() {
               Sessions appear as soon as a site with Datadog's browser SDK is visited.
             </div>
           )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+const BREAKDOWNS: { title: string; facet: string; metric: string; unit: string }[] = [
+  { title: "Top pages", facet: "@view.url_path", metric: "@view.id", unit: "views" },
+  { title: "Sites", facet: "@view.url_host", metric: "@session.id", unit: "sessions" },
+  { title: "Browsers", facet: "@browser.name", metric: "@session.id", unit: "sessions" },
+  { title: "Operating systems", facet: "@os.name", metric: "@session.id", unit: "sessions" },
+  { title: "Devices", facet: "@device.type", metric: "@session.id", unit: "sessions" },
+  { title: "Referrers", facet: "@view.referrer", metric: "@session.id", unit: "sessions" },
+];
+
+function Breakdown({ b, query, from, to }: { b: (typeof BREAKDOWNS)[number]; query: string; from: number; to: number }) {
+  const q = useQuery({
+    queryKey: ["rum", "breakdown", b.facet, query, from, to],
+    queryFn: ({ signal }) =>
+      api.aggregate(
+        "rum",
+        {
+          compute: [{ aggregation: "cardinality", metric: b.metric }],
+          filter: { query: `source:view ${query}`.trim(), from, to },
+          group_by: [{ facet: b.facet, limit: 10 }],
+        },
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+  });
+  const rows = (q.data?.data.buckets ?? [])
+    .map((r) => ({ label: r.by[b.facet] ?? "", n: typeof r.computes.c0 === "number" ? r.computes.c0 : 0 }))
+    .sort((x, y) => y.n - x.n);
+  const max = Math.max(1, ...rows.map((r) => r.n));
+  return (
+    <div className="card">
+      <div className="card-title">
+        {b.title} <span className="muted">· {b.unit}</span>
+      </div>
+      <div className="widget-toplist">
+        {rows.map((r) => (
+          <Link
+            className="widget-toplist-row"
+            key={r.label}
+            to={`/rum/explorer?query=${encodeURIComponent(`source:view ${r.label ? `${b.facet}:"${r.label}" ` : ""}${query}`.trim())}&from_ts=${from}&to_ts=${to}&live=false`}
+          >
+            <span className="widget-toplist-label mono ellipsis" title={r.label}>
+              {r.label || "(none)"}
+            </span>
+            <span className="widget-toplist-bar">
+              <i style={{ width: `${(r.n / max) * 100}%` }} />
+            </span>
+            <span className="widget-toplist-value">{thousands(r.n)}</span>
+          </Link>
+        ))}
+        {q.data && rows.length === 0 && <div className="muted">No data</div>}
+      </div>
+    </div>
+  );
+}
+
+/** Who visits: sessions over time, then pages, browsers, systems, devices and referrers. */
+export function RumAnalytics() {
+  const time = useTimeRange("1w");
+  const [query] = useQueryParam("query");
+  const interval = Math.max(60_000, Math.ceil((time.to - time.from) / 60 / 60_000) * 60_000);
+  const series = useQuery({
+    queryKey: ["rum", "analytics", query, time.from, time.to],
+    queryFn: ({ signal }) =>
+      api.aggregate(
+        "rum",
+        {
+          compute: [
+            { aggregation: "cardinality", metric: "@session.id", type: "timeseries", interval: String(interval) },
+            { aggregation: "cardinality", metric: "@view.id", type: "timeseries", interval: String(interval) },
+          ],
+          filter: { query: `source:view ${query}`.trim(), from: time.from, to: time.to },
+          group_by: [],
+        },
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+  });
+  const bucket = series.data?.data.buckets[0];
+  const points = (k: string) => (Array.isArray(bucket?.computes[k]) ? (bucket!.computes[k] as { time: string; value: number | null }[]) : []);
+  const step = series.data?.meta.interval_ms ?? interval;
+  const chart = (title: string, k: string, color: string) => (
+    <div className="card">
+      <div className="card-title">{title}</div>
+      <TimeChart
+        times={points(k).map((p) => Date.parse(p.time))}
+        interval={step}
+        from={time.from}
+        to={time.to}
+        height={120}
+        series={[{ key: k, label: title, color, values: points(k).map((p) => p.value ?? 0) }]}
+        onZoom={(a, b) => time.setAbsolute(Math.round(a), Math.round(b))}
+      />
+    </div>
+  );
+  return (
+    <>
+      <PageHeader title="Real User Monitoring" tabs={RUM_TABS}>
+        <TimePicker time={time} />
+      </PageHeader>
+      <div className="page-scroll page-padding">
+        <div className="rum-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+          {chart("Sessions", "c0", "#8b6fd0")}
+          {chart("Page views", "c1", "#3d9bd9")}
+        </div>
+        <div className="rum-grid">
+          {BREAKDOWNS.map((b) => (
+            <Breakdown key={b.facet} b={b} query={query} from={time.from} to={time.to} />
+          ))}
         </div>
       </div>
     </>

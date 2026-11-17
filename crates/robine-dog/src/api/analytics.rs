@@ -225,6 +225,18 @@ pub async fn run(
     req: &AggregateReq,
     now: i64,
 ) -> Result<Outcome, ApiError> {
+    run_in(st, ds, table(ds), req, now).await
+}
+
+/// [`run`] over another table with the columns of `ds` (RUM events are
+/// stored like logs).
+pub async fn run_in(
+    st: &AppState,
+    ds: Dataset,
+    table: &str,
+    req: &AggregateReq,
+    now: i64,
+) -> Result<Outcome, ApiError> {
     let from = parse_time(&req.filter.from, now)
         .ok_or_else(|| ApiError::BadQuery("bad filter.from".into()))?;
     let to = parse_time(&req.filter.to, now)
@@ -244,8 +256,7 @@ pub async fn run(
     };
     let filter = sql::compile(&parse_query(&req.filter.query)?, ds);
     let base = format!(
-        "FROM {} WHERE {} AND {filter}",
-        table(ds),
+        "FROM {table} WHERE {} AND {filter}",
         time_clause(ds, from, to)
     );
     let gt = &st.store.gt;
@@ -478,8 +489,17 @@ fn now_ms() -> i64 {
 }
 
 async fn respond(st: AppState, ds: Dataset, req: AggregateReq) -> Result<Json<Value>, ApiError> {
+    respond_in(st, ds, table(ds), req).await
+}
+
+async fn respond_in(
+    st: AppState,
+    ds: Dataset,
+    table: &str,
+    req: AggregateReq,
+) -> Result<Json<Value>, ApiError> {
     let started = std::time::Instant::now();
-    let out = run(&st, ds, &req, now_ms()).await?;
+    let out = run_in(&st, ds, table, &req, now_ms()).await?;
     Ok(Json(json!({
         "data": {"buckets": out.buckets},
         "meta": {
@@ -495,6 +515,14 @@ pub async fn logs(
     Json(req): Json<AggregateReq>,
 ) -> Result<Json<Value>, ApiError> {
     respond(st, Dataset::Logs, req).await
+}
+
+/// RUM events, in the format of Datadog's `/api/v2/rum/analytics/aggregate`.
+pub async fn rum(
+    State(st): State<AppState>,
+    Json(req): Json<AggregateReq>,
+) -> Result<Json<Value>, ApiError> {
+    respond_in(st, Dataset::Logs, "rum_events", req).await
 }
 
 pub async fn spans(

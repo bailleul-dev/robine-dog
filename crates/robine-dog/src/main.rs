@@ -145,6 +145,7 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/rum/histogram", post(rum::histogram))
         .route("/rum/performance", post(rum::performance))
         .route("/rum/sessions", post(rum::sessions))
+        .route("/rum/aggregate", post(api::analytics::rum))
         .route("/events/search", post(api::events::search))
         .route("/events/histogram", post(api::events::histogram))
         .route("/events", post(api::events::create))
@@ -264,6 +265,7 @@ fn public_api(st: AppState) -> Router<AppState> {
             axum::routing::put(api::downtimes::update).delete(api::downtimes::cancel),
         )
         .route("/api/v1/monitor/validate", post(api::monitors::validate))
+        .route("/api/v1/monitor/search", get(api::datadog::monitor_search))
         .route(
             "/api/v1/monitor/{id}",
             get(api::monitors::get)
@@ -334,6 +336,7 @@ fn public_api(st: AppState) -> Router<AppState> {
         .route("/api/v2/spans/events", get(api::datadog::spans_list))
         .route("/api/v2/rum/events/search", post(api::datadog::rum_search))
         .route("/api/v2/rum/events", get(api::datadog::rum_list))
+        .route("/api/v2/rum/analytics/aggregate", post(api::analytics::rum))
         .route("/api/v2/events/search", post(api::datadog::events_search))
         .route("/api/v2/events", get(api::datadog::events_list))
         .route("/api/v1/events", get(api::datadog::events_v1))

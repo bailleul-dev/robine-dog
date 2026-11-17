@@ -53,6 +53,8 @@ state (facets, metric metadata) is in PostgreSQL.
 | Datadog's public API for reading, for its clients and SDKs (`DD-API-KEY`): search of logs, spans, RUM events and events; metric queries, lists and metadata; hosts; incidents; notebooks | `/api/v2/logs/events/search`, `/api/v2/spans/events/search`, `/api/v2/rum/events/search`, `/api/v2/events/search`, `/api/v1/events`, `/api/v1/query`, `/api/v1/metrics`, `/api/v2/metrics`, `/api/v1/search`, `/api/v1/hosts`, `/api/v2/incidents`, `/api/v1/notebooks` |
 | Synthetic tests alert by themselves: when one starts failing (at once, or after `min_failure_duration`) and when it recovers, an event is posted and its message is sent to the `@webhook-…` it names | — |
 | RUM sessions: what each visitor did (entry page, duration, views, actions, errors), opening on the session's events | — |
+| RUM analytics: sessions and page views over time, top pages, sites, browsers, operating systems, device types and referrers. The browser, system and device type are read from the `User-Agent` at intake, as Datadog does (`@browser.name`, `@os.name`, `@device.type`) | `/api/v2/rum/analytics/aggregate` |
+| Monitor search with Datadog's syntax (`status:alert type:log tag:"env:prod" muted:true`, words of the name) and its counts per status, type and tag | `/api/v1/monitor/search` |
 | Status page uptime: 30 days of daily bars and the uptime of each component backed by a synthetic test | — |
 | Downtimes: scheduled silences by monitor, monitor tags and scope | `/api/v1/downtime` |
 | Infrastructure: hosts, containers and Kubernetes resources (pods, deployments, stateful sets, daemon sets, nodes, namespaces), from the Agent's `system.*`, `container.*`, `kubernetes.*` and `kubernetes_state.*` metrics | — |

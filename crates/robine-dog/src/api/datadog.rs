@@ -555,6 +555,122 @@ pub async fn hosts_totals(State(st): State<AppState>) -> Response {
     }
 }
 
+// --- monitors --------------------------------------------------------------
+
+/// Whether a monitor matches Datadog's monitor search syntax: `status:alert`,
+/// `type:metric`, `muted:true`, `tag:"env:prod"` or a bare `env:prod`, and
+/// words looked for in the name.
+fn monitor_matches(m: &Value, query: &str) -> bool {
+    let lower = |v: &Value| v.as_str().unwrap_or("").to_lowercase();
+    let tags: Vec<String> = m["tags"]
+        .as_array()
+        .map(|t| t.iter().map(lower).collect())
+        .unwrap_or_default();
+    let muted = m["options"]["silenced"]
+        .as_object()
+        .is_some_and(|s| !s.is_empty());
+    query.split_whitespace().all(|word| {
+        let word = word.to_lowercase().replace('"', "");
+        match word.split_once(':') {
+            Some(("status", v)) => {
+                lower(&m["overall_state"]).replace(' ', "") == v.replace(' ', "")
+            }
+            Some(("type", v)) => lower(&m["type"]).starts_with(v),
+            Some(("muted", v)) => muted == (v == "true"),
+            Some(("id", v)) => m["id"].as_i64().is_some_and(|i| v.parse() == Ok(i)),
+            Some(("tag", v)) => tags.iter().any(|t| t == v),
+            Some(_) => tags.contains(&word),
+            None => lower(&m["name"]).contains(&word),
+        }
+    })
+}
+
+fn counts(values: impl Iterator<Item = String>) -> Vec<Value> {
+    let mut n: HashMap<String, i64> = HashMap::new();
+    for v in values {
+        *n.entry(v).or_default() += 1;
+    }
+    let mut out: Vec<_> = n.into_iter().collect();
+    out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    out.into_iter()
+        .map(|(name, count)| json!({"name": name, "count": count}))
+        .collect()
+}
+
+/// `GET /api/v1/monitor/search?query=…&page=0&per_page=30`.
+pub async fn monitor_search(
+    State(st): State<AppState>,
+    Query(q): Query<HashMap<String, String>>,
+) -> Response {
+    let all = match ui(&st, Method::GET, "/monitors", None).await {
+        Ok(v) => v.as_array().cloned().unwrap_or_default(),
+        Err(e) => return failed(e),
+    };
+    let query = q.get("query").map(String::as_str).unwrap_or("");
+    let found: Vec<&Value> = all.iter().filter(|m| monitor_matches(m, query)).collect();
+    let per_page = q
+        .get("per_page")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(30)
+        .clamp(1, 100);
+    let page = q
+        .get("page")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
+    let name = |m: &Value, k: &str| m[k].as_str().unwrap_or("").to_string();
+    let monitors: Vec<Value> = found
+        .iter()
+        .skip(page * per_page)
+        .take(per_page)
+        .map(|m| {
+            let typ = name(m, "type");
+            let handles: Vec<Value> = name(m, "message")
+                .split_whitespace()
+                .filter_map(|w| w.strip_prefix('@'))
+                .map(|h| h.trim_end_matches(['.', ',', ';']))
+                .filter(|h| !h.is_empty())
+                .map(|h| json!({"handle": h, "name": h}))
+                .collect();
+            json!({
+                "id": m["id"],
+                "name": m["name"],
+                "status": m["overall_state"],
+                "query": m["query"],
+                "type": typ,
+                "classification": typ.split_whitespace().next().unwrap_or("metric"),
+                "tags": m["tags"],
+                "creator": m["creator"],
+                "org_id": m["org_id"],
+                "last_triggered_ts": m["last_triggered_ts"],
+                "notifications": handles,
+                "metrics": [],
+                "scopes": [],
+            })
+        })
+        .collect();
+    Json(json!({
+        "monitors": monitors,
+        "counts": {
+            "status": counts(found.iter().map(|m| name(m, "overall_state"))),
+            "type": counts(found.iter().map(|m| name(m, "type"))),
+            "muted": counts(found.iter().map(|m| {
+                m["options"]["silenced"].as_object().is_some_and(|s| !s.is_empty()).to_string()
+            })),
+            "tag": counts(found.iter().flat_map(|m| {
+                m["tags"].as_array().cloned().unwrap_or_default().into_iter()
+                    .filter_map(|t| t.as_str().map(String::from))
+            })),
+        },
+        "metadata": {
+            "page": page,
+            "per_page": per_page,
+            "page_count": found.len().div_ceil(per_page),
+            "total_count": found.len(),
+        },
+    }))
+    .into_response()
+}
+
 // --- incidents -------------------------------------------------------------
 
 fn incident_out(i: &Value) -> Value {
@@ -806,6 +922,25 @@ pub async fn notebook(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn monitor_search_syntax() {
+        let m = json!({"name": "High errors", "type": "log alert", "overall_state": "No Data",
+                       "tags": ["team:core", "env:prod"], "options": {"silenced": {}}, "id": 7});
+        assert!(monitor_matches(&m, ""));
+        assert!(monitor_matches(
+            &m,
+            "errors type:log status:\"no data\""
+                .replace("no data", "nodata")
+                .as_str()
+        ));
+        assert!(monitor_matches(
+            &m,
+            "tag:\"env:prod\" team:core muted:false id:7"
+        ));
+        assert!(!monitor_matches(&m, "status:alert"));
+        assert!(!monitor_matches(&m, "env:dev"));
+    }
+
     use super::*;
 
     #[test]
