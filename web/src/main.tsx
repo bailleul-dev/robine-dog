@@ -1,3 +1,5 @@
+import { Watchdog } from "./pages/Watchdog";
+import { NotebookList, NotebookPage } from "./pages/Notebooks";
 import { Integrations } from "./pages/Integrations";
 import { EventsExplorer, RumExplorer } from "./pages/Events";
 import { RumPerformancePage } from "./pages/Rum";
@@ -44,6 +46,37 @@ function App() {
     return () => window.removeEventListener("robine-dog:unauthenticated", onUnauth);
   }, []);
 
+  // robine-dog watches its own UI: with a client token configured, the
+  // browser SDK reports the sessions of this page to this very server.
+  const signedIn = !!me.data;
+  useEffect(() => {
+    if (!signedIn) return;
+    let cancelled = false;
+    void api
+      .rumConfig()
+      .then(async (c) => {
+        if (!c.client_token || cancelled) return;
+        const { datadogRum } = await import("@datadog/browser-rum");
+        datadogRum.init({
+          applicationId: "robine-dog",
+          clientToken: c.client_token,
+          proxy: `${window.location.origin}/rum/proxy`,
+          service: "robine-dog-web",
+          env: c.env ?? undefined,
+          version: c.version,
+          sessionSampleRate: 100,
+          sessionReplaySampleRate: 0,
+          trackUserInteractions: true,
+          trackResources: true,
+          trackLongTasks: true,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [signedIn]);
+
   if (me.isLoading) return <div className="loading">Loading…</div>;
   if (!me.data || window.location.pathname === "/login") {
     if (me.data && window.location.pathname === "/login") return <Navigate to="/logs" replace />;
@@ -81,6 +114,9 @@ function App() {
         <Route path="/rum" element={<Navigate to="/rum/performance-monitoring" replace />} />
         <Route path="/rum/performance-monitoring" element={<RumPerformancePage />} />
         <Route path="/rum/explorer" element={<RumExplorer />} />
+        <Route path="/watchdog" element={<Watchdog />} />
+        <Route path="/notebook/list" element={<NotebookList />} />
+        <Route path="/notebook/:id" element={<NotebookPage />} />
         <Route path="/infrastructure" element={<Hosts />} />
         <Route path="/containers" element={<Containers />} />
         <Route path="/orchestration" element={<Navigate to="/orchestration/overview/pod" replace />} />

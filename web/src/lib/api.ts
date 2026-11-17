@@ -144,6 +144,20 @@ export type RumPage = {
   errors: number;
 };
 export type RumPerformance = { sessions: number; views: number; errors: number; actions: number; pages: RumPage[] };
+export type WatchdogStory = {
+  id: string;
+  kind: "error_logs" | "apm_errors" | "apm_latency";
+  service: string;
+  title: string;
+  start: number;
+  last_seen: number;
+  end: number | null;
+  value: number;
+  baseline: number;
+  unit: string;
+};
+export type NotebookCell = { id: string; type: "markdown" | "metric" | "logs"; text: string };
+export type Notebook = { id?: string; name: string; cells: NotebookCell[] };
 export type Downtime = {
   id: string;
   scope: string;
@@ -608,6 +622,14 @@ export const api = {
     post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/rum/search", s, signal),
   rumHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/rum/histogram", s, signal),
   rumPerformance: (s: Scope, signal?: AbortSignal) => post<RumPerformance>("/rum/performance", s, signal),
+  watchdog: () => call<{ stories: WatchdogStory[] }>("/watchdog/stories"),
+  runWatchdog: () => post<{ stories: WatchdogStory[] }>("/watchdog/stories", {}),
+  rumConfig: () => call<{ client_token: string | null; version: string; env: string | null }>("/rum-config"),
+  notebooks: () => call<{ data: { id: string; name: string; cells: number; modified_at: number }[] }>("/notebooks"),
+  notebook: (id: string) => call<Notebook>(`/notebooks/${id}`),
+  createNotebook: (n: Notebook) => post<Notebook>("/notebooks", n),
+  updateNotebook: (id: string, n: Notebook) => put<Notebook>(`/notebooks/${id}`, n),
+  deleteNotebook: (id: string) => del<unknown>(`/notebooks/${id}`),
   postEvent: (e: Record<string, unknown>) => post<unknown>("/events", e),
   downtimes: () => call<Downtime[]>("/downtimes"),
   createDowntime: (d: Partial<Downtime>) => post<Downtime>("/downtimes", d),

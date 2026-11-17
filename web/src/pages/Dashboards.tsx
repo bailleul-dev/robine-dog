@@ -434,7 +434,7 @@ const NOTE_COLORS: Record<string, string> = {
 };
 
 /** Bold, italics, code, links and headings: enough for notes. */
-function Markdown({ text }: { text: string }) {
+export function Markdown({ text }: { text: string }) {
   const inline = (s: string, key: number) => {
     const parts = s.split(
       /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|_[^_]+_)/g,

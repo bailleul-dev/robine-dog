@@ -20,6 +20,7 @@ mod query;
 mod rum;
 mod store;
 mod synthetics;
+mod watchdog;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -107,6 +108,18 @@ fn ui_api(st: AppState) -> Router<AppState> {
                 .delete(api::monitors::delete_webhook),
         )
         .route("/webhooks/{name}/test", post(api::monitors::test_webhook))
+        .route("/watchdog/stories", get(watchdog::list).post(watchdog::run))
+        .route("/rum-config", get(api::notebooks::rum_config))
+        .route(
+            "/notebooks",
+            get(api::notebooks::list).post(api::notebooks::create),
+        )
+        .route(
+            "/notebooks/{id}",
+            get(api::notebooks::get)
+                .put(api::notebooks::update)
+                .delete(api::notebooks::delete),
+        )
         .route("/rum/search", post(rum::search))
         .route("/rum/histogram", post(rum::histogram))
         .route("/rum/performance", post(rum::performance))
@@ -429,6 +442,7 @@ async fn main() -> anyhow::Result<()> {
     }
     monitors::spawn(st.clone());
     synthetics::spawn(st.clone());
+    watchdog::spawn(st.clone());
     if cfg.auth_disabled {
         tracing::warn!(
             "authentication is DISABLED (ROBINE_DOG_AUTH=disabled): loopback development only"

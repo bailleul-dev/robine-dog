@@ -11,6 +11,7 @@ pub mod generated_metrics;
 pub mod logs;
 pub mod metrics;
 pub mod monitors;
+pub mod notebooks;
 pub mod patterns;
 pub mod pipelines;
 pub mod query;

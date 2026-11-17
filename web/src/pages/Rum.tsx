@@ -94,18 +94,25 @@ export function RumPerformancePage() {
           {d && d.pages.length === 0 && (
             <div className="empty-state">
               <h3>No page view in this time range</h3>
-              Add Datadog's browser SDK to a site and point it here:
-              <pre className="event-text" style={{ textAlign: "left", maxWidth: 640, margin: "12px auto 0" }}>
-                {`import { datadogRum } from "@datadog/browser-rum";
-
-datadogRum.init({
-  applicationId: "my-app",
-  clientToken: "<ROBINE_DOG_CLIENT_TOKEN>",
-  proxy: "${window.location.origin}/rum/proxy",
-  service: "my-app-web",
-  env: "prod",
-  sessionSampleRate: 100,
-});`}
+              Add Datadog's browser SDK to a site, as Datadog documents it, with <code>proxy</code> pointing here:
+              <pre className="event-text" style={{ textAlign: "left", maxWidth: 760, margin: "12px auto 0" }}>
+                {`<script>
+  (function(h,o,u,n,d) {
+    h=h[d]=h[d]||{q:[],onReady:function(c){h.q.push(c)}}
+    d=o.createElement(u);d.async=1;d.src=n
+    n=o.getElementsByTagName(u)[0];n.parentNode.insertBefore(d,n)
+  })(window,document,'script','https://www.datadoghq-browser-agent.com/us1/v6/datadog-rum.js','DD_RUM')
+  window.DD_RUM.onReady(function() {
+    window.DD_RUM.init({
+      clientToken: '<ROBINE_DOG_CLIENT_TOKEN>',
+      applicationId: 'my-app',
+      proxy: '${window.location.origin}/rum/proxy',
+      service: 'my-app-web',
+      env: 'prod',
+      sessionSampleRate: 100,
+    });
+  })
+</script>`}
               </pre>
             </div>
           )}
