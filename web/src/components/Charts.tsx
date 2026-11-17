@@ -164,19 +164,27 @@ export function TimeChart({
           series.map((s) => (
             <path
               key={s.key}
-              d={times
-                .map((t, i) => {
-                  const v = s.values[i];
-                  if (v === undefined || Number.isNaN(v)) return "";
-                  const prev = s.values[i - 1];
-                  const move = i === 0 || prev === undefined || Number.isNaN(prev);
-                  return `${move ? "M" : "L"}${x(t + interval / 2).toFixed(1)},${y(v).toFixed(1)}`;
-                })
-                .join("")}
+              d={(() => {
+                // Points reported less often than the bucket size leave empty
+                // buckets: the line bridges them, up to five minutes, as
+                // Datadog interpolates. A point on its own is a dot.
+                let last = -Infinity;
+                return times
+                  .map((t, i) => {
+                    const v = s.values[i];
+                    if (v === undefined || Number.isNaN(v)) return "";
+                    const move = (i - last) * interval > Math.max(300_000, interval);
+                    last = i;
+                    const at = `${x(t + interval / 2).toFixed(1)},${y(v).toFixed(1)}`;
+                    return move ? `M${at}h0.01` : `L${at}`;
+                  })
+                  .join("");
+              })()}
               fill="none"
               stroke={s.color}
               strokeWidth={1.6}
               strokeLinejoin="round"
+              strokeLinecap="round"
             />
           ))}
         {kind === "lines" && hover !== null && (

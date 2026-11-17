@@ -3,6 +3,7 @@
 pub mod analytics;
 pub mod apm;
 pub mod dashboards;
+pub mod downtimes;
 pub mod errors;
 pub mod facets;
 pub mod generated_metrics;
@@ -12,6 +13,7 @@ pub mod monitors;
 pub mod patterns;
 pub mod pipelines;
 pub mod query;
+pub mod slos;
 pub mod spans;
 pub mod views;
 

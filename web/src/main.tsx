@@ -1,3 +1,7 @@
+import { Slos } from "./pages/Slos";
+import { Synthetics } from "./pages/Synthetics";
+import { Downtimes } from "./pages/Downtimes";
+import { Containers, Hosts, Kubernetes } from "./pages/Infrastructure";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -58,6 +62,7 @@ function App() {
         <Route path="/monitors" element={<Navigate to="/monitors/manage" replace />} />
         <Route path="/monitors/manage" element={<ManageMonitors />} />
         <Route path="/monitors/triggered" element={<TriggeredMonitors />} />
+        <Route path="/monitors/downtimes" element={<Downtimes />} />
         <Route path="/monitors/webhooks" element={<Webhooks />} />
         <Route path="/monitors/create" element={<MonitorEditor key="create" />} />
         <Route path="/monitors/:id" element={<MonitorPage />} />
@@ -66,6 +71,14 @@ function App() {
         <Route path="/apm/services/:name" element={<ServicePage />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
+        <Route path="/synthetics/tests" element={<Synthetics />} />
+        <Route path="/slo/manage" element={<Slos />} />
+        <Route path="/infrastructure" element={<Hosts />} />
+        <Route path="/containers" element={<Containers />} />
+        <Route path="/orchestration" element={<Navigate to="/orchestration/overview/pod" replace />} />
+        {["pod", "deployment", "statefulset", "daemonset", "node", "namespace"].map((k) => (
+          <Route key={k} path={`/orchestration/overview/${k}`} element={<Kubernetes kind={k} />} />
+        ))}
         <Route path="/metrics" element={<Navigate to="/metrics/explorer" replace />} />
         <Route path="/metrics/explorer" element={<MetricsExplorer />} />
         <Route path="/metrics/summary" element={<MetricsSummary />} />

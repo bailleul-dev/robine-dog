@@ -127,6 +127,17 @@ impl Hosts {
         Some(h)
     }
 
+    /// Every host an Agent described, by name.
+    pub fn list(&self) -> Vec<Host> {
+        let mut hosts: Vec<Host> = self
+            .inner
+            .read()
+            .map(|g| g.hosts.values().cloned().collect())
+            .unwrap_or_default();
+        hosts.sort_by(|a, b| a.name.cmp(&b.name));
+        hosts
+    }
+
     pub async fn save(pg: &Pg, h: &Host) -> anyhow::Result<()> {
         pg.put_doc(KIND, &h.name, &serde_json::to_value(h)?).await?;
         Ok(())

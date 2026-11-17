@@ -30,6 +30,7 @@ import { useTimeRange } from "../lib/time";
 export const MONITOR_TABS = [
   { to: "/monitors/manage", label: "Manage Monitors" },
   { to: "/monitors/triggered", label: "Triggered Monitors" },
+  { to: "/monitors/downtimes", label: "Manage Downtimes" },
   { to: "/monitors/webhooks", label: "Webhooks" },
 ];
 

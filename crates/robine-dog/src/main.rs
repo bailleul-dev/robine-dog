@@ -17,6 +17,7 @@ mod monitors;
 mod pipelines;
 mod query;
 mod store;
+mod synthetics;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -55,6 +56,30 @@ fn ui_api(st: AppState) -> Router<AppState> {
         .route(
             "/monitors",
             get(api::monitors::list).post(api::monitors::create),
+        )
+        .route(
+            "/synthetics/tests",
+            get(synthetics::list).post(synthetics::create),
+        )
+        .route(
+            "/synthetics/tests/{id}",
+            get(synthetics::get)
+                .put(synthetics::update)
+                .delete(synthetics::delete),
+        )
+        .route("/synthetics/tests/{id}/trigger", post(synthetics::trigger))
+        .route("/slos", get(api::slos::list).post(api::slos::create))
+        .route(
+            "/slos/{id}",
+            axum::routing::put(api::slos::update).delete(api::slos::delete),
+        )
+        .route(
+            "/downtimes",
+            get(api::downtimes::list).post(api::downtimes::create),
+        )
+        .route(
+            "/downtimes/{id}",
+            axum::routing::put(api::downtimes::update).delete(api::downtimes::cancel),
         )
         .route("/monitors/validate", post(api::monitors::validate))
         .route("/monitors/preview", post(api::monitors::preview))
@@ -143,6 +168,7 @@ fn ui_api(st: AppState) -> Router<AppState> {
         )
         .route("/pipelines/{id}/clone", post(api::pipelines::clone))
         .route("/metrics", get(api::metrics::list))
+        .route("/hosts", get(api::metrics::hosts))
         .route("/metrics/query", post(api::metrics::query))
         .route(
             "/metrics/{name}",
@@ -167,6 +193,32 @@ fn public_api(st: AppState) -> Router<AppState> {
         .route(
             "/api/v1/monitor",
             get(api::monitors::list).post(api::monitors::create),
+        )
+        .route(
+            "/api/v1/synthetics/tests",
+            get(synthetics::list).post(synthetics::create),
+        )
+        .route("/api/v1/synthetics/tests/api", post(synthetics::create))
+        .route(
+            "/api/v1/synthetics/tests/api/{id}",
+            get(synthetics::get).put(synthetics::update),
+        )
+        .route(
+            "/api/v1/synthetics/tests/{id}",
+            get(synthetics::get).delete(synthetics::delete),
+        )
+        .route("/api/v1/slo", get(api::slos::list).post(api::slos::create))
+        .route(
+            "/api/v1/slo/{id}",
+            axum::routing::put(api::slos::update).delete(api::slos::delete),
+        )
+        .route(
+            "/api/v1/downtime",
+            get(api::downtimes::list).post(api::downtimes::create),
+        )
+        .route(
+            "/api/v1/downtime/{id}",
+            axum::routing::put(api::downtimes::update).delete(api::downtimes::cancel),
         )
         .route("/api/v1/monitor/validate", post(api::monitors::validate))
         .route(
@@ -358,6 +410,7 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!(error = %e, "could not load the generated metrics");
     }
     monitors::spawn(st.clone());
+    synthetics::spawn(st.clone());
     if cfg.auth_disabled {
         tracing::warn!(
             "authentication is DISABLED (ROBINE_DOG_AUTH=disabled): loopback development only"

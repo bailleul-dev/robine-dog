@@ -109,6 +109,46 @@ export type MetricDetail = MetricMeta & {
   tags: Record<string, string[]>;
   series: number;
 };
+export type SyntheticAssertion = { type: string; operator: string; property?: string | null; target: string | number };
+export type SyntheticTest = {
+  public_id?: string;
+  name: string;
+  status: string;
+  config: {
+    request: { method: string; url: string; headers?: Record<string, string>; body?: string | null; timeout?: number | null };
+    assertions: SyntheticAssertion[];
+  };
+  options: { tick_every?: number | null };
+  message: string;
+  tags: string[];
+  last_result?: { ts: number; passed: boolean; status_code: number | null; duration_ms: number; failure: string | null };
+};
+export type Slo = {
+  id?: string;
+  name: string;
+  description?: string | null;
+  type?: string;
+  query: { numerator: string; denominator: string };
+  thresholds: { timeframe: string; target: number; warning?: number | null }[];
+  tags: string[];
+};
+export type Downtime = {
+  id: string;
+  scope: string;
+  monitor_id: number | null;
+  monitor_tags: string[];
+  start: number;
+  end: number | null;
+  message: string | null;
+  status: "scheduled" | "active" | "ended" | "canceled";
+};
+export type HostInfo = {
+  name: string;
+  tags: string[];
+  aliases: string[];
+  agent_version?: string;
+  os?: string;
+};
 export type MetricSeries = {
   query_index: number;
   group: Record<string, string>;
@@ -535,7 +575,21 @@ export const api = {
     from: number,
     to: number,
     signal?: AbortSignal,
-  ) => post<MetricsResponse>("/metrics/query", { queries, from, to }, signal),
+    maxSeries?: number,
+  ) => post<MetricsResponse>("/metrics/query", { queries, from, to, max_series: maxSeries }, signal),
+  hosts: () => call<HostInfo[]>("/hosts"),
+  synthetics: () => call<{ tests: SyntheticTest[] }>("/synthetics/tests"),
+  createSynthetic: (t: SyntheticTest) => post<SyntheticTest>("/synthetics/tests", t),
+  updateSynthetic: (id: string, t: SyntheticTest) => put<SyntheticTest>(`/synthetics/tests/${id}`, t),
+  deleteSynthetic: (id: string) => del<unknown>(`/synthetics/tests/${id}`),
+  triggerSynthetic: (id: string) => post<unknown>(`/synthetics/tests/${id}/trigger`, {}),
+  slos: () => call<{ data: Slo[] }>("/slos"),
+  createSlo: (s: Slo) => post<unknown>("/slos", s),
+  updateSlo: (id: string, s: Slo) => put<unknown>(`/slos/${id}`, s),
+  deleteSlo: (id: string) => del<unknown>(`/slos/${id}`),
+  downtimes: () => call<Downtime[]>("/downtimes"),
+  createDowntime: (d: Partial<Downtime>) => post<Downtime>("/downtimes", d),
+  cancelDowntime: (id: string) => del<unknown>(`/downtimes/${id}`),
   aggregate: (
     dataset: "logs" | "spans",
     req: AggregateRequest,

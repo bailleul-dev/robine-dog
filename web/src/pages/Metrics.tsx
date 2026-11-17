@@ -194,7 +194,7 @@ function QueryRow({
 
 type Line = { key: string; label: string; color: string; values: number[]; unit: string | null; query: number };
 
-function lines(data: MetricsResponse, from: number, to: number): { times: number[]; lines: Line[] } {
+export function lines(data: MetricsResponse, from: number, to: number): { times: number[]; lines: Line[] } {
   const interval = data.interval_ms;
   const times: number[] = [];
   for (let t = from - (from % interval); t <= to; t += interval) times.push(t);

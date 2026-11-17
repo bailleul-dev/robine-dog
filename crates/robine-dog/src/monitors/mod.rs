@@ -505,6 +505,7 @@ fn fmt_value(v: Option<f64>) -> String {
 
 /// Evaluates one monitor now: states, history, value series, notifications.
 pub async fn run_monitor(st: &AppState, def: &MonitorDef, now: i64) -> anyhow::Result<()> {
+    let downtimes = crate::api::downtimes::stored(st).await.unwrap_or_default();
     let id = def.id.unwrap_or_default();
     let p = parse(&def.query).map_err(|e| anyhow::anyhow!(e))?;
     let to = now - def.options.evaluation_delay.unwrap_or(0) * 1000;
@@ -604,7 +605,9 @@ pub async fn run_monitor(st: &AppState, def: &MonitorDef, now: i64) -> anyhow::R
             };
             let title = ctx.title();
             let message = template::render(&def.message, &ctx);
-            let notified = if is_muted(def, &s.group, now) {
+            let silenced = is_muted(def, &s.group, now)
+                || downtimes.iter().any(|d| d.applies(def, &s.group, now));
+            let notified = if silenced {
                 vec![]
             } else {
                 webhooks::notify(st, &ctx, &title, &message).await

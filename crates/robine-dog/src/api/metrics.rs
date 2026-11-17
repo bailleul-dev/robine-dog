@@ -100,6 +100,14 @@ pub struct QueryReq {
     queries: Vec<String>,
     from: i64,
     to: i64,
+    /// Series kept per query (the largest ones): 50 for a graph, more for
+    /// the infrastructure lists, which have a row per group.
+    max_series: Option<usize>,
+}
+
+/// The hosts Agents described: their tags, aliases, Agent version.
+pub async fn hosts(State(st): State<AppState>) -> ApiResult<Vec<crate::hosts::Host>> {
+    Ok(Json(st.hosts.list()))
 }
 
 #[derive(Serialize)]
@@ -133,12 +141,14 @@ type Group = (Vec<String>, Vec<(i64, f64)>);
 
 /// At most this many series per query, the largest ones.
 const MAX_SERIES: usize = 50;
+const MAX_SERIES_LIMIT: usize = 5000;
 
 pub async fn query(State(st): State<AppState>, Json(req): Json<QueryReq>) -> ApiResult<QueryResp> {
     if req.queries.len() > 10 {
         return Err(ApiError::BadQuery("at most 10 queries".into()));
     }
     let (from, to) = (req.from, req.to);
+    let max_series = req.max_series.unwrap_or(MAX_SERIES).min(MAX_SERIES_LIMIT);
     let metas: HashMap<String, MetricMeta> = st
         .store
         .pg
@@ -203,7 +213,7 @@ pub async fn query(State(st): State<AppState>, Json(req): Json<QueryReq>) -> Api
             let sum = |p: &Vec<(i64, f64)>| p.iter().map(|x| x.1.abs()).sum::<f64>();
             sum(&b.1).total_cmp(&sum(&a.1))
         });
-        for (key, points) in ranked.into_iter().take(MAX_SERIES) {
+        for (key, points) in ranked.into_iter().take(max_series) {
             series.push(Series {
                 query_index: i,
                 group: q.by.iter().cloned().zip(key).collect(),
