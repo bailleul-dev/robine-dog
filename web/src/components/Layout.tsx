@@ -69,7 +69,7 @@ const SECTIONS: Item[][] = [
       match: ["/slo", "/event"],
       links: [
         { label: "SLOs", to: "/slo/manage", hint: "Service level objectives and error budgets" },
-        { label: "Incidents", hint: "Declare and manage incidents" },
+        { label: "Incidents", to: "/incidents", hint: "Declare and manage incidents" },
         { label: "On-Call", hint: "Schedules, escalations and pages" },
         { label: "Case Management" },
         { label: "Event Management", to: "/event/explorer", hint: "Monitor alerts, Agent and API events" },
@@ -79,7 +79,7 @@ const SECTIONS: Item[][] = [
       groups: [
         {
           title: "Settings",
-          links: [{ label: "Incident Settings" }, { label: "Status Pages" }],
+          links: [{ label: "Incident Settings" }, { label: "Status Pages", to: "/status-pages", hint: "A public page of components and incidents" }],
         },
       ],
     },

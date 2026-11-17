@@ -3761,3 +3761,51 @@ table.list td.infra-bad {
   border-color: var(--border-strong);
   outline: 0;
 }
+
+/* Incidents */
+.synth-state.stable {
+  background: var(--orange, #d9902f);
+}
+
+.incident {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+  max-width: 1200px;
+}
+
+.incident-side {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.incident-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.incident-timeline {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.incident-timeline li {
+  padding: 8px 0 8px 12px;
+  border-left: 2px solid var(--border);
+  font-size: 13px;
+}
+
+.incident-timeline li.state,
+.incident-timeline li.declared {
+  border-left-color: var(--accent, #6b4fbb);
+}
+
+@media (max-width: 900px) {
+  .incident {
+    grid-template-columns: 1fr;
+  }
+}

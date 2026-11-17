@@ -381,6 +381,11 @@ fn check(mut t: Test) -> Result<Test, ApiError> {
     Ok(t)
 }
 
+/// The latest run of a test, if it ran since this server started.
+pub fn last_result(public_id: &str) -> Option<RunResult> {
+    LAST.lock().ok().and_then(|l| l.get(public_id).cloned())
+}
+
 fn with_last(mut t: Test) -> Test {
     let id = t.public_id.clone().unwrap_or_default();
     t.last_result = LAST.lock().ok().and_then(|l| l.get(&id).cloned());

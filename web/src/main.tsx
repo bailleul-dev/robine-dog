@@ -1,3 +1,4 @@
+import { IncidentList, IncidentPage, StatusPageSettings } from "./pages/Incidents";
 import { Watchdog } from "./pages/Watchdog";
 import { NotebookList, NotebookPage } from "./pages/Notebooks";
 import { Integrations } from "./pages/Integrations";
@@ -115,6 +116,9 @@ function App() {
         <Route path="/rum/performance-monitoring" element={<RumPerformancePage />} />
         <Route path="/rum/explorer" element={<RumExplorer />} />
         <Route path="/watchdog" element={<Watchdog />} />
+        <Route path="/incidents" element={<IncidentList />} />
+        <Route path="/incidents/:id" element={<IncidentPage />} />
+        <Route path="/status-pages" element={<StatusPageSettings />} />
         <Route path="/notebook/list" element={<NotebookList />} />
         <Route path="/notebook/:id" element={<NotebookPage />} />
         <Route path="/infrastructure" element={<Hosts />} />

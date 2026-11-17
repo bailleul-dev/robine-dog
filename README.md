@@ -47,6 +47,9 @@ state (facets, metric metadata) is in PostgreSQL.
 | Real User Monitoring: Datadog's browser SDK (`proxy: "https://<robine-dog>/rum/proxy"`, the client token as key): views with their web vitals, actions, resources, errors (also filed in Error Tracking), long tasks; browser logs through the same proxy. Sites install the SDK as Datadog documents it (npm or its CDN), with `proxy` added | `/rum/proxy`, `/api/v2/rum` |
 | Watchdog: every five minutes each service's last quarter of an hour is compared with its previous day (error logs, failed requests, p95 latency); anomalies open a story and post a `source:watchdog` event | — |
 | Notebooks: text, metric graphs and log graphs in cells | — |
+| Incidents: severity, state, commander, a timeline of notes and changes; declared by hand or from a Watchdog story; each change of state posts a `source:incident` event | — |
+| Status page: public at `/status` once enabled; components take their state from a synthetic test or a monitor, and incidents marked public are listed | — |
+| MCP server, as Datadog's: streamable HTTP at `/v1/mcp`, the API key in `DD_API_KEY` (or `Authorization: Bearer`), the tools of Datadog's `core` toolset under their names (`search_datadog_logs`, `get_datadog_metric`, `search_datadog_spans`, `get_datadog_trace`, `search_datadog_monitors`, `search_datadog_incidents`, notebooks…) | `/v1/mcp` |
 | Downtimes: scheduled silences by monitor, monitor tags and scope | `/api/v1/downtime` |
 | Infrastructure: hosts, containers and Kubernetes resources (pods, deployments, stateful sets, daemon sets, nodes, namespaces), from the Agent's `system.*`, `container.*`, `kubernetes.*` and `kubernetes_state.*` metrics | — |
 | Synthetic API tests: HTTP requests on a schedule with assertions (status code, response time, body, headers); each run is a `source:synthetics` log and the `synthetics.http.response.time` and `synthetics.test_runs` metrics | `/api/v1/synthetics/tests` |

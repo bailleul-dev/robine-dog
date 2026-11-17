@@ -48,6 +48,11 @@ function StoryCard({ s }: { s: WatchdogStory }) {
       </div>
       {s.kind === "error_logs" && <LogsChart s={s} />}
       <div className="toolbar" style={{ marginTop: 8 }}>
+        {!s.end && (
+          <Link className="btn small" to={`/incidents?declare=${encodeURIComponent(s.title)}`}>
+            Declare Incident
+          </Link>
+        )}
         {s.kind === "error_logs" ? (
           <Link className="btn small" to={`/logs?query=${encodeURIComponent(`service:${s.service} status:error`)}&${range}`}>
             View error logs

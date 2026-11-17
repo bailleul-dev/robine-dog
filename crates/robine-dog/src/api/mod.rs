@@ -8,6 +8,7 @@ pub mod errors;
 pub mod events;
 pub mod facets;
 pub mod generated_metrics;
+pub mod incidents;
 pub mod logs;
 pub mod metrics;
 pub mod monitors;

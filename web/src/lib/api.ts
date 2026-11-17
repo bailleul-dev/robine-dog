@@ -144,6 +144,23 @@ export type RumPage = {
   errors: number;
 };
 export type RumPerformance = { sessions: number; views: number; errors: number; actions: number; pages: RumPage[] };
+export type Incident = {
+  id: string;
+  public_id: number;
+  title: string;
+  severity: string;
+  state: string;
+  created: number;
+  modified: number;
+  resolved: number | null;
+  commander: string | null;
+  summary: string;
+  services: string[];
+  public: boolean;
+  timeline: { ts: number; kind: "declared" | "note" | "state" | "severity"; text: string; by: string | null }[];
+};
+export type StatusComponent = { name: string; kind: "synthetic" | "monitor"; ref: string; status?: string };
+export type StatusPage = { enabled: boolean; title: string; description: string; components: StatusComponent[] };
 export type WatchdogStory = {
   id: string;
   kind: "error_logs" | "apm_errors" | "apm_latency";
@@ -622,6 +639,14 @@ export const api = {
     post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/rum/search", s, signal),
   rumHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/rum/histogram", s, signal),
   rumPerformance: (s: Scope, signal?: AbortSignal) => post<RumPerformance>("/rum/performance", s, signal),
+  incidents: () => call<{ incidents: Incident[] }>("/incidents"),
+  incident: (id: string) => call<Incident>(`/incidents/${id}`),
+  declareIncident: (i: { title: string; severity: string; summary: string; services: string[] }) => post<Incident>("/incidents", i),
+  updateIncident: (id: string, p: Partial<Incident>) => put<Incident>(`/incidents/${id}`, p),
+  noteIncident: (id: string, text: string) => post<Incident>(`/incidents/${id}/timeline`, { text }),
+  deleteIncident: (id: string) => del<unknown>(`/incidents/${id}`),
+  statusPage: () => call<StatusPage>("/status-page"),
+  saveStatusPage: (p: StatusPage) => put<StatusPage>("/status-page", p),
   watchdog: () => call<{ stories: WatchdogStory[] }>("/watchdog/stories"),
   runWatchdog: () => post<{ stories: WatchdogStory[] }>("/watchdog/stories", {}),
   rumConfig: () => call<{ client_token: string | null; version: string; env: string | null }>("/rum-config"),

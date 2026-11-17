@@ -13,6 +13,7 @@ mod config;
 mod events;
 mod hosts;
 mod intake;
+mod mcp;
 mod metrics;
 mod monitors;
 mod pipelines;
@@ -41,6 +42,11 @@ pub struct AppState {
 }
 
 fn ui_api(st: AppState) -> Router<AppState> {
+    ui_routes().layer(axum::middleware::from_fn_with_state(st, auth::require))
+}
+
+/// The API of the UI, before authentication: also what the MCP tools call.
+pub(crate) fn ui_routes() -> Router<AppState> {
     Router::new()
         .route("/me", get(auth::me))
         .route("/logs/search", post(api::logs::search))
@@ -110,6 +116,21 @@ fn ui_api(st: AppState) -> Router<AppState> {
         .route("/webhooks/{name}/test", post(api::monitors::test_webhook))
         .route("/watchdog/stories", get(watchdog::list).post(watchdog::run))
         .route("/rum-config", get(api::notebooks::rum_config))
+        .route(
+            "/incidents",
+            get(api::incidents::list).post(api::incidents::create),
+        )
+        .route(
+            "/incidents/{id}",
+            get(api::incidents::get)
+                .put(api::incidents::update)
+                .delete(api::incidents::delete),
+        )
+        .route("/incidents/{id}/timeline", post(api::incidents::note))
+        .route(
+            "/status-page",
+            get(api::incidents::status_page).put(api::incidents::put_status_page),
+        )
         .route(
             "/notebooks",
             get(api::notebooks::list).post(api::notebooks::create),
@@ -196,7 +217,6 @@ fn ui_api(st: AppState) -> Router<AppState> {
             "/metrics/{name}",
             get(api::metrics::detail).patch(api::metrics::update),
         )
-        .layer(axum::middleware::from_fn_with_state(st, auth::require))
 }
 
 /// Datadog's public API, for its clients and Terraform: `DD-API-KEY` auth.
@@ -359,6 +379,8 @@ fn app(st: AppState) -> Router {
         .route("/auth/callback", get(auth::callback))
         .route("/auth/logout", post(auth::logout).get(auth::logout))
         .route("/health", get(health))
+        .route("/status", get(api::incidents::public_page))
+        .route("/v1/mcp", post(mcp::post).get(mcp::get))
         .fallback_service(spa)
         .layer(CompressionLayer::new())
         .with_state(st)
