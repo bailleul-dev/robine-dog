@@ -95,6 +95,7 @@ export type ServiceDetail = {
   resources: (Stats & { resource: string; operation: string })[];
   distribution: [number, number][];
   downstream: { service: string; calls: number; errors: number; avg: number }[];
+  deployments: (Stats & { version: string; first_seen: number; last_seen: number })[];
 };
 
 export type MetricMeta = {

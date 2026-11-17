@@ -202,6 +202,19 @@ pub struct ServiceDetail {
     /// Latency distribution: `[bucket upper bound in ns, count]`, log scale.
     distribution: Vec<(i64, i64)>,
     downstream: Vec<Dependency>,
+    /// The versions that served requests in the range, latest first.
+    deployments: Vec<Deployment>,
+}
+
+/// One version of the service (the `version` of its spans).
+#[derive(Serialize)]
+pub struct Deployment {
+    version: String,
+    /// Epoch milliseconds, looking back 30 days.
+    first_seen: i64,
+    last_seen: i64,
+    #[serde(flatten)]
+    stats: Stats,
 }
 
 #[derive(Serialize)]
@@ -247,13 +260,44 @@ pub async fn service(
     );
     let resources_sql =
         format!("SELECT resource, name, {STATS} FROM spans WHERE {filter} GROUP BY resource, name");
-    let (summary, series, resources, kinds, downstream) = tokio::try_join!(
+    let versions_sql = format!(
+        "SELECT version, CAST(max(ts) AS BIGINT), {STATS} FROM spans
+         WHERE {filter} AND version IS NOT NULL AND version != '' GROUP BY version"
+    );
+    // When each version first served a request, beyond the range shown.
+    let first_seen_sql = format!(
+        "SELECT version, CAST(min(ts) AS BIGINT) FROM spans
+         WHERE top_level AND service = {} AND version IS NOT NULL AND {} GROUP BY version",
+        lit(&name),
+        time_clause(Dataset::Spans, r.to - 30 * 86_400_000, r.to)
+    );
+    let (summary, series, resources, kinds, downstream, versions, first_seen) = tokio::try_join!(
         gt.query(&summary_sql),
         gt.query(&series_sql),
         gt.query(&resources_sql),
         kinds(&st, &filter),
         gt.query(&downstream_sql),
+        gt.query(&versions_sql),
+        gt.query(&first_seen_sql),
     )?;
+    let first_seen: HashMap<String, i64> = first_seen
+        .iter()
+        .filter_map(|row| Some((str_at(row, 0)?, i64_at(row, 1) / 1_000_000)))
+        .collect();
+    let mut deployments: Vec<Deployment> = versions
+        .iter()
+        .filter_map(|row| {
+            let version = str_at(row, 0)?;
+            let last_seen = i64_at(row, 1) / 1_000_000;
+            Some(Deployment {
+                first_seen: first_seen.get(&version).copied().unwrap_or(last_seen),
+                last_seen,
+                stats: stats_at(row, 2),
+                version,
+            })
+        })
+        .collect();
+    deployments.sort_by_key(|d| std::cmp::Reverse(d.first_seen));
     let summary_row = summary.first().cloned().unwrap_or_default();
     let summary = stats_at(&summary_row, 0);
     let min_d = f64_at(&summary_row, 10).unwrap_or(1.0).max(1.0);
@@ -335,6 +379,7 @@ pub async fn service(
         timeseries: by_bucket.into_values().collect(),
         resources,
         distribution,
+        deployments,
         downstream: downstream
             .iter()
             .map(|row| Dependency {

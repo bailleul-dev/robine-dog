@@ -6,7 +6,7 @@ import { ServiceChip } from "../components/Common";
 import { PageHeader } from "../components/Layout";
 import { TimePicker } from "../components/TimePicker";
 import { api, type ServiceSummary } from "../lib/api";
-import { compact, duration, percent, rate, serviceColor, spanTypeIcon } from "../lib/format";
+import { ago, compact, duration, percent, rate, serviceColor, spanTypeIcon } from "../lib/format";
 import { useTimeRange } from "../lib/time";
 import { APM_TABS } from "./TraceExplorer";
 
@@ -339,6 +339,61 @@ export function ServicePage() {
                   )}
                 </div>
               </div>
+
+              {d.deployments.length > 0 && (
+                <>
+                  <div className="section-title">Deployments</div>
+                  <table className="list" style={{ border: "1px solid var(--border)", borderRadius: 6 }}>
+                    <thead>
+                      <tr>
+                        <th>Version</th>
+                        <th style={{ width: 170 }}>First seen</th>
+                        <th style={{ width: 170 }}>Last seen</th>
+                        <th className="num" style={{ width: 110 }}>
+                          Requests
+                        </th>
+                        <th className="num" style={{ width: 130 }}>
+                          Error rate
+                        </th>
+                        <th className="num" style={{ width: 100 }}>
+                          P50
+                        </th>
+                        <th className="num" style={{ width: 100 }}>
+                          P95
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {d.deployments.map((v, i) => {
+                        // Against the version before it: is this deployment worse?
+                        const prev = d.deployments[i + 1];
+                        const worse = (now: number, before: number, floor: number) => !!prev && now > floor && now > before * 1.5;
+                        return (
+                          <tr key={v.version} onClick={() => navigate(tracesLink(`version:"${v.version.replace(/"/g, '\\"')}"`))}>
+                            <td className="mono">
+                              {v.version}
+                            </td>
+                            <td className="muted" title={new Date(v.first_seen).toLocaleString()}>
+                              {ago(v.first_seen)}
+                            </td>
+                            <td className="muted" title={new Date(v.last_seen).toLocaleString()}>
+                              {ago(v.last_seen)}
+                            </td>
+                            <td className="num">{compact(v.hits)}</td>
+                            <td className="num" style={{ color: worse(v.error_rate, prev?.error_rate ?? 0, 0.01) ? "var(--red)" : undefined }}>
+                              {percent(v.error_rate)}
+                            </td>
+                            <td className="num mono">{duration(v.p50)}</td>
+                            <td className="num mono" style={{ color: worse(v.p95, prev?.p95 ?? 0, 0) ? "var(--red)" : undefined }}>
+                              {duration(v.p95)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </>
+              )}
 
               <div className="section-title">Resources</div>
               <table className="list" style={{ border: "1px solid var(--border)", borderRadius: 6 }}>

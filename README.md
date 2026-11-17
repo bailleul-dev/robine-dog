@@ -54,6 +54,7 @@ state (facets, metric metadata) is in PostgreSQL.
 | Synthetic tests alert by themselves: when one starts failing (at once, or after `min_failure_duration`) and when it recovers, an event is posted and its message is sent to the `@webhook-…` it names | — |
 | RUM sessions: what each visitor did (entry page, duration, views, actions, errors), opening on the session's events | — |
 | RUM analytics: sessions and page views over time, top pages, sites, browsers, operating systems, device types and referrers. The browser, system and device type are read from the `User-Agent` at intake, as Datadog does (`@browser.name`, `@os.name`, `@device.type`) | `/api/v2/rum/analytics/aggregate` |
+| Deployment tracking: on a service's page, each `version` that served requests with when it was first and last seen, its requests, error rate and latency; what got worse than the version before is in red | — |
 | Monitor search with Datadog's syntax (`status:alert type:log tag:"env:prod" muted:true`, words of the name) and its counts per status, type and tag | `/api/v1/monitor/search` |
 | Status page uptime: 30 days of daily bars and the uptime of each component backed by a synthetic test | — |
 | Downtimes: scheduled silences by monitor, monitor tags and scope | `/api/v1/downtime` |
