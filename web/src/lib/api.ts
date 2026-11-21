@@ -923,6 +923,61 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type SecuritySignal = {
+  id: string;
+  attributes: {
+    rule_id: string;
+    title: string;
+    severity: string;
+    status: string;
+    group: string;
+    group_tags: Record<string, string>;
+    query: string;
+    message: string;
+    value: number;
+    first_seen: number;
+    timestamp: number;
+    assignee: string | null;
+    archive_reason: string | null;
+  };
+};
+export type SecurityRule = {
+  id: string;
+  name: string;
+  isEnabled: boolean;
+  isDefault?: boolean;
+  message: string;
+  tags?: string[];
+  queries: {
+    name?: string;
+    query: string;
+    groupByFields: string[];
+    aggregation: string;
+    metrics?: string[];
+  }[];
+  cases: { name?: string; status: string; condition: string }[];
+  options: {
+    evaluationWindow: number;
+    keepAlive?: number;
+    maxSignalDuration?: number;
+  };
+};
+export type AuditEvent = {
+  id: string;
+  attributes: {
+    timestamp: number;
+    message: string;
+    attributes: {
+      evt: { source: string };
+      http: {
+        method: string;
+        url_details: { path: string };
+        status_code: number;
+      };
+      usr: { id: string; name: string | null };
+    };
+  };
+};
 export type CiFilter = {
   from: number;
   to: number;
@@ -1915,6 +1970,36 @@ export const api = {
       }[]
     >(
       `/ci/pipelines/${encodeURIComponent(provider)}/${encodeURIComponent(id)}/jobs`,
+    ),
+  securitySignals: (f: {
+    from: number;
+    to: number;
+    status?: string;
+    severity?: string;
+    query?: string;
+  }) =>
+    call<{ data: SecuritySignal[] }>(`/security/signals?${profileQs(f)}`).then(
+      (r) => r.data,
+    ),
+  triageSignal: (
+    id: string,
+    what: "state" | "assignee",
+    attributes: Record<string, unknown>,
+  ) =>
+    call<unknown>(`/security/signals/${id}/${what}`, {
+      method: "PATCH",
+      body: JSON.stringify({ data: { attributes } }),
+    }),
+  securityRules: () =>
+    call<{ data: SecurityRule[] }>("/security/rules").then((r) => r.data),
+  saveSecurityRule: (id: string | null, rule: Partial<SecurityRule>) =>
+    id
+      ? put<SecurityRule>(`/security/rules/${id}`, rule)
+      : post<SecurityRule>("/security/rules", rule),
+  deleteSecurityRule: (id: string) => del<unknown>(`/security/rules/${id}`),
+  auditEvents: (f: { from: number; to: number; query?: string }) =>
+    call<{ data: AuditEvent[] }>(`/audit/events?${profileQs(f)}`).then(
+      (r) => r.data,
     ),
   llmTraces: (f: LlmFilter) =>
     call<LlmTraceRow[]>(`/llm-obs/traces?${profileQs(f)}`),

@@ -26,6 +26,7 @@ import { ManageMonitors, MonitorEditor, MonitorPage, TriggeredMonitors, Webhooks
 import { GenerateMetrics } from "./pages/GenerateMetrics";
 import { CiPipelinesPage, CiTestsPage } from "./pages/CiVisibility";
 import { LlmOverview, LlmTraces } from "./pages/LlmObs";
+import { AuditTrail, DetectionRules, SecuritySignals } from "./pages/Security";
 import { Profiler } from "./pages/Profiler";
 import {
   IngestionControl,
@@ -139,6 +140,9 @@ function App() {
         <Route path="/llm/traces" element={<LlmTraces />} />
         <Route path="/ci/pipelines" element={<CiPipelinesPage />} />
         <Route path="/ci/tests" element={<CiTestsPage />} />
+        <Route path="/security/signals" element={<SecuritySignals />} />
+        <Route path="/security/rules" element={<DetectionRules />} />
+        <Route path="/audit" element={<AuditTrail />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />

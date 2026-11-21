@@ -241,6 +241,39 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX ci_pipelines_by_time ON ci_pipelines (end_ms);
     CREATE INDEX ci_pipelines_by_pipeline ON ci_pipelines (provider, pipeline_id);
     "#,
+    // Cloud SIEM signals, and the Audit Trail of changes made through the
+    // UI and the API.
+    r#"
+    CREATE TABLE security_signals (
+        id BIGSERIAL PRIMARY KEY,
+        rule_id TEXT NOT NULL,
+        rule_name TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        group_key TEXT NOT NULL,
+        group_tags JSONB NOT NULL,
+        query TEXT NOT NULL,
+        message TEXT NOT NULL,
+        value DOUBLE PRECISION NOT NULL,
+        first_seen BIGINT NOT NULL,
+        last_seen BIGINT NOT NULL,
+        assignee TEXT,
+        archive_reason TEXT
+    );
+    CREATE INDEX security_signals_by_time ON security_signals (last_seen);
+    CREATE INDEX security_signals_by_rule ON security_signals (rule_id, group_key);
+    CREATE TABLE audit_events (
+        id BIGSERIAL PRIMARY KEY,
+        ts BIGINT NOT NULL,
+        actor TEXT NOT NULL,
+        actor_name TEXT,
+        source TEXT NOT NULL,
+        method TEXT NOT NULL,
+        path TEXT NOT NULL,
+        status INT NOT NULL
+    );
+    CREATE INDEX audit_events_by_time ON audit_events (ts);
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.

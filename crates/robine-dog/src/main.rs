@@ -8,6 +8,7 @@
 //! Telemetry is stored in GreptimeDB, the application's state in PostgreSQL.
 
 mod api;
+mod audit;
 mod auth;
 mod catalog;
 mod checks;
@@ -25,6 +26,7 @@ mod pipelines;
 mod profiling;
 mod query;
 mod rum;
+mod security;
 mod slo;
 mod store;
 mod synthetics;
@@ -189,7 +191,9 @@ fn logconfig_routes(r: Router<AppState>, v1: &str, v2: &str) -> Router<AppState>
 }
 
 fn ui_api(st: AppState) -> Router<AppState> {
-    ui_routes().layer(axum::middleware::from_fn_with_state(st, auth::require))
+    ui_routes()
+        .layer(axum::middleware::from_fn_with_state(st.clone(), audit::ui))
+        .layer(axum::middleware::from_fn_with_state(st, auth::require))
 }
 
 /// The API of the UI, before authentication: also what the MCP tools call.
@@ -458,6 +462,22 @@ pub(crate) fn ui_routes() -> Router<AppState> {
     let r = r
         .route("/apm/ingestion", get(catalog::retention::ingestion))
         .route("/ci/tests", get(civis::tests))
+        .route(
+            "/security/rules",
+            get(security::list_rules).post(security::create_rule),
+        )
+        .route(
+            "/security/rules/{id}",
+            get(security::get_rule)
+                .put(security::update_rule)
+                .delete(security::delete_rule),
+        )
+        .route("/security/signals", get(security::signals))
+        .route(
+            "/security/signals/{id}/{what}",
+            axum::routing::patch(security::triage),
+        )
+        .route("/audit/events", get(audit::events))
         .route("/ci/pipelines", get(civis::pipelines))
         .route("/ci/pipelines/{provider}/{id}/jobs", get(civis::jobs))
         .route("/llm-obs/traces", get(llmobs::traces))
@@ -734,12 +754,34 @@ fn public_api(st: AppState) -> Router<AppState> {
                 .delete(api::datadog::notebook),
         )
         .route(
+            "/api/v2/security_monitoring/rules",
+            get(security::list_rules).post(security::create_rule),
+        )
+        .route(
+            "/api/v2/security_monitoring/rules/{id}",
+            get(security::get_rule)
+                .put(security::update_rule)
+                .delete(security::delete_rule),
+        )
+        .route(
+            "/api/v2/security_monitoring/signals",
+            get(security::signals),
+        )
+        .route(
+            "/api/v2/security_monitoring/signals/{id}/{what}",
+            axum::routing::patch(security::triage),
+        )
+        .route("/api/v2/audit/events", get(audit::events))
+        .route(
             "/api/v1/logs/config/pipeline-order",
             get(api::pipelines::order).put(api::pipelines::set_order),
         );
-    catalog_routes(logconfig_routes(r, "/api/v1", "/api/v2"), "/api/v2").layer(
-        axum::middleware::from_fn_with_state(st, intake::logs::require_api_key),
-    )
+    catalog_routes(logconfig_routes(r, "/api/v1", "/api/v2"), "/api/v2")
+        .layer(axum::middleware::from_fn_with_state(st.clone(), audit::api))
+        .layer(axum::middleware::from_fn_with_state(
+            st,
+            intake::logs::require_api_key,
+        ))
 }
 
 fn app(st: AppState) -> Router {
@@ -919,6 +961,8 @@ async fn main() -> anyhow::Result<()> {
     profiling::spawn_purge(st.clone());
     llmobs::spawn_purge(st.clone());
     civis::spawn_purge(st.clone());
+    audit::spawn_purge(st.clone());
+    security::spawn(st.clone());
     {
         // RUM-based metrics counted at a session's or view's end.
         let st = st.clone();
