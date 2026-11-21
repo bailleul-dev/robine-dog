@@ -499,6 +499,28 @@ impl Pg {
             .collect())
     }
 
+    /// The state changes of some monitors up to `to_ms`, oldest first: the
+    /// history monitor-based SLOs are computed from.
+    pub async fn monitor_transitions(
+        &self,
+        monitor_ids: &[i64],
+        to_ms: i64,
+    ) -> Result<Vec<(i64, String, i64, String)>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT monitor_id, grp, ts, to_status FROM monitor_events
+                 WHERE monitor_id = ANY($1) AND ts <= to_timestamp($2::double precision / 1000.0)
+                 ORDER BY ts, id",
+                &[&monitor_ids, &(to_ms as f64)],
+            )
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| (r.get(0), r.get(1), ms(r.get(2)).unwrap_or(0), r.get(3)))
+            .collect())
+    }
+
     pub async fn forget_monitor(&self, monitor_id: i64) -> Result<()> {
         let c = self.pool.get().await?;
         c.execute(

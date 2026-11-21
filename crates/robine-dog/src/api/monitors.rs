@@ -206,11 +206,31 @@ fn check(mut def: MonitorDef) -> Result<MonitorDef, ApiError> {
     Ok(def)
 }
 
+/// An SLO alert names an SLO that exists, with a target for its time frame.
+async fn slo_ref(st: &AppState, p: &monitors::Parsed) -> Result<(), ApiError> {
+    let monitors::Source::Slo {
+        slo_id, timeframe, ..
+    } = &p.source
+    else {
+        return Ok(());
+    };
+    let slo = crate::slo::get(st, slo_id)
+        .await?
+        .ok_or_else(|| ApiError::BadQuery(format!("no SLO {slo_id}")))?;
+    if !slo.thresholds.iter().any(|t| &t.timeframe == timeframe) {
+        return Err(ApiError::BadQuery(format!(
+            "the SLO has no {timeframe} target"
+        )));
+    }
+    Ok(())
+}
+
 /// A composite names monitors that exist, other than itself.
 async fn check_refs(st: &AppState, id: Option<i64>, def: &MonitorDef) -> Result<(), ApiError> {
     let Ok(p) = monitors::parse(&def.query) else {
         return Ok(());
     };
+    slo_ref(st, &p).await?;
     let monitors::Source::Composite(expr) = &p.source else {
         return Ok(());
     };
@@ -411,6 +431,7 @@ pub struct Preview {
 /// What a query evaluates to right now, per group (the editor's check).
 pub async fn preview(State(st): State<AppState>, Json(p): Json<Preview>) -> ApiResult<Value> {
     let parsed = monitors::parse(&p.query).map_err(ApiError::BadQuery)?;
+    slo_ref(&st, &parsed).await?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)

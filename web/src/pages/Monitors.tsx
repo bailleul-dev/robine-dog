@@ -46,6 +46,7 @@ const TYPE_LABELS: Record<string, string> = {
   "service check": "Service Check",
   composite: "Composite",
   "synthetics alert": "Synthetics",
+  "slo alert": "SLO",
 };
 
 export function MonitorPill({
@@ -646,7 +647,8 @@ type Kind =
   | "events"
   | "errors"
   | "check"
-  | "composite";
+  | "composite"
+  | "slo";
 
 /** Kinds built from a metric query. */
 const METRIC_KINDS: Kind[] = [
@@ -690,6 +692,7 @@ const KINDS: [Kind, string, string][] = [
   ["errors", "Error Tracking", "Alert on the errors of issues"],
   ["check", "Service Check", "Alert on an Agent check's status"],
   ["composite", "Composite", "Combine other monitors"],
+  ["slo", "SLO", "Alert on an SLO's burn rate or error budget"],
 ];
 
 const WINDOWS = ["1m", "5m", "10m", "15m", "30m", "1h", "2h", "4h", "1d", "1w"];
@@ -789,6 +792,12 @@ type Form = {
   over: string;
   // composite
   composite: string;
+  // SLO
+  slo: string;
+  sloAlert: string;
+  sloTimeframe: string;
+  longWindow: string;
+  shortWindow: string;
 };
 
 const blank = (kind: Kind): Form => ({
@@ -838,7 +847,9 @@ const blank = (kind: Kind): Form => ({
         ? "0"
         : kind === "check"
           ? "1"
-          : "",
+          : kind === "slo"
+            ? "14.4"
+            : "",
   warning: kind === "check" ? "1" : "",
   criticalRecovery: "",
   warningRecovery: "",
@@ -863,6 +874,11 @@ const blank = (kind: Kind): Form => ({
   check: "datadog.agent.up",
   over: "*",
   composite: "",
+  slo: "",
+  sloAlert: "burn_rate",
+  sloTimeframe: "30d",
+  longWindow: "1h",
+  shortWindow: "5m",
 });
 
 const quote = (s: string) =>
@@ -903,6 +919,10 @@ function buildQuery(f: Form): string {
     }
     case "composite":
       return f.composite.trim();
+    case "slo":
+      return f.sloAlert === "error_budget"
+        ? `error_budget(${quote(f.slo)}).over("${f.sloTimeframe}")${tail}`
+        : `burn_rate(${quote(f.slo)}).over("${f.sloTimeframe}").long_window("${f.longWindow}").short_window("${f.shortWindow}")${tail}`;
   }
   const fn = EVENT_FN[f.kind];
   const rollup =
@@ -948,6 +968,26 @@ function parseInto(q: string, f: Form): Form {
   const tail = q.match(/^([\s\S]*?)\s*(>=|<=|==|!=|>|<)\s*(-?[\d.eE+-]+)\s*$/);
   if (!tail) return { ...f, raw: q };
   const [, head, cmp, critical] = tail;
+  const slo = head.match(
+    /^(burn_rate|error_budget)\(\s*"([^"]+)"\s*\)((?:\.\w+\(\s*"[^"]*"\s*\))*)$/,
+  );
+  if (slo) {
+    const out: Form = {
+      ...f,
+      kind: "slo",
+      raw: null,
+      slo: slo[2],
+      sloAlert: slo[1],
+      cmp,
+      critical,
+    };
+    for (const c of slo[3].matchAll(/\.(\w+)\(\s*"([^"]*)"\s*\)/g)) {
+      if (c[1] === "over") out.sloTimeframe = c[2];
+      else if (c[1] === "long_window") out.longWindow = c[2];
+      else if (c[1] === "short_window") out.shortWindow = c[2];
+    }
+    return out;
+  }
   const change = head.match(
     /^(change|pct_change)\(\s*(avg|min|max|sum)\(last_(\w+)\)\s*,\s*last_(\w+)\s*\):(.+)$/,
   );
@@ -1042,6 +1082,7 @@ const TYPE_KIND: Record<string, Kind> = {
   "error-tracking alert": "errors",
   "service check": "check",
   composite: "composite",
+  "slo alert": "slo",
 };
 
 function fromMonitor(m: Monitor | MonitorDraft): Form {
@@ -1093,6 +1134,8 @@ function monitorType(f: Form): string {
       return "service check";
     case "composite":
       return "composite";
+    case "slo":
+      return "slo alert";
     default:
       return "query alert";
   }
@@ -1426,8 +1469,23 @@ export function MonitorEditor() {
   });
   const webhooks = useQuery({ queryKey: ["webhooks"], queryFn: api.webhooks });
   const [form, setForm] = useState<Form | null>(
-    sourceId ? null : blank((params.get("type") as Kind) || "metric"),
+    sourceId
+      ? null
+      : {
+          ...blank((params.get("type") as Kind) || "metric"),
+          ...(params.get("slo")
+            ? {
+                slo: params.get("slo")!,
+                sloTimeframe: params.get("timeframe") || "30d",
+              }
+            : {}),
+        },
   );
+  const slos = useQuery({
+    queryKey: ["slos"],
+    queryFn: api.slos,
+    enabled: form?.kind === "slo",
+  });
   const others = useQuery({
     queryKey: ["monitors"],
     queryFn: () => api.monitors(),
@@ -1511,7 +1569,9 @@ export function MonitorEditor() {
                     ? "Pick the check"
                     : k === "composite"
                       ? "Combine monitors"
-                      : "Define the search query"
+                      : k === "slo"
+                        ? "Pick the SLO"
+                        : "Define the search query"
               }
             >
               {form.raw !== null ? (
@@ -1570,6 +1630,94 @@ export function MonitorEditor() {
                     Check runs come from the Agent (
                     <code>/api/v1/check_run</code>) and DogStatsD (
                     <code>_sc|name|status</code>).
+                  </span>
+                </>
+              ) : k === "slo" ? (
+                <>
+                  <label className="form-field">
+                    <span className="form-label">SLO</span>
+                    <select
+                      className="input"
+                      value={form.slo}
+                      onChange={(e) => {
+                        const chosen = slos.data?.data.find(
+                          (x) => x.id === e.target.value,
+                        );
+                        set({
+                          slo: e.target.value,
+                          sloTimeframe:
+                            chosen?.thresholds[0]?.timeframe ??
+                            form.sloTimeframe,
+                          name:
+                            form.name ||
+                            (chosen
+                              ? `${chosen.name}: burning its budget`
+                              : ""),
+                        });
+                      }}
+                    >
+                      <option value="">Choose an SLO</option>
+                      {(slos.data?.data ?? []).map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="form-row inline">
+                    Alert on the
+                    <select
+                      className="input"
+                      value={form.sloAlert}
+                      onChange={(e) =>
+                        set({
+                          sloAlert: e.target.value,
+                          critical:
+                            e.target.value === "error_budget" ? "75" : "14.4",
+                        })
+                      }
+                    >
+                      <option value="burn_rate">burn rate</option>
+                      <option value="error_budget">
+                        error budget spent (%)
+                      </option>
+                    </select>
+                    of the
+                    <select
+                      className="input"
+                      value={form.sloTimeframe}
+                      onChange={(e) => set({ sloTimeframe: e.target.value })}
+                    >
+                      {(
+                        slos.data?.data.find((x) => x.id === form.slo)
+                          ?.thresholds ?? [{ timeframe: form.sloTimeframe }]
+                      ).map((t) => (
+                        <option key={t.timeframe} value={t.timeframe}>
+                          {t.timeframe} target
+                        </option>
+                      ))}
+                    </select>
+                    {form.sloAlert === "burn_rate" && (
+                      <>
+                        over the last
+                        <WindowSelect
+                          value={form.longWindow}
+                          onChange={(longWindow) => set({ longWindow })}
+                          only={["5m", "15m", "30m", "1h", "2h", "4h", "1d"]}
+                        />
+                        and the last
+                        <WindowSelect
+                          value={form.shortWindow}
+                          onChange={(shortWindow) => set({ shortWindow })}
+                          only={["1m", "5m", "10m", "15m", "30m", "1h", "2h"]}
+                        />
+                      </>
+                    )}
+                  </div>
+                  <span className="form-hint">
+                    {form.sloAlert === "burn_rate"
+                      ? "The burn rate is how many times faster than the target allows the budget is spent; both windows must be above the threshold (14.4 for an hour spends 2 % of a 30-day budget)."
+                      : "The share of the time frame's error budget already spent."}
                   </span>
                 </>
               ) : k === "composite" ? (
@@ -1722,7 +1870,11 @@ export function MonitorEditor() {
                         ? "outlier flag (1: an outlier)"
                         : k === "forecast"
                           ? "forecast bound"
-                          : "evaluated value"}{" "}
+                          : k === "slo"
+                            ? form.sloAlert === "burn_rate"
+                              ? "burn rate"
+                              : "budget spent (%)"
+                            : "evaluated value"}{" "}
                     is
                     <select
                       className="input"

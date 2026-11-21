@@ -378,6 +378,22 @@ pub enum Source {
         by: Vec<String>,
         last: usize,
     },
+    /// `burn_rate("id").over("30d").long_window("1h").short_window("5m")`,
+    /// `error_budget("id").over("30d")`.
+    Slo {
+        slo_id: String,
+        timeframe: String,
+        alert: SloAlert,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SloAlert {
+    /// How many times faster than allowed the budget burns, over both
+    /// windows (the lower of the two).
+    BurnRate { long_ms: i64, short_ms: i64 },
+    /// The share of the time frame's budget spent, in percent.
+    ErrorBudget,
 }
 
 impl Source {
@@ -390,7 +406,7 @@ impl Source {
             Source::Events { by, .. }
             | Source::ErrorTracking { by, .. }
             | Source::ServiceCheck { by, .. } => by.clone(),
-            Source::Composite(_) => Vec::new(),
+            Source::Composite(_) | Source::Slo { .. } => Vec::new(),
         }
     }
 
@@ -419,6 +435,13 @@ static TAIL: LazyLock<Regex> = LazyLock::new(|| {
 });
 static METRIC_HEAD: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(avg|min|max|sum)\((last|next)_(\d+[smhdw])\):(.+)$").unwrap());
+static SLO_HEAD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"^(burn_rate|error_budget)\(\s*"([^"]+)"\s*\)((?:\.\w+\(\s*"[^"]*"\s*\))*)$"#)
+        .unwrap()
+});
+static SLO_CALL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\.(\w+)\(\s*"([^"]*)"\s*\)"#).unwrap());
+
 static CHANGE_HEAD: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^(change|pct_change)\(\s*(avg|min|max|sum)\(last_(\d+[smhdw])\)\s*,\s*last_(\d+[smhdw])\s*\):(.+)$",
@@ -552,6 +575,45 @@ pub fn parse(query: &str) -> Result<Parsed, String> {
     let head = caps[1].trim();
     let cmp = Cmp::parse(&caps[2]).ok_or("bad comparator")?;
     let threshold: f64 = caps[3].parse().map_err(|_| "bad threshold")?;
+    if let Some(m) = SLO_HEAD.captures(head) {
+        let span = crate::api::analytics::parse_span_ms;
+        let (mut timeframe, mut long, mut short) = ("30d".to_string(), None, None);
+        for c in SLO_CALL.captures_iter(&m[3]) {
+            match &c[1] {
+                "over" => timeframe = c[2].to_string(),
+                "long_window" => long = Some(span(&c[2]).ok_or("bad long window")?),
+                "short_window" => short = Some(span(&c[2]).ok_or("bad short window")?),
+                other => return Err(format!("unknown method .{other}()")),
+            }
+        }
+        if crate::slo::timeframe_ms(&timeframe).is_none() {
+            return Err("the time frame is 7d, 30d or 90d".into());
+        }
+        let (alert, window_ms) = if &m[1] == "burn_rate" {
+            let long_ms = long.unwrap_or(3_600_000);
+            let short_ms = short.unwrap_or(long_ms / 12).max(60_000);
+            if !(60_000..=48 * 3_600_000).contains(&long_ms) || short_ms >= long_ms {
+                return Err("the long window is 1m to 48h, the short one shorter".into());
+            }
+            (SloAlert::BurnRate { long_ms, short_ms }, long_ms)
+        } else {
+            if long.is_some() || short.is_some() {
+                return Err("error budget alerts have no windows".into());
+            }
+            let w = crate::slo::timeframe_ms(&timeframe).unwrap_or(0);
+            (SloAlert::ErrorBudget, w)
+        };
+        return Ok(Parsed {
+            source: Source::Slo {
+                slo_id: m[2].to_string(),
+                timeframe,
+                alert,
+            },
+            window_ms,
+            cmp,
+            threshold,
+        });
+    }
     if let Some(m) = CHANGE_HEAD.captures(head) {
         let window_ms = parse_span_ms(&m[3]).ok_or("bad evaluation window")?;
         let shift_ms = parse_span_ms(&m[4]).ok_or("bad comparison window")?;
@@ -696,6 +758,7 @@ pub fn type_of(p: &Parsed) -> &'static str {
         Source::ErrorTracking { .. } => "error-tracking alert",
         Source::Composite(_) => "composite",
         Source::ServiceCheck { .. } => "service check",
+        Source::Slo { .. } => "slo alert",
     }
 }
 
@@ -1063,6 +1126,40 @@ pub async fn evaluate(
                 .into_iter()
                 .map(|(g, (tags, v))| Sample::new(g, tags, Some(v)))
                 .collect())
+        }
+        Source::Slo {
+            slo_id,
+            timeframe,
+            alert,
+        } => {
+            let Some(slo) = crate::slo::get(st, slo_id).await? else {
+                anyhow::bail!("no SLO {slo_id}");
+            };
+            let target = slo
+                .threshold(Some(timeframe))
+                .map(|t| t.target)
+                .ok_or_else(|| anyhow::anyhow!("the SLO has no target"))?;
+            let api = |e: crate::api::ApiError| match e {
+                crate::api::ApiError::BadQuery(m) => anyhow::anyhow!(m),
+                crate::api::ApiError::NotFound => anyhow::anyhow!("not found"),
+                crate::api::ApiError::Internal(e) => e,
+            };
+            let value = match alert {
+                SloAlert::ErrorBudget => crate::slo::status(st, &slo, timeframe, to)
+                    .await
+                    .map_err(api)?
+                    .error_budget_remaining
+                    .map(|left| 100.0 - left),
+                SloAlert::BurnRate { long_ms, short_ms } => {
+                    let b = crate::slo::compute(st, &slo, to - long_ms, to, 60_000)
+                        .await
+                        .map_err(api)?;
+                    let long = b.sums().burn_rate(target);
+                    let short = b.sums_since(to - short_ms).burn_rate(target);
+                    long.zip(short).map(|(l, s)| l.min(s))
+                }
+            };
+            Ok(vec![Sample::new("*".into(), BTreeMap::new(), value)])
         }
         Source::ServiceCheck {
             check,
@@ -1646,6 +1743,44 @@ mod tests {
         assert_eq!(type_of(&p), "composite");
         assert!(parse("12 &&").is_err());
         assert!(parse("12 & 3").is_err());
+    }
+
+    #[test]
+    fn slo_alerts() {
+        let p = parse(r#"burn_rate("abc").over("7d").long_window("1h").short_window("5m") > 14.4"#)
+            .unwrap();
+        assert_eq!(type_of(&p), "slo alert");
+        let Source::Slo {
+            slo_id,
+            timeframe,
+            alert,
+        } = &p.source
+        else {
+            panic!()
+        };
+        assert_eq!((slo_id.as_str(), timeframe.as_str()), ("abc", "7d"));
+        assert_eq!(
+            alert,
+            &SloAlert::BurnRate {
+                long_ms: 3_600_000,
+                short_ms: 300_000
+            }
+        );
+        assert_eq!(p.threshold, 14.4);
+        let p = parse(r#"error_budget("abc").over("30d") > 75"#).unwrap();
+        assert!(matches!(
+            p.source,
+            Source::Slo {
+                alert: SloAlert::ErrorBudget,
+                ..
+            }
+        ));
+        assert!(parse(r#"error_budget("abc").over("1y") > 75"#).is_err());
+        assert!(
+            parse(r#"burn_rate("abc").over("30d").long_window("1h").short_window("2h") > 1"#)
+                .is_err()
+        );
+        assert!(parse(r#"burn_rate("abc").over("30d").nope("1h") > 1"#).is_err());
     }
 
     #[test]

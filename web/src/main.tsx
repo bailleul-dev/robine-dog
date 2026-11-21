@@ -4,7 +4,7 @@ import { NotebookList, NotebookPage } from "./pages/Notebooks";
 import { Integrations } from "./pages/Integrations";
 import { EventsExplorer, RumExplorer } from "./pages/Events";
 import { RumAnalytics, RumPerformancePage, RumSessions } from "./pages/Rum";
-import { Slos } from "./pages/Slos";
+import { SloPage, Slos } from "./pages/Slos";
 import { Synthetics } from "./pages/Synthetics";
 import { Downtimes } from "./pages/Downtimes";
 import { Containers, Hosts, Kubernetes } from "./pages/Infrastructure";
@@ -110,6 +110,7 @@ function App() {
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />
         <Route path="/slo/manage" element={<Slos />} />
+        <Route path="/slo/:id" element={<SloPage />} />
         <Route path="/event/explorer" element={<EventsExplorer />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/rum" element={<Navigate to="/rum/performance-monitoring" replace />} />

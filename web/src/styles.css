@@ -3650,6 +3650,42 @@ table.list td.infra-bad {
   padding: 6px 0 2px;
 }
 
+.segmented {
+  display: flex;
+  gap: 6px;
+}
+
+.slo-tile {
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.slo-tile.selected {
+  border-color: var(--purple);
+  background: var(--purple-soft);
+}
+
+.slo-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.slo-monitor-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow: auto;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
 .event-text {
   margin: 0;
   padding: 10px 12px;

@@ -20,6 +20,7 @@ mod monitors;
 mod pipelines;
 mod query;
 mod rum;
+mod slo;
 mod store;
 mod synthetics;
 mod watchdog;
@@ -79,10 +80,27 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         )
         .route("/synthetics/tests/{id}/trigger", post(synthetics::trigger))
         .route("/slos", get(api::slos::list).post(api::slos::create))
+        .route("/slos/search", get(api::slos::search))
+        .route("/slos/can_delete", get(api::slos::can_delete))
+        .route(
+            "/slo-corrections",
+            get(api::slos::list_corrections).post(api::slos::create_correction),
+        )
+        .route(
+            "/slo-corrections/{id}",
+            get(api::slos::get_correction)
+                .patch(api::slos::update_correction)
+                .delete(api::slos::delete_correction),
+        )
         .route(
             "/slos/{id}",
-            axum::routing::put(api::slos::update).delete(api::slos::delete),
+            get(api::slos::get)
+                .put(api::slos::update)
+                .delete(api::slos::delete),
         )
+        .route("/slos/{id}/history", get(api::slos::history))
+        .route("/slos/{id}/corrections", get(api::slos::slo_corrections))
+        .route("/slos/{id}/status", get(api::slos::status))
         .route(
             "/downtimes",
             get(api::downtimes::list).post(api::downtimes::create),
@@ -254,9 +272,28 @@ fn public_api(st: AppState) -> Router<AppState> {
             get(synthetics::get).delete(synthetics::delete),
         )
         .route("/api/v1/slo", get(api::slos::list).post(api::slos::create))
+        .route("/api/v1/slo/search", get(api::slos::search))
+        .route("/api/v1/slo/can_delete", get(api::slos::can_delete))
+        .route(
+            "/api/v1/slo/correction",
+            get(api::slos::list_corrections).post(api::slos::create_correction),
+        )
+        .route(
+            "/api/v1/slo/correction/{id}",
+            get(api::slos::get_correction)
+                .patch(api::slos::update_correction)
+                .delete(api::slos::delete_correction),
+        )
         .route(
             "/api/v1/slo/{id}",
-            axum::routing::put(api::slos::update).delete(api::slos::delete),
+            get(api::slos::get)
+                .put(api::slos::update)
+                .delete(api::slos::delete),
+        )
+        .route("/api/v1/slo/{id}/history", get(api::slos::history))
+        .route(
+            "/api/v1/slo/{id}/corrections",
+            get(api::slos::slo_corrections),
         )
         .route(
             "/api/v1/downtime",

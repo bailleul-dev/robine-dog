@@ -125,14 +125,75 @@ export type SyntheticTest = {
   tags: string[];
   last_result?: { ts: number; passed: boolean; status_code: number | null; duration_ms: number; failure: string | null };
 };
+export type SloThreshold = { timeframe: string; target: number; warning?: number | null };
+export type TimeSlice = {
+  query: {
+    formulas: { formula: string }[];
+    queries: { data_source: string; name: string; query: string }[];
+  };
+  comparator: string;
+  threshold: number;
+  query_interval_seconds?: number;
+};
 export type Slo = {
   id?: string;
   name: string;
   description?: string | null;
-  type?: string;
-  query: { numerator: string; denominator: string };
-  thresholds: { timeframe: string; target: number; warning?: number | null }[];
+  type?: "metric" | "monitor" | "time_slice" | string;
+  query?: { numerator: string; denominator: string } | null;
+  monitor_ids?: number[];
+  groups?: string[];
+  sli_specification?: { time_slice: TimeSlice } | null;
+  thresholds: SloThreshold[];
   tags: string[];
+  created_at?: number;
+  modified_at?: number;
+};
+export type SloStatus = {
+  timeframe: string;
+  target: number;
+  warning?: number | null;
+  sli: number | null;
+  good: number;
+  total: number;
+  error_budget_remaining: number | null;
+  state: "ok" | "warning" | "breached" | "no_data";
+  unit: "events" | "seconds";
+  error?: string;
+};
+export type SloHistory = {
+  data: {
+    from_ts: number;
+    to_ts: number;
+    type: string;
+    overall: {
+      sli_value: number | null;
+      error_budget_remaining: { custom: number | null };
+      corrections: { start: number; end: number }[];
+      history?: [number, number][];
+    };
+    series: {
+      interval: number;
+      times: number[];
+      numerator: { sum: number; values: number[] };
+      denominator: { sum: number; values: number[] };
+      unit: string;
+    };
+  };
+};
+export type SloCorrection = {
+  id: string;
+  type: "correction";
+  attributes: {
+    slo_id: string;
+    start: number;
+    end?: number | null;
+    duration?: number | null;
+    rrule?: string | null;
+    category: string;
+    description?: string | null;
+    timezone?: string | null;
+  };
 };
 export type RumPage = {
   service: string | null;
@@ -663,7 +724,22 @@ export const api = {
   slos: () => call<{ data: Slo[] }>("/slos"),
   createSlo: (s: Slo) => post<unknown>("/slos", s),
   updateSlo: (id: string, s: Slo) => put<unknown>(`/slos/${id}`, s),
-  deleteSlo: (id: string) => del<unknown>(`/slos/${id}`),
+  deleteSlo: (id: string, force = false) =>
+    del<unknown>(`/slos/${id}${force ? "?force=true" : ""}`),
+  slo: (id: string) =>
+    call<{ data: Slo & { configured_alert_ids: number[] } }>(`/slos/${id}`),
+  sloStatus: (id: string) => call<SloStatus[]>(`/slos/${id}/status`),
+  sloHistory: (id: string, from: number, to: number, target?: number) =>
+    call<SloHistory>(
+      `/slos/${id}/history?from=${from}&to=${to}${target ? `&target=${target}` : ""}`,
+    ),
+  sloCorrections: (id: string) =>
+    call<{ data: SloCorrection[] }>(`/slos/${id}/corrections`),
+  createSloCorrection: (a: SloCorrection["attributes"]) =>
+    post<unknown>("/slo-corrections", {
+      data: { type: "correction", attributes: a },
+    }),
+  deleteSloCorrection: (id: string) => del<unknown>(`/slo-corrections/${id}`),
   searchEvents: (s: Scope & { limit?: number; cursor?: string }, signal?: AbortSignal) =>
     post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/events/search", s, signal),
   eventsHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/events/histogram", s, signal),
