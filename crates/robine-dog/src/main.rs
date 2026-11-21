@@ -8,6 +8,7 @@
 //! Telemetry is stored in GreptimeDB, the application's state in PostgreSQL.
 
 mod api;
+mod appsec;
 mod audit;
 mod auth;
 mod cases;
@@ -544,6 +545,8 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         )
         .route("/ci/pipelines", get(civis::pipelines))
         .route("/deployments", get(delivery::deployments))
+        .route("/appsec/endpoints", get(appsec::endpoints))
+        .route("/code-security", get(appsec::vulnerabilities))
         .route("/dora", get(delivery::dora_metrics))
         .route("/coverage", get(delivery::coverage))
         .route("/ci/pipelines/{provider}/{id}/jobs", get(civis::jobs))
@@ -1104,6 +1107,7 @@ async fn main() -> anyhow::Result<()> {
     profiling::spawn_purge(st.clone());
     llmobs::spawn_purge(st.clone());
     civis::spawn_purge(st.clone());
+    appsec::spawn(st.clone());
     audit::spawn_purge(st.clone());
     security::spawn(st.clone());
     oncall::spawn(st.clone());

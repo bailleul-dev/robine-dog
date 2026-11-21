@@ -384,6 +384,33 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX coverage_reports_by_time ON coverage_reports (ts);
     "#,
+    // Code Security: libraries loaded by services, checked against OSV.
+    r#"
+    CREATE TABLE sca_dependencies (
+        service TEXT NOT NULL,
+        env TEXT NOT NULL,
+        language TEXT NOT NULL,
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        last_seen BIGINT NOT NULL,
+        PRIMARY KEY (service, env, name, version)
+    );
+    CREATE TABLE sca_packages (
+        language TEXT NOT NULL,
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        checked_at BIGINT NOT NULL,
+        vulns TEXT[] NOT NULL,
+        PRIMARY KEY (language, name, version)
+    );
+    CREATE TABLE sca_vulns (
+        id TEXT PRIMARY KEY,
+        summary TEXT,
+        severity TEXT,
+        aliases TEXT,
+        fixed TEXT
+    );
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.

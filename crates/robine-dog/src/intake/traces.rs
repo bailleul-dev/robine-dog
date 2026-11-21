@@ -48,7 +48,10 @@ pub fn router() -> Router<AppState> {
             "/v0.1/pipeline_stats",
             axum::routing::post(crate::dsm::intake),
         )
-        .route("/telemetry/proxy/{*rest}", any(discard))
+        .route(
+            "/telemetry/proxy/{*rest}",
+            axum::routing::post(crate::appsec::telemetry),
+        )
         .route("/debugger/v1/input", axum::routing::post(debugger))
         .route("/debugger/v2/input", axum::routing::post(debugger))
         .route("/debugger/{*rest}", any(discard))
@@ -405,12 +408,18 @@ impl Insertable for SpanRow {
 /// Every span feeds the trace metrics and span-based metrics; retention
 /// filters then decide which traces are stored.
 pub async fn ingest(st: &AppState, mut chunks: Vec<Vec<SpanRow>>) -> anyhow::Result<usize> {
+    let mut attacks = Vec::new();
     for chunk in &mut chunks {
         mark_top_level(chunk);
         for s in chunk.iter() {
             crate::metrics::trace_metrics(&st.aggregator, s);
             st.generated.on_span(&st.aggregator, s);
+            attacks.extend(crate::appsec::attacks(s));
         }
+    }
+    // Attacks are kept whatever the retention filters decide for the trace.
+    if !attacks.is_empty() {
+        st.store.logs.send(attacks).await?;
     }
     let now = crate::intake::logs::now_ms();
     let spans: Vec<SpanRow> = crate::catalog::retention::filter(st, chunks, now)

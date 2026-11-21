@@ -83,6 +83,12 @@ import { TraceExplorer } from "./pages/TraceExplorer";
 import { SharedDashboard } from "./pages/SharedDashboard";
 import "./styles.css";
 import { Coverage, Deployments, Dora } from "./pages/Delivery";
+import {
+  AppProtection,
+  CloudSecurity,
+  CodeSecurity,
+  WorkloadProtection,
+} from "./pages/AppSec";
 
 const client = new QueryClient({
   defaultOptions: {
@@ -213,6 +219,10 @@ function App() {
         <Route path="/ci/coverage" element={<Coverage />} />
         <Route path="/ci/tests" element={<CiTestsPage />} />
         <Route path="/security/signals" element={<SecuritySignals />} />
+        <Route path="/security/appsec" element={<AppProtection />} />
+        <Route path="/security/code" element={<CodeSecurity />} />
+        <Route path="/security/workload" element={<WorkloadProtection />} />
+        <Route path="/security/cloud" element={<CloudSecurity />} />
         <Route path="/security/rules" element={<DetectionRules />} />
         <Route path="/audit" element={<AuditTrail />} />
         <Route path="/cases" element={<Cases />} />

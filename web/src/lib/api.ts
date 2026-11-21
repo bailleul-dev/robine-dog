@@ -2169,6 +2169,36 @@ export const api = {
       daily: [number, number][];
     }>(`/dora?${deliveryQs(f)}`),
   coverage: () => call<{ data: CoverageReport[] }>("/coverage"),
+  appsecEndpoints: (from: number, to: number) =>
+    call<{
+      data: {
+        service: string;
+        method: string;
+        route: string;
+        requests: number;
+        errors: number;
+        last_seen: number;
+      }[];
+    }>(`/appsec/endpoints?from=${from}&to=${to}`),
+  codeSecurity: () =>
+    call<{
+      services: number;
+      libraries: number;
+      checked: number;
+      osv: boolean;
+      data: {
+        service: string;
+        env: string;
+        language: string;
+        library: string;
+        version: string;
+        id: string;
+        summary: string | null;
+        severity: string | null;
+        aliases: string | null;
+        fixed: string | null;
+      }[];
+    }>("/code-security"),
   ciPipelines: (f: CiFilter) =>
     call<CiPipelines>(`/ci/pipelines?${profileQs(f)}`),
   ciJobs: (provider: string, id: string) =>

@@ -103,6 +103,17 @@ fn defaults() -> Vec<(&'static str, Value)> {
                 "options": {"evaluationWindow": 300, "keepAlive": 3600, "maxSignalDuration": 86400}}),
         ),
         (
+            "ootb-appsec-attacker",
+            json!({"name": "Attacks from one address", "isEnabled": true, "type": "log_detection",
+                "message": "One client keeps triggering App & API Protection rules: block it, or check what it hit.",
+                "tags": ["source:appsec", "tactic:TA0001-initial-access"],
+                "queries": [{"name": "a", "query": "source:appsec",
+                    "groupByFields": ["@network.client.ip"], "aggregation": "count"}],
+                "cases": [{"name": "many", "status": "high", "condition": "a > 50"},
+                    {"name": "some", "status": "medium", "condition": "a > 10"}],
+                "options": {"evaluationWindow": 300, "keepAlive": 3600, "maxSignalDuration": 86400}}),
+        ),
+        (
             "ootb-401-burst",
             json!({"name": "Burst of unauthorized requests", "isEnabled": true, "type": "log_detection",
                 "message": "Many 401 or 403 answers to one client: credential stuffing or a broken client.",
