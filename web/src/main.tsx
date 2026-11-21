@@ -24,6 +24,7 @@ import { DashboardList, DashboardPage } from "./pages/Dashboards";
 import { ErrorTracking, IssuePage } from "./pages/ErrorTracking";
 import { ManageMonitors, MonitorEditor, MonitorPage, TriggeredMonitors, Webhooks } from "./pages/Monitors";
 import { GenerateMetrics } from "./pages/GenerateMetrics";
+import { Profiler } from "./pages/Profiler";
 import {
   IngestionControl,
   ResourcePage,
@@ -131,6 +132,7 @@ function App() {
         <Route path="/apm/retention-filters" element={<RetentionFilters />} />
         <Route path="/apm/ingestion-control" element={<IngestionControl />} />
         <Route path="/teams" element={<Teams />} />
+        <Route path="/profiling" element={<Profiler />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />

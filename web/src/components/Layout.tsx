@@ -169,7 +169,7 @@ const SECTIONS: Item[][] = [
       label: "APM",
       icon: <ApmIcon />,
       to: "/apm/services",
-      match: ["/apm", "/teams"],
+      match: ["/apm", "/teams", "/profiling"],
       links: [
         {
           label: "Software Catalog",
@@ -197,7 +197,7 @@ const SECTIONS: Item[][] = [
           to: "/error-tracking",
           hint: "Errors grouped into issues",
         },
-        { label: "Profiles" },
+        { label: "Profiles", to: "/profiling", hint: "Continuous Profiler: where code spends CPU, time and memory" },
         { label: "Database Monitoring" },
         { label: "Data Streams Monitoring" },
         { label: "Data Jobs Monitoring" },

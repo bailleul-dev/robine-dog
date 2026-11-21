@@ -6,6 +6,7 @@
 //!
 //! Usage: robine-dog-demo [--backfill-minutes 60] [--rate 3] [--no-live]
 
+mod profiles;
 mod rum;
 
 use rand::Rng;
@@ -884,6 +885,21 @@ struct Client {
 
 impl Client {
     /// RUM events, as the browser SDK posts them.
+    /// Profiles of the minute ending at `end_ms`, to the trace port as
+    /// ddtrace sends them.
+    fn send_profiles(&self, rng: &mut impl Rng, end_ms: i64) -> anyhow::Result<()> {
+        for (ct, body) in profiles::uploads(rng, end_ms, "prod") {
+            self.http
+                .post(format!("{}/profiling/v1/input", self.agent_url))
+                .header("Content-Type", ct)
+                .header("DD-API-KEY", &self.api_key)
+                .body(body)
+                .send()?
+                .error_for_status()?;
+        }
+        Ok(())
+    }
+
     fn send_rum(&self, events: &[Value]) -> anyhow::Result<()> {
         for chunk in events.chunks(400) {
             let body: Vec<String> = chunk.iter().map(|e| e.to_string()).collect();
@@ -1124,12 +1140,25 @@ fn main() -> anyhow::Result<()> {
             events.len()
         );
         client.send_rum(&events)?;
+        let minutes = backfill_min.min(60);
+        println!("backfilling {minutes} minutes of profiles…");
+        for m in (0..minutes).rev() {
+            client.send_profiles(&mut rng, now_ms - m * 60_000)?;
+        }
         println!("backfill done");
     }
     if live {
         println!("sending live traffic at ~{rate} req/s (Ctrl-C to stop)");
         let mut last_tick = 0;
+        let mut last_profile = now_ns() / 1_000_000;
         loop {
+            let now_ms = now_ns() / 1_000_000;
+            if now_ms - last_profile >= 60_000 {
+                if let Err(e) = client.send_profiles(&mut rng, now_ms) {
+                    eprintln!("profile upload failed: {e}");
+                }
+                last_profile = now_ms;
+            }
             let now_s = now_ns() / 1_000_000_000;
             if now_s - last_tick >= 10 {
                 statsd.tick(&mut rng, now_s, false);

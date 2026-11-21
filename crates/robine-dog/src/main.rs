@@ -20,6 +20,7 @@ mod mcp;
 mod metrics;
 mod monitors;
 mod pipelines;
+mod profiling;
 mod query;
 mod rum;
 mod slo;
@@ -454,6 +455,13 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         );
     let r = r
         .route("/apm/ingestion", get(catalog::retention::ingestion))
+        .route("/profiling/profiles", get(profiling::list))
+        .route("/profiling/services", get(profiling::services))
+        .route("/profiling/flamegraph", post(profiling::flamegraph))
+        .route(
+            "/profiling/profiles/{id}/files/{name}",
+            get(profiling::download),
+        )
         .route("/apm/resource", get(api::apm::resource))
         .route(
             "/apm/definition-template/{name}",
@@ -750,6 +758,8 @@ fn app(st: AppState) -> Router {
             post(rum::proxy).options(intake::sentry::preflight),
         )
         .route("/api/v1/check_run", post(checks::intake))
+        .route("/api/v2/profile", post(profiling::intake))
+        .route("/profiling/v1/input", post(profiling::intake))
         .route("/api/v1/series", post(intake::series::v1))
         .route("/api/v2/series", post(intake::series::v2))
         .route("/api/v1/validate", get(intake::series::validate))
@@ -881,6 +891,7 @@ async fn main() -> anyhow::Result<()> {
     monitors::spawn(st.clone());
     synthetics::spawn(st.clone());
     rum::replay::spawn_purge(st.clone());
+    profiling::spawn_purge(st.clone());
     {
         // RUM-based metrics counted at a session's or view's end.
         let st = st.clone();

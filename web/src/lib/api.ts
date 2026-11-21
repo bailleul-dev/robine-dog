@@ -894,6 +894,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+const profileQs = (f: ProfileFilter) =>
+  new URLSearchParams(
+    Object.entries(f)
+      .filter(([, v]) => v !== undefined && v !== "")
+      .map(([k, v]) => [k, String(v)]),
+  ).toString();
 const post = <T>(path: string, body: unknown, signal?: AbortSignal) =>
   call<T>(path, { method: "POST", body: JSON.stringify(body), signal });
 const put = <T>(path: string, body: unknown) =>
@@ -901,6 +907,46 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type ProfileFilter = {
+  service?: string;
+  env?: string;
+  version?: string;
+  host?: string;
+  from: number;
+  to: number;
+};
+export type ProfileRow = {
+  id: number;
+  start: number;
+  end: number;
+  service: string;
+  env: string | null;
+  version: string | null;
+  host: string | null;
+  language: string | null;
+  runtime_id: string | null;
+  tags: string[];
+  types: string[];
+  files: string[];
+  size: number;
+};
+export type ProfiledService = {
+  service: string;
+  profiles: number;
+  types: string[];
+  languages: string[];
+  versions: string[];
+};
+export type FlameNode = { name: string; value: number; self: number; children: FlameNode[] };
+export type FlameGraph = {
+  type: string;
+  unit: string;
+  profiles: number;
+  types: Record<string, string>;
+  tree: FlameNode;
+  top: { name: string; self: number; total: number }[];
+  endpoints: { endpoint: string; value: number }[];
+};
 export type RetentionFilter = {
   id: string;
   type: string;
@@ -1517,6 +1563,10 @@ export const api = {
     put<unknown>("/apm/config/retention-filters-execution-order", {
       data: ids.map((id) => ({ id, type: "apm_retention_filter" })),
     }),
+  profiledServices: (f: ProfileFilter) => call<ProfiledService[]>(`/profiling/services?${profileQs(f)}`),
+  profiles: (f: ProfileFilter) => call<ProfileRow[]>(`/profiling/profiles?${profileQs(f)}`),
+  flamegraph: (f: ProfileFilter & { type?: string; endpoint?: string; profile_id?: number }) =>
+    post<FlameGraph>("/profiling/flamegraph", f),
   apmIngestion: () => call<{ services: IngestionService[] }>("/apm/ingestion").then((r) => r.services),
   apmResource: (service: string, resource: string, from: number, to: number, env?: string) =>
     call<ResourceDetail>(

@@ -4597,3 +4597,22 @@ table.list td.infra-bad {
 .scorecard-table td.score-fail { color: var(--red); }
 .scorecard-table td.score-skip { color: var(--text-faint); }
 .scorecard-table td:first-child { min-width: 170px; white-space: nowrap; }
+
+/* Continuous Profiler: flame graph. */
+.flame-crumbs { font-size: 12px; margin-bottom: 6px; }
+.flame-canvas { position: relative; width: 100%; overflow: hidden; }
+.flame-frame {
+  position: absolute;
+  overflow: hidden;
+  white-space: nowrap;
+  font: 11px/17px var(--mono, monospace);
+  color: #1d1d1f;
+  padding: 0 3px;
+  border-radius: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.flame-frame:hover { filter: brightness(1.1); outline: 1px solid var(--text); }
+.flame-frame.match { outline: 2px solid var(--purple); }
+.flame-hover { font-size: 12px; margin-top: 6px; min-height: 18px; }
+.profile-top-row { cursor: pointer; }

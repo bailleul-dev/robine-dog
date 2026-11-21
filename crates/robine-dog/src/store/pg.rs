@@ -124,6 +124,33 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX replay_segments_by_session ON replay_segments (session_id, start_ms);
     CREATE INDEX replay_segments_by_time ON replay_segments (start_ms);
     "#,
+    // Continuous Profiler: a profile's tags, its stacks folded per sample type
+    // (zstd JSON), and the uploaded pprof files.
+    r#"
+    CREATE TABLE profiles (
+        id BIGSERIAL PRIMARY KEY,
+        start_ms BIGINT NOT NULL,
+        end_ms BIGINT NOT NULL,
+        service TEXT NOT NULL,
+        env TEXT,
+        version TEXT,
+        host TEXT,
+        language TEXT,
+        runtime_id TEXT,
+        tags TEXT[] NOT NULL,
+        types TEXT[] NOT NULL,
+        folded BYTEA NOT NULL,
+        size BIGINT NOT NULL
+    );
+    CREATE INDEX profiles_by_service ON profiles (service, end_ms);
+    CREATE INDEX profiles_by_time ON profiles (end_ms);
+    CREATE TABLE profile_files (
+        profile_id BIGINT NOT NULL REFERENCES profiles ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        data BYTEA NOT NULL,
+        PRIMARY KEY (profile_id, name)
+    );
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.
@@ -836,5 +863,119 @@ impl Pg {
             &[&before_ms],
         )
         .await?)
+    }
+
+    pub async fn put_profile(
+        &self,
+        m: &crate::profiling::Meta,
+        types: &[String],
+        folded: &[u8],
+        files: &[(String, Vec<u8>)],
+    ) -> Result<i64> {
+        let mut c = self.pool.get().await?;
+        let tx = c.transaction().await?;
+        let size: i64 = files.iter().map(|f| f.1.len() as i64).sum();
+        let id: i64 = tx
+            .query_one(
+                "INSERT INTO profiles (start_ms, end_ms, service, env, version, host, language,
+                    runtime_id, tags, types, folded, size)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
+                &[
+                    &m.start,
+                    &m.end,
+                    &m.service,
+                    &m.env,
+                    &m.version,
+                    &m.host,
+                    &m.language,
+                    &m.runtime_id,
+                    &m.tags,
+                    &types,
+                    &folded,
+                    &size,
+                ],
+            )
+            .await?
+            .get(0);
+        let mut seen = std::collections::HashSet::new();
+        for (name, data) in files {
+            if seen.insert(name.as_str()) {
+                tx.execute(
+                    "INSERT INTO profile_files (profile_id, name, data) VALUES ($1, $2, $3)",
+                    &[&id, name, data],
+                )
+                .await?;
+            }
+        }
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    /// Profiles overlapping a range, newest first.
+    pub async fn profiles(
+        &self,
+        f: &crate::profiling::Filter,
+        limit: i64,
+    ) -> Result<Vec<crate::profiling::ProfileRow>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT p.id, p.start_ms, p.end_ms, p.service, p.env, p.version, p.host, p.language,
+                    p.runtime_id, p.tags, p.types, p.size,
+                    ARRAY(SELECT name FROM profile_files WHERE profile_id = p.id ORDER BY name)
+                 FROM profiles p
+                 WHERE p.end_ms >= $1 AND p.start_ms <= $2
+                   AND ($3::TEXT IS NULL OR p.service = $3) AND ($4::TEXT IS NULL OR p.env = $4)
+                   AND ($5::TEXT IS NULL OR p.version = $5) AND ($6::TEXT IS NULL OR p.host = $6)
+                 ORDER BY p.end_ms DESC LIMIT $7",
+                &[&f.from, &f.to, &f.service, &f.env, &f.version, &f.host, &limit],
+            )
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| crate::profiling::ProfileRow {
+                id: r.get(0),
+                meta: crate::profiling::Meta {
+                    start: r.get(1),
+                    end: r.get(2),
+                    service: r.get(3),
+                    env: r.get(4),
+                    version: r.get(5),
+                    host: r.get(6),
+                    language: r.get(7),
+                    runtime_id: r.get(8),
+                    tags: r.get(9),
+                },
+                types: r.get(10),
+                size: r.get(11),
+                files: r.get(12),
+            })
+            .collect())
+    }
+
+    pub async fn profile_folded(&self, ids: &[i64]) -> Result<Vec<Vec<u8>>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query("SELECT folded FROM profiles WHERE id = ANY($1)", &[&ids])
+            .await?;
+        Ok(rows.iter().map(|r| r.get(0)).collect())
+    }
+
+    pub async fn profile_file(&self, id: i64, name: &str) -> Result<Option<Vec<u8>>> {
+        let c = self.pool.get().await?;
+        Ok(c.query_opt(
+            "SELECT data FROM profile_files WHERE profile_id = $1 AND name = $2",
+            &[&id, &name],
+        )
+        .await?
+        .map(|r| r.get(0)))
+    }
+
+    pub async fn purge_profiles(&self, before_ms: i64) -> Result<u64> {
+        let c = self.pool.get().await?;
+        Ok(
+            c.execute("DELETE FROM profiles WHERE end_ms < $1", &[&before_ms])
+                .await?,
+        )
     }
 }

@@ -40,7 +40,10 @@ pub fn router() -> Router<AppState> {
         .route("/v0.5/traces", post(v05).put(v05))
         .route("/info", get(info))
         .route("/v0.6/stats", any(discard))
-        .route("/profiling/v1/input", any(discard))
+        .route(
+            "/profiling/v1/input",
+            axum::routing::post(crate::profiling::intake),
+        )
         .route("/telemetry/proxy/{*rest}", any(discard))
         .route("/debugger/{*rest}", any(discard))
         .route("/evp_proxy/{*rest}", any(discard))

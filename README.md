@@ -47,6 +47,7 @@ state (facets, metric metadata) is in PostgreSQL.
 | Retention filters and Ingestion Control: every span feeds trace and span-based metrics, then ordered filters keep traces matching a query at a rate (decided on the trace id, like the tracers); spans, traces and volume per service, sampling decisions (`_dd.p.dm`, priority), tracer versions; `datadog.estimated_usage.apm.*` metrics | `/api/v2/apm/config/retention-filters`, `/apm/retention-filters`, `/apm/ingestion-control` |
 | Software Catalog: service definitions (schema v2, v2.1, v2.2, JSON or YAML: team, contacts, links, tier, lifecycle, languages) shown on service pages and edited there; Teams with members, links and the services they own | `/api/v2/services/definitions`, `/api/v2/team`, `/teams` |
 | Scorecards: Production Readiness, Observability Best Practices and Ownership & Documentation rules evaluated from definitions, monitors, SLOs, spans and logs; custom rules whose outcomes are posted through the API; scores per service and scorecard | `/api/v2/scorecard/rules`, `/api/v2/scorecard/outcomes`, `/apm/scorecards` |
+| Continuous Profiler: pprof uploads of the Datadog profilers (gzip or zstd, v4 and older formats), merged over a period into a flame graph per service and version (CPU, wall time, allocations, heap…), top functions, time per endpoint, links from spans and service pages, raw pprof downloads; kept `ROBINE_DOG_PROFILE_RETENTION_DAYS` (8) | `/api/v2/profile`, `/profiling/v1/input`, `/profiling` |
 | Error Tracking: error spans (`error.type`, `error.message`, `error.stack`) and error logs (`error.kind`, `error.stack`) grouped into issues by service, type, masked message and top stack frame; volume, first / last seen, stack trace with app frames highlighted, breakdown by version, env, host and resource, links to the trace or log; For Review / Reviewed / Ignored / Resolved, with regressions | `/error-tracking` |
 | Sentry SDKs: envelope and store endpoints, the DSN's key being a client token; events become error logs (`error.kind`, `error.message`, `error.stack`, `usr.*`, `http.*`, trace ids) and Error Tracking issues | `/api/<project>/envelope/`, `/sentry/<service>/api/<project>/envelope/` |
 | Monitors: metric (`avg(last_5m):avg:system.cpu.user{*} by {host} > 80`), logs (`logs("…").rollup(…).by(…).last("5m") > 10`) and APM (`trace-analytics(…)`) queries, evaluated every minute per group, OK / Warn / Alert / No Data, recovery thresholds, renotify, mute by scope, priority, event history and value graph, Manage / Triggered Monitors pages, an editor with live evaluation | `/monitors` |
@@ -249,7 +250,8 @@ of robine-dog's own UI sessions recorded by Session Replay, 0 to 100, default
 0; with `ROBINE_DOG_CLIENT_TOKEN` set), `ROBINE_DOG_ARCHIVE_FLUSH_SECONDS`
 (how often log archives are written, default 300) and the S3 credentials of
 archives, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (or the instance's
-role).
+role), and `ROBINE_DOG_PROFILE_RETENTION_DAYS` (how long profiles are kept,
+default 8).
 
 Rows are written in batches (every 200 ms or 5,000 rows) and metric buckets
 every 10 seconds; on SIGTERM both are flushed before exiting.

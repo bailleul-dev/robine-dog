@@ -215,6 +215,9 @@ export function ServicePage() {
         <Link className="btn" to={`/logs?query=${encodeURIComponent(`service:${name}`)}`}>
           View Logs
         </Link>
+        <Link className="btn" to={`/profiling?service=${encodeURIComponent(name)}`}>
+          View Profiles
+        </Link>
       </div>
       <div className="page-scroll">
         {d && (
