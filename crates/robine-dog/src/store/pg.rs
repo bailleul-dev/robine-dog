@@ -151,6 +151,51 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (profile_id, name)
     );
     "#,
+    // LLM Observability: spans of LLM applications and their evaluations.
+    r#"
+    CREATE TABLE llm_spans (
+        trace_id TEXT NOT NULL,
+        span_id TEXT NOT NULL,
+        parent_id TEXT,
+        ml_app TEXT NOT NULL,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        start_ns BIGINT NOT NULL,
+        duration BIGINT NOT NULL,
+        error BOOLEAN NOT NULL,
+        model_name TEXT,
+        model_provider TEXT,
+        input_tokens BIGINT,
+        output_tokens BIGINT,
+        total_tokens BIGINT,
+        cost DOUBLE PRECISION,
+        session_id TEXT,
+        service TEXT,
+        env TEXT,
+        tags TEXT[] NOT NULL,
+        input TEXT NOT NULL,
+        output TEXT NOT NULL,
+        body JSONB NOT NULL,
+        PRIMARY KEY (trace_id, span_id)
+    );
+    CREATE INDEX llm_spans_by_app ON llm_spans (ml_app, start_ns);
+    CREATE INDEX llm_spans_by_time ON llm_spans (start_ns);
+    CREATE INDEX llm_spans_by_session ON llm_spans (session_id);
+    CREATE TABLE llm_evals (
+        id BIGSERIAL PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        span_id TEXT NOT NULL,
+        ml_app TEXT NOT NULL,
+        label TEXT NOT NULL,
+        metric_type TEXT NOT NULL,
+        categorical TEXT,
+        score DOUBLE PRECISION,
+        ts BIGINT NOT NULL,
+        tags TEXT[] NOT NULL
+    );
+    CREATE INDEX llm_evals_by_span ON llm_evals (span_id);
+    CREATE INDEX llm_evals_by_time ON llm_evals (ts);
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.
@@ -261,6 +306,11 @@ pub struct MetricMeta {
 }
 
 impl Pg {
+    /// A connection, for modules that own their tables' SQL.
+    pub async fn conn(&self) -> Result<deadpool_postgres::Object> {
+        Ok(self.pool.get().await?)
+    }
+
     pub async fn connect(url: &str) -> Result<Self> {
         let cfg: tokio_postgres::Config = url.parse().context("ROBINE_DOG_POSTGRES_URL")?;
         let mgr = Manager::from_config(

@@ -261,10 +261,10 @@ const SECTIONS: Item[][] = [
       id: "llm",
       label: "LLM Observability",
       icon: <AiIcon />,
-      match: [],
+      match: ["/llm"],
       links: [
-        { label: "Traces", hint: "Prompts, completions and tool calls" },
-        { label: "Evaluations" },
+        { label: "Overview", to: "/llm/overview", hint: "Calls, tokens, cost, models, evaluations" },
+        { label: "Traces", to: "/llm/traces", hint: "Prompts, completions and tool calls" },
         { label: "Experiments" },
         { label: "Agent Observability" },
       ],

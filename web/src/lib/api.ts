@@ -350,8 +350,19 @@ export type RumSession = {
 };
 export type RumReplay = {
   session_id: string;
-  views: { view_id: string; start: number; end: number; records: number; segments: number }[];
-  records: { type: number; timestamp: number; data?: unknown; format?: number }[];
+  views: {
+    view_id: string;
+    start: number;
+    end: number;
+    records: number;
+    segments: number;
+  }[];
+  records: {
+    type: number;
+    timestamp: number;
+    data?: unknown;
+    format?: number;
+  }[];
 };
 export type RumFrustrationTally = {
   count: number;
@@ -377,7 +388,12 @@ export type RumFrustrations = {
 };
 export type RumRetention = {
   period: string;
-  cohorts: { start: number; users: number; returned: number[]; rates: number[] }[];
+  cohorts: {
+    start: number;
+    users: number;
+    returned: number[];
+    rates: number[];
+  }[];
 };
 export type RumRetentionReq = {
   start_query: string;
@@ -894,7 +910,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-const profileQs = (f: ProfileFilter) =>
+const profileQs = (f: Record<string, string | number | boolean | undefined>) =>
   new URLSearchParams(
     Object.entries(f)
       .filter(([, v]) => v !== undefined && v !== "")
@@ -907,6 +923,90 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type LlmSpan = {
+  trace_id: string;
+  span_id: string;
+  parent_id: string | null;
+  ml_app: string;
+  name: string;
+  kind: string;
+  start_ns: number;
+  duration: number;
+  error: boolean;
+  model_name: string | null;
+  model_provider: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  cost: number | null;
+  session_id: string | null;
+  service: string | null;
+  env: string | null;
+  tags: string[];
+  input: string;
+  output: string;
+  body: Record<string, unknown>;
+};
+export type LlmEval = {
+  span_id?: string;
+  label: string;
+  type: string;
+  categorical: string | null;
+  score: number | null;
+};
+export type LlmTraceRow = LlmSpan & {
+  spans: number;
+  llm_calls: number;
+  tokens: number;
+  cost: number;
+  errors: number;
+  evals: LlmEval[];
+};
+export type LlmFilter = {
+  ml_app?: string;
+  query?: string;
+  kind?: string;
+  errors?: boolean;
+  from: number;
+  to: number;
+};
+export type LlmOverview = {
+  apps: { ml_app: string; traces: number }[];
+  traces: number;
+  errors: number;
+  llm_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number;
+  p50: number;
+  p95: number;
+  interval_ms: number;
+  series: {
+    t: number;
+    traces: number;
+    errors: number;
+    tokens: number;
+    cost: number;
+  }[];
+  models: {
+    provider: string;
+    model: string;
+    calls: number;
+    errors: number;
+    input_tokens: number;
+    output_tokens: number;
+    cost: number;
+    p95: number;
+  }[];
+  evaluations: {
+    label: string;
+    type: string;
+    count: number;
+    avg_score: number | null;
+    top_value: string | null;
+    flagged: number;
+  }[];
+};
 export type ProfileFilter = {
   service?: string;
   env?: string;
@@ -937,7 +1037,12 @@ export type ProfiledService = {
   languages: string[];
   versions: string[];
 };
-export type FlameNode = { name: string; value: number; self: number; children: FlameNode[] };
+export type FlameNode = {
+  name: string;
+  value: number;
+  self: number;
+  children: FlameNode[];
+};
 export type FlameGraph = {
   type: string;
   unit: string;
@@ -962,13 +1067,27 @@ export type RetentionFilter = {
 };
 export type IngestionService = {
   service: string;
-  last_hour: { spans: number; kept_spans: number; traces: number; kept_traces: number; bytes: number };
+  last_hour: {
+    spans: number;
+    kept_spans: number;
+    traces: number;
+    kept_traces: number;
+    bytes: number;
+  };
   spans_per_second: number;
   mechanisms: Record<string, number>;
   tracers: Record<string, number>;
   last_seen: number;
 };
-export type ApmPoint = { t: number; hits: number; errors: number; p50: number; p95: number; p99: number; max: number };
+export type ApmPoint = {
+  t: number;
+  hits: number;
+  errors: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+};
 export type TraceSample = {
   trace_id: string;
   span_id: string;
@@ -981,11 +1100,31 @@ export type ResourceDetail = {
   service: string;
   resource: string;
   operation: string;
-  summary: { hits: number; errors: number; error_rate: number; p50: number; p75: number; p90: number; p95: number; p99: number; max: number; avg: number; total_time: number };
+  summary: {
+    hits: number;
+    errors: number;
+    error_rate: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    p95: number;
+    p99: number;
+    max: number;
+    avg: number;
+    total_time: number;
+  };
   interval_ms: number;
   timeseries: ApmPoint[];
   distribution: [number, number][];
-  spans: { service: string; name: string; traces: number; spans_per_trace: number; avg: number; p95: number; time_share: number }[];
+  spans: {
+    service: string;
+    name: string;
+    traces: number;
+    spans_per_trace: number;
+    avg: number;
+    p95: number;
+    time_share: number;
+  }[];
   slowest: TraceSample[];
   errors: TraceSample[];
   status_codes: [string, number][];
@@ -1022,7 +1161,14 @@ export type TeamView = {
 };
 export type ScorecardRule = {
   id: string;
-  attributes: { name: string; scorecard_name: string; description: string; enabled: boolean; custom: boolean; owner: string | null };
+  attributes: {
+    name: string;
+    scorecard_name: string;
+    description: string;
+    enabled: boolean;
+    custom: boolean;
+    owner: string | null;
+  };
 };
 export type Scorecards = {
   rules: ScorecardRule[];
@@ -1049,7 +1195,12 @@ export type LogIndex = {
   daily_limit_warning_threshold_percentage?: number | null;
   num_retention_days?: number | null;
   is_rate_limited?: boolean;
-  usage?: { window_start: number; indexed: number; excluded: number; over_quota: number };
+  usage?: {
+    window_start: number;
+    indexed: number;
+    excluded: number;
+    over_quota: number;
+  };
 };
 export type ArchiveAttributes = {
   name: string;
@@ -1074,7 +1225,11 @@ export type ArchiveAttributes = {
     last_error: string | null;
   };
 };
-export type LogArchive = { id: string; type: string; attributes: ArchiveAttributes };
+export type LogArchive = {
+  id: string;
+  type: string;
+  attributes: ArchiveAttributes;
+};
 export type HistoricalView = {
   id: string;
   name: string;
@@ -1112,12 +1267,24 @@ export type SdsJson = {
   id: string;
   type: string;
   attributes: Record<string, unknown>;
-  relationships?: Record<string, { data: { id: string; type: string } | { id: string; type: string }[] }>;
+  relationships?: Record<
+    string,
+    { data: { id: string; type: string } | { id: string; type: string }[] }
+  >;
 };
-export type SdsConfig = { data: SdsJson; included: SdsJson[]; meta: { version: number } };
+export type SdsConfig = {
+  data: SdsJson;
+  included: SdsJson[];
+  meta: { version: number };
+};
 export type SdsStandardPattern = {
   id: string;
-  attributes: { name: string; pattern: string; description: string; tags: string[] };
+  attributes: {
+    name: string;
+    pattern: string;
+    description: string;
+    tags: string[];
+  };
 };
 export type ReferenceTable = {
   id: string;
@@ -1125,11 +1292,13 @@ export type ReferenceTable = {
     table_name: string;
     description: string;
     row_count: number;
-    schema: { primary_keys: string[]; fields: { name: string; type: string }[] };
+    schema: {
+      primary_keys: string[];
+      fields: { name: string; type: string }[];
+    };
     updated_at: string;
   };
 };
-
 
 export const api = {
   me: () => call<Identity>("/me"),
@@ -1431,18 +1600,17 @@ export const api = {
   createView: (v: Omit<SavedView, "id">) => post<SavedView>("/views", v),
   deleteView: (id: string) => del<unknown>(`/views/${id}`),
   generatedMetrics: (source: GeneratedSource) =>
-    call<{ data: GeneratedMetric[] }>(generatedPath(source)).then((r) => r.data),
+    call<{ data: GeneratedMetric[] }>(generatedPath(source)).then(
+      (r) => r.data,
+    ),
   createGeneratedMetric: (
     source: GeneratedSource,
     id: string,
     attributes: GeneratedMetricAttributes,
   ) =>
-    post<{ data: GeneratedMetric }>(
-      generatedPath(source),
-      {
-        data: { id, type: `${source}_metrics`, attributes },
-      },
-    ),
+    post<{ data: GeneratedMetric }>(generatedPath(source), {
+      data: { id, type: `${source}_metrics`, attributes },
+    }),
   updateGeneratedMetric: (
     source: GeneratedSource,
     id: string,
@@ -1459,30 +1627,48 @@ export const api = {
     ),
   deleteGeneratedMetric: (source: GeneratedSource, id: string) =>
     del<unknown>(`${generatedPath(source)}/${encodeURIComponent(id)}`),
-  logIndexes: () => call<{ indexes: LogIndex[] }>("/logs/config/indexes").then((r) => r.indexes),
+  logIndexes: () =>
+    call<{ indexes: LogIndex[] }>("/logs/config/indexes").then(
+      (r) => r.indexes,
+    ),
   createLogIndex: (i: LogIndex) => post<LogIndex>("/logs/config/indexes", i),
   updateLogIndex: (name: string, i: LogIndex) =>
     put<LogIndex>(`/logs/config/indexes/${encodeURIComponent(name)}`, i),
-  deleteLogIndex: (name: string) => del<unknown>(`/logs/config/indexes/${encodeURIComponent(name)}`),
+  deleteLogIndex: (name: string) =>
+    del<unknown>(`/logs/config/indexes/${encodeURIComponent(name)}`),
   setLogIndexOrder: (names: string[]) =>
     put<unknown>("/logs/config/index-order", { index_names: names }),
-  logArchives: () => call<{ data: LogArchive[] }>("/logs/config/archives").then((r) => r.data),
+  logArchives: () =>
+    call<{ data: LogArchive[] }>("/logs/config/archives").then((r) => r.data),
   createLogArchive: (a: ArchiveAttributes) =>
-    post<{ data: LogArchive }>("/logs/config/archives", { data: { type: "archives", attributes: a } }),
+    post<{ data: LogArchive }>("/logs/config/archives", {
+      data: { type: "archives", attributes: a },
+    }),
   updateLogArchive: (id: string, a: ArchiveAttributes) =>
-    put<{ data: LogArchive }>(`/logs/config/archives/${id}`, { data: { type: "archives", attributes: a } }),
+    put<{ data: LogArchive }>(`/logs/config/archives/${id}`, {
+      data: { type: "archives", attributes: a },
+    }),
   deleteLogArchive: (id: string) => del<unknown>(`/logs/config/archives/${id}`),
   setLogArchiveOrder: (ids: string[]) =>
     put<unknown>("/logs/config/archive-order", {
       data: { type: "archive_order", attributes: { archive_ids: ids } },
     }),
   historicalViews: () => call<HistoricalView[]>("/logs/rehydrations"),
-  rehydrate: (v: { name: string; archive_id: string; query: string; from: number; to: number; max_logs?: number }) =>
-    post<HistoricalView>("/logs/rehydrations", v),
-  deleteHistoricalView: (id: string) => del<unknown>(`/logs/rehydrations/${id}`),
+  rehydrate: (v: {
+    name: string;
+    archive_id: string;
+    query: string;
+    from: number;
+    to: number;
+    max_logs?: number;
+  }) => post<HistoricalView>("/logs/rehydrations", v),
+  deleteHistoricalView: (id: string) =>
+    del<unknown>(`/logs/rehydrations/${id}`),
   sdsConfig: () => call<SdsConfig>("/sensitive-data-scanner/config"),
   sdsStandardPatterns: () =>
-    call<{ data: SdsStandardPattern[] }>("/sensitive-data-scanner/config/standard-patterns").then((r) => r.data),
+    call<{ data: SdsStandardPattern[] }>(
+      "/sensitive-data-scanner/config/standard-patterns",
+    ).then((r) => r.data),
   sdsReorderGroups: (ids: string[]) =>
     call<unknown>("/sensitive-data-scanner/config", {
       method: "PATCH",
@@ -1490,12 +1676,23 @@ export const api = {
         data: {
           id: "robine-dog",
           type: "sensitive_data_scanner_configuration",
-          relationships: { groups: { data: ids.map((id) => ({ id, type: "sensitive_data_scanner_group" })) } },
+          relationships: {
+            groups: {
+              data: ids.map((id) => ({
+                id,
+                type: "sensitive_data_scanner_group",
+              })),
+            },
+          },
         },
         meta: {},
       }),
     }),
-  sdsSaveGroup: (id: string | null, attributes: Record<string, unknown>, ruleOrder?: string[]) =>
+  sdsSaveGroup: (
+    id: string | null,
+    attributes: Record<string, unknown>,
+    ruleOrder?: string[],
+  ) =>
     id
       ? call<unknown>(`/sensitive-data-scanner/config/groups/${id}`, {
           method: "PATCH",
@@ -1505,7 +1702,16 @@ export const api = {
               type: "sensitive_data_scanner_group",
               attributes,
               ...(ruleOrder
-                ? { relationships: { rules: { data: ruleOrder.map((r) => ({ id: r, type: "sensitive_data_scanner_rule" })) } } }
+                ? {
+                    relationships: {
+                      rules: {
+                        data: ruleOrder.map((r) => ({
+                          id: r,
+                          type: "sensitive_data_scanner_rule",
+                        })),
+                      },
+                    },
+                  }
                 : {}),
             },
             meta: {},
@@ -1516,77 +1722,170 @@ export const api = {
             type: "sensitive_data_scanner_group",
             attributes,
             relationships: {
-              configuration: { data: { type: "sensitive_data_scanner_configuration", id: "robine-dog" } },
+              configuration: {
+                data: {
+                  type: "sensitive_data_scanner_configuration",
+                  id: "robine-dog",
+                },
+              },
               rules: { data: [] },
             },
           },
           meta: {},
         }),
-  sdsDeleteGroup: (id: string) => del<unknown>(`/sensitive-data-scanner/config/groups/${id}`),
-  sdsSaveRule: (id: string | null, groupId: string, attributes: Record<string, unknown>, standard: string | null) => {
+  sdsDeleteGroup: (id: string) =>
+    del<unknown>(`/sensitive-data-scanner/config/groups/${id}`),
+  sdsSaveRule: (
+    id: string | null,
+    groupId: string,
+    attributes: Record<string, unknown>,
+    standard: string | null,
+  ) => {
     const relationships: Record<string, unknown> = {
       group: { data: { type: "sensitive_data_scanner_group", id: groupId } },
     };
     if (standard)
-      relationships.standard_pattern = { data: { type: "sensitive_data_scanner_standard_pattern", id: standard } };
-    const body = JSON.stringify({ data: { type: "sensitive_data_scanner_rule", attributes, relationships }, meta: {} });
+      relationships.standard_pattern = {
+        data: { type: "sensitive_data_scanner_standard_pattern", id: standard },
+      };
+    const body = JSON.stringify({
+      data: { type: "sensitive_data_scanner_rule", attributes, relationships },
+      meta: {},
+    });
     return id
-      ? call<unknown>(`/sensitive-data-scanner/config/rules/${id}`, { method: "PATCH", body })
-      : call<unknown>("/sensitive-data-scanner/config/rules", { method: "POST", body });
+      ? call<unknown>(`/sensitive-data-scanner/config/rules/${id}`, {
+          method: "PATCH",
+          body,
+        })
+      : call<unknown>("/sensitive-data-scanner/config/rules", {
+          method: "POST",
+          body,
+        });
   },
-  sdsDeleteRule: (id: string) => del<unknown>(`/sensitive-data-scanner/config/rules/${id}`),
-  sdsTest: (t: { pattern: string; standard_pattern_id: string | null; text_replacement: SdsReplacement; text: string }) =>
-    post<{ matches: { start: number; end: number; text: string }[]; result: string }>("/sensitive-data-scanner/test", t),
-  referenceTables: () => call<{ data: ReferenceTable[] }>("/reference-tables/tables").then((r) => r.data),
-  createReferenceTable: (t: { table_name: string; description: string; primary_key: string; csv: string }) =>
-    post<{ data: ReferenceTable }>("/reference-tables/tables", t),
+  sdsDeleteRule: (id: string) =>
+    del<unknown>(`/sensitive-data-scanner/config/rules/${id}`),
+  sdsTest: (t: {
+    pattern: string;
+    standard_pattern_id: string | null;
+    text_replacement: SdsReplacement;
+    text: string;
+  }) =>
+    post<{
+      matches: { start: number; end: number; text: string }[];
+      result: string;
+    }>("/sensitive-data-scanner/test", t),
+  referenceTables: () =>
+    call<{ data: ReferenceTable[] }>("/reference-tables/tables").then(
+      (r) => r.data,
+    ),
+  createReferenceTable: (t: {
+    table_name: string;
+    description: string;
+    primary_key: string;
+    csv: string;
+  }) => post<{ data: ReferenceTable }>("/reference-tables/tables", t),
   replaceReferenceTable: (id: string, csv: string, description: string) =>
     call<{ data: ReferenceTable }>(`/reference-tables/tables/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ csv, description }),
     }),
-  deleteReferenceTable: (id: string) => del<unknown>(`/reference-tables/tables/${id}`),
+  deleteReferenceTable: (id: string) =>
+    del<unknown>(`/reference-tables/tables/${id}`),
   referenceTableRows: (id: string, search: string) =>
-    call<{ data: { id: string; attributes: { values: Record<string, unknown> } }[]; meta: { total: number } }>(
+    call<{
+      data: { id: string; attributes: { values: Record<string, unknown> } }[];
+      meta: { total: number };
+    }>(
       `/reference-tables/tables/${id}/rows?limit=100&search=${encodeURIComponent(search)}`,
     ),
   retentionFilters: () =>
-    call<{ data: RetentionFilter[] }>("/apm/config/retention-filters").then((r) => r.data),
-  saveRetentionFilter: (id: string | null, a: { name: string; filter: { query: string }; rate: number; enabled: boolean }) => {
-    const body = { data: { type: "apm_retention_filter", attributes: { ...a, filter_type: "spans-sampling-processor" } } };
+    call<{ data: RetentionFilter[] }>("/apm/config/retention-filters").then(
+      (r) => r.data,
+    ),
+  saveRetentionFilter: (
+    id: string | null,
+    a: {
+      name: string;
+      filter: { query: string };
+      rate: number;
+      enabled: boolean;
+    },
+  ) => {
+    const body = {
+      data: {
+        type: "apm_retention_filter",
+        attributes: { ...a, filter_type: "spans-sampling-processor" },
+      },
+    };
     return id
       ? put<unknown>(`/apm/config/retention-filters/${id}`, body)
       : post<unknown>("/apm/config/retention-filters", body);
   },
-  deleteRetentionFilter: (id: string) => del<unknown>(`/apm/config/retention-filters/${id}`),
+  deleteRetentionFilter: (id: string) =>
+    del<unknown>(`/apm/config/retention-filters/${id}`),
   reorderRetentionFilters: (ids: string[]) =>
     put<unknown>("/apm/config/retention-filters-execution-order", {
       data: ids.map((id) => ({ id, type: "apm_retention_filter" })),
     }),
-  profiledServices: (f: ProfileFilter) => call<ProfiledService[]>(`/profiling/services?${profileQs(f)}`),
-  profiles: (f: ProfileFilter) => call<ProfileRow[]>(`/profiling/profiles?${profileQs(f)}`),
-  flamegraph: (f: ProfileFilter & { type?: string; endpoint?: string; profile_id?: number }) =>
-    post<FlameGraph>("/profiling/flamegraph", f),
-  apmIngestion: () => call<{ services: IngestionService[] }>("/apm/ingestion").then((r) => r.services),
-  apmResource: (service: string, resource: string, from: number, to: number, env?: string) =>
+  llmTraces: (f: LlmFilter) =>
+    call<LlmTraceRow[]>(`/llm-obs/traces?${profileQs(f)}`),
+  llmTrace: (id: string) =>
+    call<{ spans: LlmSpan[]; evals: (LlmEval & { ts: number })[] }>(
+      `/llm-obs/traces/${id}`,
+    ),
+  llmOverview: (f: LlmFilter) =>
+    call<LlmOverview>(`/llm-obs/overview?${profileQs(f)}`),
+  profiledServices: (f: ProfileFilter) =>
+    call<ProfiledService[]>(`/profiling/services?${profileQs(f)}`),
+  profiles: (f: ProfileFilter) =>
+    call<ProfileRow[]>(`/profiling/profiles?${profileQs(f)}`),
+  flamegraph: (
+    f: ProfileFilter & {
+      type?: string;
+      endpoint?: string;
+      profile_id?: number;
+    },
+  ) => post<FlameGraph>("/profiling/flamegraph", f),
+  apmIngestion: () =>
+    call<{ services: IngestionService[] }>("/apm/ingestion").then(
+      (r) => r.services,
+    ),
+  apmResource: (
+    service: string,
+    resource: string,
+    from: number,
+    to: number,
+    env?: string,
+  ) =>
     call<ResourceDetail>(
       `/apm/resource?service=${encodeURIComponent(service)}&resource=${encodeURIComponent(resource)}&from=${from}&to=${to}${env ? `&env=${encodeURIComponent(env)}` : ""}`,
     ),
   serviceDefinitions: () =>
-    call<{ data: ServiceDefinition[] }>("/services/definitions").then((r) => r.data),
+    call<{ data: ServiceDefinition[] }>("/services/definitions").then(
+      (r) => r.data,
+    ),
   definitionYaml: (service: string) =>
-    call<{ yaml: string; exists: boolean }>(`/apm/definition-template/${encodeURIComponent(service)}`),
+    call<{ yaml: string; exists: boolean }>(
+      `/apm/definition-template/${encodeURIComponent(service)}`,
+    ),
   saveDefinition: (yaml: string) =>
     call<unknown>("/services/definitions", {
       method: "POST",
       body: yaml,
       headers: { "content-type": "application/yaml" },
     }),
-  deleteDefinition: (service: string) => del<unknown>(`/services/definitions/${encodeURIComponent(service)}`),
+  deleteDefinition: (service: string) =>
+    del<unknown>(`/services/definitions/${encodeURIComponent(service)}`),
   teams: () => call<TeamView[]>("/teams"),
-  saveTeam: (id: string | null, a: { name: string; handle: string; description: string }) =>
+  saveTeam: (
+    id: string | null,
+    a: { name: string; handle: string; description: string },
+  ) =>
     id
-      ? call<unknown>(`/team/${id}`, { method: "PATCH", body: JSON.stringify({ data: { type: "team", attributes: a } }) })
+      ? call<unknown>(`/team/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ data: { type: "team", attributes: a } }),
+        })
       : post<unknown>("/team", { data: { type: "team", attributes: a } }),
   deleteTeam: (id: string) => del<unknown>(`/team/${id}`),
   addTeamMember: (id: string, user: string, admin: boolean) =>
@@ -1600,11 +1899,20 @@ export const api = {
   removeTeamMember: (id: string, user: string) =>
     del<unknown>(`/team/${id}/memberships/${encodeURIComponent(user)}`),
   addTeamLink: (id: string, label: string, url: string) =>
-    post<unknown>(`/team/${id}/links`, { data: { type: "team_links", attributes: { label, url } } }),
-  removeTeamLink: (id: string, link: string) => del<unknown>(`/team/${id}/links/${link}`),
+    post<unknown>(`/team/${id}/links`, {
+      data: { type: "team_links", attributes: { label, url } },
+    }),
+  removeTeamLink: (id: string, link: string) =>
+    del<unknown>(`/team/${id}/links/${link}`),
   scorecards: () => call<Scorecards>("/scorecards"),
-  createScorecardRule: (a: { name: string; scorecard_name: string; description: string }) =>
-    post<unknown>("/scorecard/rules", { data: { type: "rule", attributes: { ...a, enabled: true } } }),
+  createScorecardRule: (a: {
+    name: string;
+    scorecard_name: string;
+    description: string;
+  }) =>
+    post<unknown>("/scorecard/rules", {
+      data: { type: "rule", attributes: { ...a, enabled: true } },
+    }),
   deleteScorecardRule: (id: string) => del<unknown>(`/scorecard/rules/${id}`),
   monitors: () => call<Monitor[]>("/monitors"),
   monitor: (id: number) => call<Monitor>(`/monitors/${id}`),

@@ -15,6 +15,7 @@ mod config;
 mod events;
 mod hosts;
 mod intake;
+mod llmobs;
 mod logconfig;
 mod mcp;
 mod metrics;
@@ -455,6 +456,9 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         );
     let r = r
         .route("/apm/ingestion", get(catalog::retention::ingestion))
+        .route("/llm-obs/traces", get(llmobs::traces))
+        .route("/llm-obs/traces/{id}", get(llmobs::trace))
+        .route("/llm-obs/overview", get(llmobs::overview))
         .route("/profiling/profiles", get(profiling::list))
         .route("/profiling/services", get(profiling::services))
         .route("/profiling/flamegraph", post(profiling::flamegraph))
@@ -759,6 +763,19 @@ fn app(st: AppState) -> Router {
         )
         .route("/api/v1/check_run", post(checks::intake))
         .route("/api/v2/profile", post(profiling::intake))
+        .route("/api/v2/llmobs", post(llmobs::spans_intake))
+        .route(
+            "/api/intake/llm-obs/v1/trace/spans",
+            post(llmobs::spans_intake),
+        )
+        .route(
+            "/api/intake/llm-obs/v1/eval-metric",
+            post(llmobs::evals_intake),
+        )
+        .route(
+            "/api/intake/llm-obs/v2/eval-metric",
+            post(llmobs::evals_intake),
+        )
         .route("/profiling/v1/input", post(profiling::intake))
         .route("/api/v1/series", post(intake::series::v1))
         .route("/api/v2/series", post(intake::series::v2))
@@ -892,6 +909,7 @@ async fn main() -> anyhow::Result<()> {
     synthetics::spawn(st.clone());
     rum::replay::spawn_purge(st.clone());
     profiling::spawn_purge(st.clone());
+    llmobs::spawn_purge(st.clone());
     {
         // RUM-based metrics counted at a session's or view's end.
         let st = st.clone();

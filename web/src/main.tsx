@@ -24,6 +24,7 @@ import { DashboardList, DashboardPage } from "./pages/Dashboards";
 import { ErrorTracking, IssuePage } from "./pages/ErrorTracking";
 import { ManageMonitors, MonitorEditor, MonitorPage, TriggeredMonitors, Webhooks } from "./pages/Monitors";
 import { GenerateMetrics } from "./pages/GenerateMetrics";
+import { LlmOverview, LlmTraces } from "./pages/LlmObs";
 import { Profiler } from "./pages/Profiler";
 import {
   IngestionControl,
@@ -133,6 +134,8 @@ function App() {
         <Route path="/apm/ingestion-control" element={<IngestionControl />} />
         <Route path="/teams" element={<Teams />} />
         <Route path="/profiling" element={<Profiler />} />
+        <Route path="/llm/overview" element={<LlmOverview />} />
+        <Route path="/llm/traces" element={<LlmTraces />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />

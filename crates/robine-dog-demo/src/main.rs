@@ -6,6 +6,7 @@
 //!
 //! Usage: robine-dog-demo [--backfill-minutes 60] [--rate 3] [--no-live]
 
+mod llm;
 mod profiles;
 mod rum;
 
@@ -900,6 +901,36 @@ impl Client {
         Ok(())
     }
 
+    /// LLM Observability traces starting at these times, and their evaluations.
+    fn send_llm(&self, rng: &mut impl Rng, starts_ns: &[i64]) -> anyhow::Result<()> {
+        let (mut events, mut evals) = (Vec::new(), Vec::new());
+        for t in starts_ns {
+            let (e, m) = llm::trace(rng, *t);
+            events.push(e);
+            evals.extend(
+                m["data"]["attributes"]["metrics"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+        }
+        for (path, body) in [
+            ("/api/v2/llmobs", serde_json::json!(events)),
+            (
+                "/api/intake/llm-obs/v1/eval-metric",
+                serde_json::json!({"data": {"type": "evaluation_metric", "attributes": {"metrics": evals}}}),
+            ),
+        ] {
+            self.http
+                .post(format!("{}{path}", self.app_url))
+                .header("DD-API-KEY", &self.api_key)
+                .json(&body)
+                .send()?
+                .error_for_status()?;
+        }
+        Ok(())
+    }
+
     fn send_rum(&self, events: &[Value]) -> anyhow::Result<()> {
         for chunk in events.chunks(400) {
             let body: Vec<String> = chunk.iter().map(|e| e.to_string()).collect();
@@ -1145,6 +1176,11 @@ fn main() -> anyhow::Result<()> {
         for m in (0..minutes).rev() {
             client.send_profiles(&mut rng, now_ms - m * 60_000)?;
         }
+        let starts: Vec<i64> = (0..minutes * 4)
+            .map(|i| (now_ms - minutes * 60_000 + i * 15_000) * 1_000_000)
+            .collect();
+        println!("backfilling {} LLM traces…", starts.len());
+        client.send_llm(&mut rng, &starts)?;
         println!("backfill done");
     }
     if live {
@@ -1158,6 +1194,11 @@ fn main() -> anyhow::Result<()> {
                     eprintln!("profile upload failed: {e}");
                 }
                 last_profile = now_ms;
+            }
+            if rng.random_bool(0.12)
+                && let Err(e) = client.send_llm(&mut rng, &[now_ns() - 4_000_000_000])
+            {
+                eprintln!("LLM traces failed: {e}");
             }
             let now_s = now_ns() / 1_000_000_000;
             if now_s - last_tick >= 10 {
