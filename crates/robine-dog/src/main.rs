@@ -21,6 +21,7 @@ mod delivery;
 mod dsm;
 mod events;
 mod hosts;
+mod infra;
 mod insights;
 mod intake;
 mod llmobs;
@@ -546,6 +547,10 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/ci/pipelines", get(civis::pipelines))
         .route("/deployments", get(delivery::deployments))
         .route("/appsec/endpoints", get(appsec::endpoints))
+        .route("/npm", get(infra::npm))
+        .route("/network-devices", get(infra::devices))
+        .route("/fleet", get(infra::fleet))
+        .route("/data-jobs", get(infra::data_jobs))
         .route("/code-security", get(appsec::vulnerabilities))
         .route("/dora", get(delivery::dora_metrics))
         .route("/coverage", get(delivery::coverage))
@@ -985,6 +990,9 @@ fn app(st: AppState) -> Router {
             post(llmobs::evals_intake),
         )
         .route("/api/v1/collector", post(processes::intake))
+        .route("/api/v1/connections", post(infra::connections))
+        .route("/api/v2/ndm", post(infra::ndm))
+        .route("/api/v1/metadata", post(infra::inventory))
         .route("/api/v0.1/pipeline_stats", post(dsm::intake))
         .route("/api/v2/databasequery", post(dbm::samples_intake))
         .route("/api/v2/dbmmetrics", post(dbm::metrics_intake))
@@ -1108,6 +1116,7 @@ async fn main() -> anyhow::Result<()> {
     llmobs::spawn_purge(st.clone());
     civis::spawn_purge(st.clone());
     appsec::spawn(st.clone());
+    infra::spawn_purge(st.clone());
     audit::spawn_purge(st.clone());
     security::spawn(st.clone());
     oncall::spawn(st.clone());

@@ -411,6 +411,29 @@ const MIGRATIONS: &[&str] = &[
         fixed TEXT
     );
     "#,
+    // Cloud Network Monitoring: flows per minute, local addresses per host.
+    r#"
+    CREATE TABLE npm_flows (
+        ts BIGINT NOT NULL,
+        host TEXT NOT NULL,
+        local_ip TEXT NOT NULL,
+        remote_ip TEXT NOT NULL,
+        port INT NOT NULL,
+        protocol TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        bytes_sent BIGINT NOT NULL,
+        bytes_received BIGINT NOT NULL,
+        retransmits BIGINT NOT NULL,
+        rtt_sum BIGINT NOT NULL,
+        connections BIGINT NOT NULL
+    );
+    CREATE INDEX npm_flows_by_time ON npm_flows (ts);
+    CREATE TABLE npm_hosts (
+        ip TEXT PRIMARY KEY,
+        host TEXT NOT NULL,
+        seen BIGINT NOT NULL
+    );
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.

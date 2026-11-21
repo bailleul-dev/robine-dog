@@ -217,7 +217,16 @@ const SECTIONS: Item[][] = [
       label: "Infrastructure",
       icon: <InfraIcon />,
       to: "/infrastructure",
-      match: ["/infrastructure", "/containers", "/orchestration", "/processes"],
+      match: [
+        "/infrastructure",
+        "/containers",
+        "/orchestration",
+        "/processes",
+        "/resources",
+        "/network",
+        "/devices",
+        "/fleet",
+      ],
       links: [
         {
           label: "Hosts",
@@ -240,16 +249,32 @@ const SECTIONS: Item[][] = [
           hint: "Live processes of every host",
         },
         { label: "Serverless" },
-        { label: "Cloud Network" },
-        { label: "Network Devices" },
-        { label: "Resource Catalog" },
+        {
+          label: "Cloud Network",
+          to: "/network",
+          hint: "Flows between hosts (system-probe)",
+        },
+        {
+          label: "Network Devices",
+          to: "/devices",
+          hint: "SNMP devices and interfaces",
+        },
+        {
+          label: "Resource Catalog",
+          to: "/resources",
+          hint: "Every host, container, pod and device",
+        },
         { label: "Cloud Cost" },
       ],
       groups: [
         {
           title: "Agents",
           links: [
-            { label: "Fleet Automation" },
+            {
+              label: "Fleet Automation",
+              to: "/fleet",
+              hint: "Agents, versions and checks",
+            },
             { label: "Remote Configuration" },
           ],
         },
@@ -260,7 +285,14 @@ const SECTIONS: Item[][] = [
       label: "APM",
       icon: <ApmIcon />,
       to: "/apm/services",
-      match: ["/apm", "/teams", "/profiling", "/databases", "/data-streams"],
+      match: [
+        "/apm",
+        "/teams",
+        "/profiling",
+        "/databases",
+        "/data-streams",
+        "/data-jobs",
+      ],
       links: [
         {
           label: "Software Catalog",
@@ -303,7 +335,11 @@ const SECTIONS: Item[][] = [
           to: "/data-streams",
           hint: "Queues: throughput, latency, consumer lag",
         },
-        { label: "Data Jobs Monitoring" },
+        {
+          label: "Data Jobs Monitoring",
+          to: "/data-jobs",
+          hint: "Spark applications, jobs and stages",
+        },
       ],
       groups: [
         {
@@ -484,14 +520,26 @@ const SECTIONS: Item[][] = [
           to: "/error-tracking",
           hint: "Issues across logs, traces and RUM",
         },
-        { label: "Exception Replay" },
+        {
+          label: "Exception Replay",
+          to: "/error-tracking",
+          hint: "Local variables of an error, from its issue",
+        },
       ],
       groups: [
         {
           title: "Settings",
           links: [
-            { label: "Issue Teams" },
-            { label: "Custom Grouping" },
+            {
+              label: "Issue Teams",
+              to: "/error-tracking",
+              hint: "Team facet, from the Software Catalog",
+            },
+            {
+              label: "Custom Grouping",
+              to: "/error-tracking",
+              hint: "error.fingerprint groups errors",
+            },
             { label: "Dynamic Sampling" },
           ],
         },
@@ -616,7 +664,11 @@ const SECTIONS: Item[][] = [
           links: [
             { label: "Agent" },
             { label: "OpenTelemetry" },
-            { label: "Fleet Automation" },
+            {
+              label: "Fleet Automation",
+              to: "/fleet",
+              hint: "Agents, versions and checks",
+            },
           ],
         },
       ],

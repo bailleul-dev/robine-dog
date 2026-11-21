@@ -2169,6 +2169,45 @@ export const api = {
       daily: [number, number][];
     }>(`/dora?${deliveryQs(f)}`),
   coverage: () => call<{ data: CoverageReport[] }>("/coverage"),
+  npm: (from: number, to: number) =>
+    call<{
+      data: {
+        source: string;
+        dest: string;
+        port: number;
+        protocol: string;
+        direction: string;
+        bytes_sent: number;
+        bytes_received: number;
+        retransmits: number;
+        rtt_us: number;
+        connections: number;
+      }[];
+    }>(`/npm?from=${from}&to=${to}`),
+  networkDevices: () =>
+    call<{ data: Record<string, unknown>[] }>("/network-devices"),
+  fleet: () => call<{ data: Record<string, unknown>[] }>("/fleet"),
+  dataJobs: (from: number, to: number) =>
+    call<{
+      summary: {
+        app: string;
+        kind: string;
+        count: number;
+        errors: number;
+        avg_ns: number;
+        max_ns: number;
+        last_seen: number;
+      }[];
+      runs: {
+        app: string;
+        resource: string;
+        ts: number;
+        duration_ns: number;
+        error: boolean;
+        trace_id: string;
+        span_id: string;
+      }[];
+    }>(`/data-jobs?from=${from}&to=${to}`),
   appsecEndpoints: (from: number, to: number) =>
     call<{
       data: {

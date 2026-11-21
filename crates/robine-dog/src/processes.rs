@@ -170,7 +170,14 @@ pub fn parse(data: &[u8]) -> Result<Vec<Proc>, String> {
 }
 
 /// `POST /api/v1/collector`.
-pub async fn intake(body: Bytes) -> Response {
+pub async fn intake(State(st): State<AppState>, body: Bytes) -> Response {
+    // System-probe connections come through the same collector.
+    if crate::infra::is_connections(&body) {
+        return match crate::infra::store_connections(&st, &body).await {
+            Ok(_) => Json(json!({})).into_response(),
+            Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        };
+    }
     let raw = match self::body(&body) {
         Ok(r) => r,
         Err(e) => return (StatusCode::BAD_REQUEST, e).into_response(),

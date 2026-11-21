@@ -89,6 +89,13 @@ import {
   CodeSecurity,
   WorkloadProtection,
 } from "./pages/AppSec";
+import {
+  CloudNetwork,
+  DataJobs,
+  Fleet,
+  NetworkDevices,
+  ResourceCatalog,
+} from "./pages/InfraMore";
 
 const client = new QueryClient({
   defaultOptions: {
@@ -272,6 +279,11 @@ function App() {
         <Route path="/notebook/list" element={<NotebookList />} />
         <Route path="/notebook/:id" element={<NotebookPage />} />
         <Route path="/infrastructure" element={<Hosts />} />
+        <Route path="/resources" element={<ResourceCatalog />} />
+        <Route path="/network" element={<CloudNetwork />} />
+        <Route path="/devices" element={<NetworkDevices />} />
+        <Route path="/fleet" element={<Fleet />} />
+        <Route path="/data-jobs" element={<DataJobs />} />
         <Route path="/infrastructure/map" element={<HostMap />} />
         <Route path="/containers" element={<Containers />} />
         <Route
