@@ -30,6 +30,7 @@ mod pipelines;
 mod processes;
 mod profiling;
 mod query;
+mod reports;
 mod rum;
 mod security;
 mod slo;
@@ -488,6 +489,23 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             axum::routing::patch(security::triage),
         )
         .route("/audit/events", get(audit::events))
+        .route("/monitors/templates", get(monitors::library::templates))
+        .route("/monitors/quality", get(monitors::library::quality))
+        .route(
+            "/reports",
+            get(reports::reports).post(reports::create_report),
+        )
+        .route(
+            "/reports/{id}",
+            put(reports::update_report).delete(reports::delete_report),
+        )
+        .route("/reports/{id}/send", post(reports::send_now))
+        .route("/reports/{id}/pdf", get(reports::pdf))
+        .route("/sheets", get(reports::sheets).post(reports::create_sheet))
+        .route(
+            "/sheets/{id}",
+            put(reports::update_sheet).delete(reports::delete_sheet),
+        )
         .route("/workflows", get(workflows::list).post(workflows::create))
         .route("/workflows/runs", get(workflows::runs))
         .route("/workflows/runs/{id}/{what}", post(workflows::decide))
@@ -1078,6 +1096,7 @@ async fn main() -> anyhow::Result<()> {
     security::spawn(st.clone());
     oncall::spawn(st.clone());
     workflows::spawn(st.clone());
+    reports::spawn(st.clone());
     {
         // RUM-based metrics counted at a session's or view's end.
         let st = st.clone();

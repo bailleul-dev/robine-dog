@@ -3,7 +3,7 @@
 //! of `ROBINE_DOG_SMTP_URL`.
 
 use crate::AppState;
-use lettre::message::{Mailbox, header::ContentType};
+use lettre::message::{Attachment as Part, Mailbox, MultiPart, SinglePart, header::ContentType};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use regex::Regex;
 use std::sync::{LazyLock, OnceLock};
@@ -53,6 +53,19 @@ pub async fn notify(st: &AppState, title: &str, message: &str) -> Vec<String> {
 
 /// Sends a plain-text e-mail to each address; the handles reached.
 pub async fn send(st: &AppState, to: &[String], title: &str, body: &str) -> Vec<String> {
+    send_with(st, to, title, body, None).await
+}
+
+/// An attachment: file name, content type, bytes.
+pub type Attachment<'a> = (&'a str, &'a str, &'a [u8]);
+
+pub async fn send_with(
+    st: &AppState,
+    to: &[String],
+    title: &str,
+    body: &str,
+    attachment: Option<Attachment<'_>>,
+) -> Vec<String> {
     if to.is_empty() {
         return Vec::new();
     }
@@ -75,12 +88,23 @@ pub async fn send(st: &AppState, to: &[String], title: &str, body: &str) -> Vec<
         let Ok(rcpt) = addr.parse::<Mailbox>() else {
             continue;
         };
-        let email = Message::builder()
+        let builder = Message::builder()
             .from(from.clone())
             .to(rcpt)
-            .subject(title)
-            .header(ContentType::TEXT_PLAIN)
-            .body(body.to_string());
+            .subject(title);
+        let email = match attachment {
+            None => builder
+                .header(ContentType::TEXT_PLAIN)
+                .body(body.to_string()),
+            Some((name, ctype, bytes)) => builder.multipart(
+                MultiPart::mixed()
+                    .singlepart(SinglePart::plain(body.to_string()))
+                    .singlepart(Part::new(name.to_string()).body(
+                        bytes.to_vec(),
+                        ContentType::parse(ctype).unwrap_or(ContentType::TEXT_PLAIN),
+                    )),
+            ),
+        };
         let result = match email {
             Ok(m) => smtp.send(m).await.map(|_| ()).map_err(|e| e.to_string()),
             Err(e) => Err(e.to_string()),

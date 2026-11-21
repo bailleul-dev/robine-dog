@@ -9,6 +9,7 @@
 //! - spans:   `trace-analytics("service:web").rollup("avg", "@duration").by("resource_name").last("10m") > 500000000`
 
 pub mod email;
+pub mod library;
 pub mod template;
 pub mod webhooks;
 

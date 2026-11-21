@@ -744,6 +744,36 @@ pub async fn run(
 }
 
 /// A step's default name: `Click on #buy`, `Type "x" in #q`.
+/// A page printed to PDF (A3 landscape, with backgrounds), once it has
+/// settled and `wait` more has passed for charts to draw. Dashboard reports.
+pub async fn pdf(url: &str, wait: Duration) -> Result<Vec<u8>, String> {
+    let mut cdp = Cdp::launch().await?;
+    let r = async {
+        let _ = cdp
+            .call(
+                "Emulation.setDeviceMetricsOverride",
+                json!({"width": 1600, "height": 1000, "deviceScaleFactor": 1, "mobile": false}),
+            )
+            .await;
+        cdp.navigate(url, Duration::from_secs(30)).await?;
+        tokio::time::sleep(wait).await;
+        let r = cdp
+            .call(
+                "Page.printToPDF",
+                json!({"landscape": false, "printBackground": true, "preferCSSPageSize": false,
+                    "paperWidth": 16.5, "paperHeight": 11.7, "marginTop": 0.3, "marginBottom": 0.3,
+                    "marginLeft": 0.3, "marginRight": 0.3}),
+            )
+            .await?;
+        base64::engine::general_purpose::STANDARD
+            .decode(r["data"].as_str().unwrap_or(""))
+            .map_err(|e| e.to_string())
+    }
+    .await;
+    cdp.close().await;
+    r
+}
+
 pub fn describe(s: &BrowserStep, vars: &Vars) -> String {
     let p = render_value(&s.params, vars);
     let el = locator(&p).map(|(_, v)| v).unwrap_or_default();

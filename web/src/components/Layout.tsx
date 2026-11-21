@@ -127,7 +127,7 @@ const SECTIONS: Item[][] = [
       label: "Dashboards",
       icon: <DashboardIcon />,
       to: "/dashboard/lists",
-      match: ["/dashboard", "/notebook"],
+      match: ["/dashboard", "/notebook", "/sheets"],
       links: [
         {
           label: "Dashboard List",
@@ -139,8 +139,16 @@ const SECTIONS: Item[][] = [
           to: "/notebook/list",
           hint: "Text and graphs, for investigations",
         },
-        { label: "Reports" },
-        { label: "Sheets" },
+        {
+          label: "Reports",
+          to: "/dashboard/reports",
+          hint: "Dashboards e-mailed as PDF on a schedule",
+        },
+        {
+          label: "Sheets",
+          to: "/sheets",
+          hint: "Tables over logs, spans and RUM, with computed columns",
+        },
       ],
       groups: [
         {
@@ -172,8 +180,16 @@ const SECTIONS: Item[][] = [
           to: "/monitors/downtimes",
           hint: "Scheduled silences",
         },
-        { label: "Monitor Quality" },
-        { label: "Templates" },
+        {
+          label: "Monitor Quality",
+          to: "/monitors/quality",
+          hint: "Monitors that notify nobody, stay muted or alerting",
+        },
+        {
+          label: "Templates",
+          to: "/monitors/templates",
+          hint: "Start from a ready-made monitor",
+        },
       ],
       groups: [
         {

@@ -56,6 +56,12 @@ import { LlmOverview, LlmTraces } from "./pages/LlmObs";
 import { AuditTrail, DetectionRules, SecuritySignals } from "./pages/Security";
 import { Cases, OnCall } from "./pages/CasesOnCall";
 import { Apps, Workflows } from "./pages/Workflows";
+import {
+  MonitorQuality,
+  MonitorTemplates,
+  Reports,
+  Sheets,
+} from "./pages/Reporting";
 import { DataStreams, Databases, Processes } from "./pages/InfraAdvanced";
 import { Profiler } from "./pages/Profiler";
 import {
@@ -208,6 +214,10 @@ function App() {
         <Route path="/cases" element={<Cases />} />
         <Route path="/on-call" element={<OnCall />} />
         <Route path="/workflows" element={<Workflows />} />
+        <Route path="/monitors/templates" element={<MonitorTemplates />} />
+        <Route path="/monitors/quality" element={<MonitorQuality />} />
+        <Route path="/dashboard/reports" element={<Reports />} />
+        <Route path="/sheets" element={<Sheets />} />
         <Route path="/apps" element={<Apps />} />
         <Route path="/processes" element={<Processes />} />
         <Route path="/data-streams" element={<DataStreams />} />

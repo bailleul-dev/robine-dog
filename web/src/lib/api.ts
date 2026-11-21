@@ -981,6 +981,40 @@ export type AppDef = {
     buttons: { label: string; workflow_id: string }[];
   };
 };
+export type MonitorTemplate = {
+  id: string;
+  category: string;
+  name: string;
+  type: string;
+  query: string;
+  message: string;
+};
+export type ReportDef = {
+  id: string;
+  attributes: {
+    name: string;
+    dashboard_id: string;
+    live_span: string;
+    schedule: string;
+    recipients: string[];
+    message?: string;
+    last_sent?: number;
+    last_result?: string;
+  };
+};
+export type SheetDef = {
+  id: string;
+  attributes: {
+    name: string;
+    dataset: "logs" | "spans" | "rum";
+    query: string;
+    group_by: string[];
+    computes: string[];
+    columns: { name: string; expr: string }[];
+    live_span: string;
+    pivot?: boolean;
+  };
+};
 export type LiveProcess = {
   host: string;
   pid: number;
@@ -2157,6 +2191,30 @@ export const api = {
       : post<unknown>(`/on-call/${what}`, body),
   onCallDelete: (what: "schedules" | "escalation-policies", id: string) =>
     del<unknown>(`/on-call/${what}/${id}`),
+  monitorTemplates: () => call<MonitorTemplate[]>("/monitors/templates"),
+  monitorQuality: () =>
+    call<{
+      monitors: number;
+      data: {
+        id: number;
+        name: string;
+        type: string;
+        overall_state: string;
+        issues: { kind: string; text: string }[];
+      }[];
+    }>("/monitors/quality"),
+  reports: () => call<{ data: ReportDef[] }>("/reports"),
+  saveReport: (id: string | null, body: ReportDef["attributes"]) =>
+    id ? put<unknown>(`/reports/${id}`, body) : post<unknown>("/reports", body),
+  deleteReport: (id: string) => del<unknown>(`/reports/${id}`),
+  sendReport: (id: string) =>
+    post<{ sent: string[] }>(`/reports/${id}/send`, {}),
+  sheets: () => call<{ data: SheetDef[] }>("/sheets"),
+  saveSheet: (id: string | null, body: SheetDef["attributes"]) =>
+    id
+      ? put<{ data: SheetDef }>(`/sheets/${id}`, body)
+      : post<{ data: SheetDef }>("/sheets", body),
+  deleteSheet: (id: string) => del<unknown>(`/sheets/${id}`),
   workflows: () => call<{ data: Workflow[]; actions: string[] }>("/workflows"),
   saveWorkflow: (id: string | null, body: Workflow["attributes"]) =>
     id
