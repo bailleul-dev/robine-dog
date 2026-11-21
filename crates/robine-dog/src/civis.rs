@@ -560,6 +560,14 @@ pub async fn webhook(
     headers: HeaderMap,
     Json(v): Json<Value>,
 ) -> Response {
+    if let Some(d) = crate::delivery::parse_webhook(&headers, &v) {
+        return reply(
+            crate::delivery::store(&st, &d)
+                .await
+                .map(|_| 1)
+                .map_err(|e| e.to_string()),
+        );
+    }
     let r = match parse_webhook(&headers, &v) {
         None => Ok(0),
         Some(p) => store_pipeline(&st, &p)

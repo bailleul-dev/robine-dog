@@ -82,6 +82,7 @@ import { ServiceMap } from "./pages/ServiceMap";
 import { TraceExplorer } from "./pages/TraceExplorer";
 import { SharedDashboard } from "./pages/SharedDashboard";
 import "./styles.css";
+import { Coverage, Deployments, Dora } from "./pages/Delivery";
 
 const client = new QueryClient({
   defaultOptions: {
@@ -207,6 +208,9 @@ function App() {
         <Route path="/llm/overview" element={<LlmOverview />} />
         <Route path="/llm/traces" element={<LlmTraces />} />
         <Route path="/ci/pipelines" element={<CiPipelinesPage />} />
+        <Route path="/ci/deployments" element={<Deployments />} />
+        <Route path="/ci/dora" element={<Dora />} />
+        <Route path="/ci/coverage" element={<Coverage />} />
         <Route path="/ci/tests" element={<CiTestsPage />} />
         <Route path="/security/signals" element={<SecuritySignals />} />
         <Route path="/security/rules" element={<DetectionRules />} />

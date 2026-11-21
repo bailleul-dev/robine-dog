@@ -8,9 +8,12 @@ import { api } from "../lib/api";
 import { ago, compact, duration, percent } from "../lib/format";
 import { useTimeRange } from "../lib/time";
 
-const CI_TABS = [
+export const CI_TABS = [
   { to: "/ci/pipelines", label: "Pipelines" },
   { to: "/ci/tests", label: "Tests" },
+  { to: "/ci/deployments", label: "Deployments" },
+  { to: "/ci/dora", label: "DORA" },
+  { to: "/ci/coverage", label: "Coverage" },
 ];
 
 const ms = (v: number) => duration(v * 1_000_000);

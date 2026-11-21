@@ -743,6 +743,43 @@ export type ErrorIssue = {
   series: number[];
   team?: string | null;
 };
+export type Deployment = {
+  id: number;
+  service: string;
+  env: string;
+  version: string | null;
+  team: string | null;
+  commit_sha: string | null;
+  repository: string | null;
+  started_ms: number;
+  finished_ms: number;
+  status: string;
+  rollback: boolean;
+  source: string;
+  url: string | null;
+};
+export type DoraMetrics = {
+  deployments: number;
+  deployment_frequency_per_day: number;
+  change_failure_rate: number;
+  failed_deployments: number;
+  lead_time_ms: number | null;
+  time_to_restore_ms: number | null;
+  failures: number;
+  service?: string;
+  team?: string | null;
+};
+export type CoverageReport = {
+  repository: string;
+  branch: string | null;
+  commit_sha: string | null;
+  service: string | null;
+  flags: string | null;
+  format: string;
+  covered: number;
+  total: number;
+  ts: number;
+};
 export type ErrorOccurrence = {
   ts: number;
   id: string | null;
@@ -2119,6 +2156,19 @@ export const api = {
       data: ids.map((id) => ({ id, type: "apm_retention_filter" })),
     }),
   ciTests: (f: CiFilter) => call<CiTests>(`/ci/tests?${profileQs(f)}`),
+  deployments: (f: {
+    from: number;
+    to: number;
+    service: string;
+    env: string;
+  }) => call<{ data: Deployment[] }>(`/deployments?${deliveryQs(f)}`),
+  dora: (f: { from: number; to: number; service: string; env: string }) =>
+    call<{
+      overall: DoraMetrics;
+      services: DoraMetrics[];
+      daily: [number, number][];
+    }>(`/dora?${deliveryQs(f)}`),
+  coverage: () => call<{ data: CoverageReport[] }>("/coverage"),
   ciPipelines: (f: CiFilter) =>
     call<CiPipelines>(`/ci/pipelines?${profileQs(f)}`),
   ciJobs: (provider: string, id: string) =>
@@ -2511,3 +2561,15 @@ export const publicApi = {
       signal,
     }),
 };
+
+function deliveryQs(f: {
+  from: number;
+  to: number;
+  service: string;
+  env: string;
+}): string {
+  const p = new URLSearchParams({ from: String(f.from), to: String(f.to) });
+  if (f.service) p.set("service", f.service);
+  if (f.env) p.set("env", f.env);
+  return p.toString();
+}

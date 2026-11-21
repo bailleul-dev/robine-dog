@@ -16,6 +16,7 @@ mod checks;
 mod civis;
 mod config;
 mod dbm;
+mod delivery;
 mod dsm;
 mod events;
 mod hosts;
@@ -542,6 +543,9 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             axum::routing::put(oncall::update).delete(oncall::delete),
         )
         .route("/ci/pipelines", get(civis::pipelines))
+        .route("/deployments", get(delivery::deployments))
+        .route("/dora", get(delivery::dora_metrics))
+        .route("/coverage", get(delivery::coverage))
         .route("/ci/pipelines/{provider}/{id}/jobs", get(civis::jobs))
         .route("/llm-obs/traces", get(llmobs::traces))
         .route("/llm-obs/traces/{id}", get(llmobs::trace))
@@ -961,6 +965,10 @@ fn app(st: AppState) -> Router {
         .route("/api/v2/cireport", post(civis::junit))
         .route("/api/v2/ci/pipeline", post(civis::pipeline_api))
         .route("/api/v2/webhook", post(civis::webhook))
+        .route("/api/v2/dora/deployment", post(delivery::dora_deployment))
+        .route("/api/v2/dora/incident", post(delivery::dora_incident))
+        .route("/api/intake/ci/custom_spans", post(delivery::custom_span))
+        .route("/api/v2/cicovreprt", post(delivery::coverage_upload))
         .route(
             "/api/intake/llm-obs/v1/trace/spans",
             post(llmobs::spans_intake),

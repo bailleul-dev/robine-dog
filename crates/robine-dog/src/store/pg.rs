@@ -342,6 +342,48 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX workflow_runs_by_workflow ON workflow_runs (workflow_id, id);
     "#,
+    // Software Delivery: deployments, DORA incidents, coverage reports.
+    r#"
+    CREATE TABLE deployments (
+        id BIGSERIAL PRIMARY KEY,
+        service TEXT NOT NULL,
+        env TEXT NOT NULL,
+        version TEXT,
+        team TEXT,
+        commit_sha TEXT,
+        repository TEXT,
+        started_ms BIGINT NOT NULL,
+        finished_ms BIGINT NOT NULL,
+        status TEXT NOT NULL,
+        rollback BOOLEAN NOT NULL,
+        source TEXT NOT NULL,
+        url TEXT
+    );
+    CREATE INDEX deployments_by_time ON deployments (finished_ms);
+    CREATE TABLE dora_incidents (
+        id BIGSERIAL PRIMARY KEY,
+        services TEXT[] NOT NULL,
+        env TEXT,
+        name TEXT,
+        severity TEXT,
+        team TEXT,
+        started_ms BIGINT NOT NULL,
+        finished_ms BIGINT
+    );
+    CREATE TABLE coverage_reports (
+        id BIGSERIAL PRIMARY KEY,
+        repository TEXT NOT NULL,
+        branch TEXT,
+        commit_sha TEXT,
+        service TEXT,
+        flags TEXT,
+        format TEXT NOT NULL,
+        covered BIGINT NOT NULL,
+        total BIGINT NOT NULL,
+        ts BIGINT NOT NULL
+    );
+    CREATE INDEX coverage_reports_by_time ON coverage_reports (ts);
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.

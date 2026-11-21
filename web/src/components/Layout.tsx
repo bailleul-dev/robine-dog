@@ -382,9 +382,21 @@ const SECTIONS: Item[][] = [
           to: "/synthetics/ci",
           hint: "Synthetic tests run from CI (datadog-ci)",
         },
-        { label: "CD Visibility" },
-        { label: "DORA Metrics" },
-        { label: "Code Coverage" },
+        {
+          label: "CD Visibility",
+          to: "/ci/deployments",
+          hint: "Deployments by service and env",
+        },
+        {
+          label: "DORA Metrics",
+          to: "/ci/dora",
+          hint: "Frequency, lead time, failure rate, restore time",
+        },
+        {
+          label: "Code Coverage",
+          to: "/ci/coverage",
+          hint: "Coverage by repository and branch",
+        },
       ],
     },
     {
