@@ -49,9 +49,33 @@ pub fn router() -> Router<AppState> {
             axum::routing::post(crate::dsm::intake),
         )
         .route("/telemetry/proxy/{*rest}", any(discard))
+        .route("/debugger/v1/input", axum::routing::post(debugger))
+        .route("/debugger/v2/input", axum::routing::post(debugger))
         .route("/debugger/{*rest}", any(discard))
         .route("/evp_proxy/{*rest}", any(crate::llmobs::evp_proxy))
         .route("/tracer_flare/v1", any(discard))
+}
+
+/// Exception Replay and Dynamic Instrumentation snapshots, sent by tracers to
+/// the Agent's debugger endpoint: stored as logs (`source:dd_debugger`), as
+/// the Agent forwards them to Datadog.
+async fn debugger(
+    axum::extract::State(st): axum::extract::State<crate::AppState>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    let mut q = std::collections::HashMap::new();
+    q.insert("ddsource".to_string(), "dd_debugger".to_string());
+    if let Some(k) = &st.cfg.api_key {
+        q.insert("dd-api-key".to_string(), k.clone());
+    }
+    super::logs::intake(
+        axum::extract::State(st),
+        axum::extract::Query(q),
+        headers,
+        body,
+    )
+    .await
 }
 
 async fn info() -> Json<Value> {

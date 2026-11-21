@@ -101,6 +101,7 @@ export function ErrorTracking() {
   const statusFilter = params.get("status") ?? "FOR_REVIEW";
   const source = params.get("source") ?? "";
   const service = params.get("service") ?? "";
+  const team = params.get("team") ?? "";
   const res = useQuery({
     queryKey: ["issues", query, time.from, time.to],
     queryFn: ({ signal }) =>
@@ -125,13 +126,15 @@ export function ErrorTracking() {
       status: c((i) => i.status),
       source: c((i) => i.source),
       service: c((i) => i.service),
+      team: c((i) => i.team ?? ""),
     };
   }, [all]);
   const shown = all.filter(
     (i) =>
       (statusFilter === "ALL" || i.status === statusFilter) &&
       (!source || i.source === source) &&
-      (!service || i.service === service),
+      (!service || i.service === service) &&
+      (!team || (i.team ?? "") === team),
   );
 
   return (
@@ -200,6 +203,28 @@ export function ErrorTracking() {
           </div>
           <div className="facet">
             <div className="facet-header" style={{ cursor: "default" }}>
+              <span>Team</span>
+            </div>
+            <div className="facet-body">
+              {[...counts.team.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([t, n]) => (
+                  <label className="facet-value" key={t}>
+                    <input
+                      type="checkbox"
+                      checked={team === t}
+                      onChange={() => set("team", team === t ? null : t)}
+                    />
+                    <span className="facet-value-label">
+                      {t || "(no owner in the Software Catalog)"}
+                    </span>
+                    <span className="facet-value-count">{n}</span>
+                  </label>
+                ))}
+            </div>
+          </div>
+          <div className="facet">
+            <div className="facet-header" style={{ cursor: "default" }}>
               <span>Service</span>
             </div>
             <div className="facet-body">
@@ -259,6 +284,7 @@ export function ErrorTracking() {
                           {SOURCE_LABELS[i.source]}
                         </span>
                         <ServiceChip name={i.service || null} />
+                        {i.team && <span className="tag">team:{i.team}</span>}
                         {i.frame && (
                           <span className="mono faint ellipsis">{i.frame}</span>
                         )}
@@ -454,6 +480,18 @@ export function IssuePage() {
                 </Link>
               )}
             </div>
+            {occ?.snapshot_ids?.length ? (
+              <div style={{ marginBottom: 8 }}>
+                Exception Replay:{" "}
+                <Link
+                  to={`/logs?${new URLSearchParams({ query: `source:dd_debugger (${occ.snapshot_ids.map((x) => `@debugger.snapshot.id:${x}`).join(" OR ")})`, from_ts: String(occ.ts - 60_000), to_ts: String(occ.ts + 60_000), live: "false" })}`}
+                >
+                  {occ.snapshot_ids.length} snapshot
+                  {occ.snapshot_ids.length > 1 ? "s" : ""} with the local
+                  variables
+                </Link>
+              </div>
+            ) : null}
             {occ?.stack ? (
               <StackTrace stack={occ.stack} />
             ) : (

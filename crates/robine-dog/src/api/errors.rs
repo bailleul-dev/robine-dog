@@ -100,13 +100,23 @@ fn exprs(source: &str) -> Exprs {
             is_error,
         )
     };
+    // Custom grouping: an `error.fingerprint` set by the application is the
+    // issue's pattern, and the stack no longer splits it.
+    let fp = text(
+        if ds == Dataset::Logs {
+            "@error.fingerprint"
+        } else {
+            "error.fingerprint"
+        },
+        ds,
+    );
     Exprs {
         pattern: format!(
-            "regexp_replace(COALESCE({msg}, ''), '[0-9a-fA-F]{{8,}}|[0-9]+', '*', 'g')"
+            "COALESCE({fp}, regexp_replace(COALESCE({msg}, ''), '[0-9a-fA-F]{{8,}}|[0-9]+', '*', 'g'))"
         ),
         // The first indented line of the stack: the top frame in Java, Python, Go, JS…
         frame: format!(
-            "COALESCE(regexp_replace({stack}, '(?s)^.*?\\n[ \\t]+([^\\n]+).*$', '${{1}}'), '')"
+            "CASE WHEN {fp} IS NOT NULL THEN '' ELSE COALESCE(regexp_replace({stack}, '(?s)^.*?\\n[ \\t]+([^\\n]+).*$', '${{1}}'), '') END"
         ),
         ds,
         table,
@@ -139,6 +149,19 @@ pub struct ListReq {
     pub to: i64,
     #[serde(default)]
     pub query: String,
+    /// Issue Teams: only the issues of this team's services.
+    #[serde(default)]
+    pub team: Option<String>,
+}
+
+/// Each service's team, from the Software Catalog's definitions.
+async fn service_teams(st: &AppState) -> HashMap<String, String> {
+    crate::catalog::definitions::summaries(st)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|s| Some((s.service, s.team?)))
+        .collect()
 }
 
 #[derive(Default)]
@@ -277,7 +300,15 @@ pub async fn issues(
         .into_iter()
         .filter_map(|d| Some((d.id, serde_json::from_value(d.body).ok()?)))
         .collect();
-    let mut out: Vec<(String, Agg)> = groups.into_iter().collect();
+    let teams = service_teams(&st).await;
+    let mut out: Vec<(String, Agg)> = groups
+        .into_iter()
+        .filter(|(_, g)| {
+            req.team
+                .as_deref()
+                .is_none_or(|t| t.is_empty() || teams.get(&g.service).is_some_and(|x| x == t))
+        })
+        .collect();
     out.sort_by_key(|a| std::cmp::Reverse(a.1.count));
     out.truncate(200);
     let mut list = Vec::new();
@@ -322,6 +353,7 @@ pub async fn issues(
             "status": status,
             "regression": regression,
             "series": g.series,
+            "team": teams.get(&g.service),
         }));
     }
     Ok(Json(
@@ -374,7 +406,7 @@ pub async fn issue(
         )
     } else {
         format!(
-            "SELECT CAST(ts AS BIGINT) AS t, CAST(id AS STRING), trace_id, span_id, COALESCE({host}, {host2}), {msg}, {stack}, resource, env, version
+            "SELECT CAST(ts AS BIGINT) AS t, CAST(id AS STRING), trace_id, span_id, COALESCE({host}, {host2}), {msg}, {stack}, resource, env, version, meta
              FROM spans WHERE {time} AND {matching} ORDER BY ts DESC LIMIT 200",
             host = text("_dd.hostname", Dataset::Spans),
             host2 = text("host", Dataset::Spans),
@@ -405,6 +437,23 @@ pub async fn issue(
                 "stack": s(6),
             });
             if doc.source == "spans" {
+                // Exception Replay: the tracer tags the error span with the
+                // ids of the snapshots it captured (`_dd.debug.error.N.snapshot_id`).
+                let snaps: Vec<String> = crate::store::greptime::json_at(r, 10)
+                    .as_object()
+                    .cloned()
+                    .map(|m| {
+                        m.iter()
+                            .filter(|(k, _)| {
+                                k.starts_with("_dd.debug.error.") && k.ends_with(".snapshot_id")
+                            })
+                            .filter_map(|(_, v)| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !snaps.is_empty() {
+                    o["snapshot_ids"] = json!(snaps);
+                }
                 o["resource"] = json!(s(7));
                 o["env"] = json!(s(8));
                 o["version"] = json!(s(9));

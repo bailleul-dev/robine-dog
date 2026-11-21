@@ -741,6 +741,7 @@ export type ErrorIssue = {
   status: string;
   regression: boolean;
   series: number[];
+  team?: string | null;
 };
 export type ErrorOccurrence = {
   ts: number;
@@ -753,6 +754,7 @@ export type ErrorOccurrence = {
   resource?: string | null;
   env?: string | null;
   version?: string | null;
+  snapshot_ids?: string[];
 };
 export type ErrorIssueDetail = Omit<ErrorIssue, "message" | "series"> & {
   interval: number;
