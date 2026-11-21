@@ -209,6 +209,9 @@ export type MetricSeries = {
   query_index: number;
   group: Record<string, string>;
   points: [number, number][];
+  /** `[t, lower, upper]`: the band of `anomalies()` / `forecast()`. */
+  bounds?: [number, number, number][];
+  outlier?: boolean;
 };
 export type MetricQueryResult = {
   query: string;
@@ -361,7 +364,14 @@ export type TimeseriesResponse = {
     attributes: {
       times: number[];
       interval: number;
-      series: { query_index: number; name: string; group_tags: string[] }[];
+      series: {
+        query_index: number;
+        name: string;
+        group_tags: string[];
+        /** robine-dog's addition: the band of `anomalies()` / `forecast()`. */
+        bounds?: { lower: (number | null)[]; upper: (number | null)[] };
+        outlier?: boolean;
+      }[];
       values: (number | null)[][];
     };
   };

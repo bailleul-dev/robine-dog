@@ -193,18 +193,40 @@ function QueryRow({
   );
 }
 
-type Line = { key: string; label: string; color: string; values: number[]; unit: string | null; query: number };
+type Line = {
+  key: string;
+  label: string;
+  color: string;
+  values: number[];
+  unit: string | null;
+  query: number;
+  band?: { lower: number[]; upper: number[] };
+  dim?: boolean;
+};
 
 export function lines(data: MetricsResponse, from: number, to: number): { times: number[]; lines: Line[] } {
   const interval = data.interval_ms;
   const times: number[] = [];
-  for (let t = from - (from % interval); t <= to; t += interval) times.push(t);
+  // A forecast runs past the end of the range.
+  const end = Math.max(to, ...data.series.flatMap((s) => s.points.map((p) => p[0])));
+  for (let t = from - (from % interval); t <= end; t += interval) times.push(t);
   const index = new Map(times.map((t, i) => [t, i]));
   const out = data.series.map((s) => {
     const values = times.map(() => NaN);
     for (const [t, v] of s.points) {
       const i = index.get(t);
       if (i !== undefined) values[i] = v;
+    }
+    let band: Line["band"];
+    if (s.bounds) {
+      band = { lower: times.map(() => NaN), upper: times.map(() => NaN) };
+      for (const [t, lo, hi] of s.bounds) {
+        const i = index.get(t);
+        if (i !== undefined) {
+          band.lower[i] = lo;
+          band.upper[i] = hi;
+        }
+      }
     }
     const result = data.results[s.query_index];
     const group = Object.entries(s.group)
@@ -218,6 +240,8 @@ export function lines(data: MetricsResponse, from: number, to: number): { times:
       values,
       unit: result.unit ?? defaultUnit(result.metric ?? "", result.type),
       query: s.query_index,
+      band,
+      dim: s.outlier === false,
     };
   });
   return { times, lines: out };
@@ -305,8 +329,8 @@ export function MetricsExplorer() {
                 times={chart.times}
                 interval={result.data!.interval_ms}
                 from={time.from}
-                to={time.to}
-                series={chart.lines.map((l): Series => ({ key: l.key, label: l.label, color: l.color, values: l.values }))}
+                to={Math.max(time.to, (chart.times[chart.times.length - 1] ?? 0) + result.data!.interval_ms)}
+                series={chart.lines.map((l): Series => ({ key: l.key, label: l.label, color: l.color, values: l.values, band: l.band, dim: l.dim }))}
                 kind={kind}
                 height={280}
                 format={(v) => formatValue(v, unit)}

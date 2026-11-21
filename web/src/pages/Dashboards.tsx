@@ -213,11 +213,14 @@ function TimeseriesWidget({
         const color = status
           ? statusColor(status)
           : PALETTE[out.length % PALETTE.length];
+        const nan = (vs: (number | null)[]) => vs.map((v) => (v === null ? NaN : v));
         out.push({
           key: `${ri}-${i}`,
           label,
           color,
-          values: a.values[i].map((v) => (v === null ? NaN : v)),
+          values: nan(a.values[i]),
+          band: s.bounds && { lower: nan(s.bounds.lower), upper: nan(s.bounds.upper) },
+          dim: s.outlier === false,
         });
       });
     });
@@ -235,7 +238,7 @@ function TimeseriesWidget({
         times={chart.times}
         interval={chart.interval}
         from={time.from}
-        to={time.to}
+        to={Math.max(time.to, (chart.times[chart.times.length - 1] ?? 0) + chart.interval)}
         series={chart.series.slice(0, 50)}
         kind={kind}
         height={Math.max(60, height - (legend ? 26 : 0))}

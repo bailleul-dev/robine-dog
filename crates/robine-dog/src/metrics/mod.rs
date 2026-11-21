@@ -2,6 +2,7 @@
 //! DogStatsD packets), and the trace metrics derived from service entry spans.
 
 pub mod dogstatsd;
+pub mod functions;
 pub mod generated;
 pub mod query;
 

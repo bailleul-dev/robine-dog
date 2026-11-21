@@ -14,7 +14,19 @@ export function useWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
-export type Series = { key: string; label?: string; color: string; values: number[] };
+export type Series = {
+  key: string;
+  label?: string;
+  color: string;
+  values: number[];
+  /** Expected range (anomalies, forecast): shaded, points outside it in red. */
+  band?: { lower: number[]; upper: number[] };
+  /** Drawn in grey: a series that `outliers()` did not single out. */
+  dim?: boolean;
+};
+
+const ANOMALY = "#e5484d";
+const DIM = "#b6bac6";
 
 function niceMax(v: number): number {
   if (v <= 0) return 1;
@@ -71,7 +83,8 @@ export function TimeChart({
   const totals = times.map((_, i) =>
     kind === "bars" ? series.reduce((s, se) => s + val(se.values[i]), 0) : Math.max(0, ...series.map((se) => val(se.values[i]))),
   );
-  const max = niceMax(Math.max(0, ...totals, ...markers.map((m) => m.value * 1.1)));
+  const bandTops = series.flatMap((s) => (s.band ? s.band.upper.filter((v) => !Number.isNaN(v)) : []));
+  const max = niceMax(Math.max(0, ...totals, ...bandTops, ...markers.map((m) => m.value * 1.1)));
   const y = (v: number) => top + plotH - (v / max) * plotH;
   const barW = Math.max(1, (interval / span) * plotW - (interval / span) * plotW * 0.18);
 
@@ -161,6 +174,44 @@ export function TimeChart({
             );
           })}
         {kind === "lines" &&
+          series.map((s) => {
+            if (!s.band) return null;
+            const { lower, upper } = s.band;
+            // One polygon per run of points with a band.
+            const runs: number[][] = [];
+            times.forEach((_, i) => {
+              const ok = !Number.isNaN(lower[i] ?? NaN) && !Number.isNaN(upper[i] ?? NaN);
+              if (!ok) return;
+              const run = runs[runs.length - 1];
+              if (run && run[run.length - 1] === i - 1) run.push(i);
+              else runs.push([i]);
+            });
+            const cx = (i: number) => x(times[i] + interval / 2).toFixed(1);
+            const cy = (v: number) => y(Math.max(0, Math.min(max, v))).toFixed(1);
+            return (
+              <g key={`band-${s.key}`}>
+                {runs.map((r) => (
+                  <path
+                    key={r[0]}
+                    d={
+                      r.map((i, k) => `${k ? "L" : "M"}${cx(i)},${cy(upper[i])}`).join("") +
+                      [...r].reverse().map((i) => `L${cx(i)},${cy(lower[i])}`).join("") +
+                      "Z"
+                    }
+                    fill={s.color}
+                    opacity={0.14}
+                  />
+                ))}
+                {times.map((_, i) => {
+                  const v = s.values[i];
+                  if (v === undefined || Number.isNaN(v) || Number.isNaN(lower[i] ?? NaN)) return null;
+                  if (v <= upper[i] && v >= lower[i]) return null;
+                  return <circle key={i} cx={cx(i)} cy={cy(v)} r={2.4} fill={ANOMALY} />;
+                })}
+              </g>
+            );
+          })}
+        {kind === "lines" &&
           series.map((s) => (
             <path
               key={s.key}
@@ -181,8 +232,8 @@ export function TimeChart({
                   .join("");
               })()}
               fill="none"
-              stroke={s.color}
-              strokeWidth={1.6}
+              stroke={s.dim ? DIM : s.color}
+              strokeWidth={s.dim ? 1.2 : 1.6}
               strokeLinejoin="round"
               strokeLinecap="round"
             />
