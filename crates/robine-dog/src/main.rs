@@ -833,6 +833,11 @@ fn public_api(st: AppState) -> Router<AppState> {
 fn app(st: AppState) -> Router {
     let index = st.cfg.static_dir.join("index.html");
     let spa = ServeDir::new(&st.cfg.static_dir).fallback(ServeFile::new(index));
+    // index.html names the hashed bundles: always revalidated, so a deploy
+    // shows up on the next load.
+    let spa = Router::new()
+        .fallback_service(spa)
+        .layer(axum::middleware::map_response(spa_cache));
     let intake = Router::new()
         .route("/api/v2/logs", post(intake::logs::intake))
         .route("/v1/input", post(intake::logs::intake))
@@ -1079,4 +1084,18 @@ async fn main() -> anyhow::Result<()> {
     store.flush().await;
     tracing::info!("stopped");
     Ok(())
+}
+
+async fn spa_cache(mut res: axum::response::Response) -> axum::response::Response {
+    use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, HeaderValue};
+    let html = res
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("text/html"));
+    if html {
+        res.headers_mut()
+            .insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    }
+    res
 }

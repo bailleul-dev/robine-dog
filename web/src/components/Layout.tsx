@@ -223,10 +223,10 @@ const SECTIONS: Item[][] = [
       links: [
         { label: "Synthetic Monitoring", to: "/synthetics/tests", hint: "API, multistep and browser tests, from CI too" },
         { label: "Real User Monitoring", to: "/rum/performance-monitoring", hint: "Page performance, sessions and browser errors" },
-        { label: "Session Replay" },
-        { label: "Product Analytics" },
+        { label: "Session Replay", to: "/rum/sessions", hint: "Replay recorded browser sessions" },
+        { label: "Product Analytics", to: "/rum/funnels", hint: "Funnels and retention" },
         { label: "Mobile App Testing" },
-        { label: "Error Tracking" },
+        { label: "Error Tracking", to: "/error-tracking", hint: "Errors grouped into issues" },
       ],
     },
     {
@@ -237,7 +237,7 @@ const SECTIONS: Item[][] = [
       links: [
         { label: "CI Visibility", to: "/ci/pipelines", hint: "Pipelines and their failures" },
         { label: "Test Optimization", to: "/ci/tests", hint: "Test runs, flaky and slow tests" },
-        { label: "Continuous Testing" },
+        { label: "Continuous Testing", to: "/synthetics/ci", hint: "Synthetic tests run from CI (datadog-ci)" },
         { label: "CD Visibility" },
         { label: "DORA Metrics" },
         { label: "Code Coverage" },
@@ -285,7 +285,7 @@ const SECTIONS: Item[][] = [
           to: "/error-tracking",
           hint: "Errors grouped into issues",
         },
-        { label: "Explorer" },
+        { label: "Explorer", to: "/error-tracking", hint: "Issues across logs, traces and RUM" },
         { label: "Exception Replay" },
       ],
       groups: [
@@ -323,7 +323,7 @@ const SECTIONS: Item[][] = [
           title: "Settings",
           links: [
             { label: "Metrics without Limits" },
-            { label: "Reference Tables" },
+            { label: "Reference Tables", to: "/logs/reference-tables", hint: "CSV tables for lookup processors" },
           ],
         },
       ],
@@ -357,11 +357,11 @@ const SECTIONS: Item[][] = [
           links: [
             { label: "Pipelines", to: "/logs/pipelines" },
             { label: "Generate Metrics", to: "/logs/generate-metrics" },
-            { label: "Indexes" },
-            { label: "Archives" },
-            { label: "Rehydrate from Archives" },
+            { label: "Indexes", to: "/logs/indexes", hint: "Exclusion filters, sampling, daily quotas" },
+            { label: "Archives", to: "/logs/archives", hint: "Hourly gzip archives to S3 or disk" },
+            { label: "Rehydrate from Archives", to: "/logs/archives", hint: "Reload archived logs into a temporary index" },
             { label: "Log Forwarding" },
-            { label: "Sensitive Data Scanner" },
+            { label: "Sensitive Data Scanner", to: "/logs/sensitive-data-scanner", hint: "Redact card numbers, e-mails, tokens at intake" },
           ],
         },
       ],
