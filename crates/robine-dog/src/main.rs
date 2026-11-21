@@ -9,6 +9,7 @@
 
 mod api;
 mod auth;
+mod catalog;
 mod checks;
 mod config;
 mod events;
@@ -43,6 +44,72 @@ pub struct AppState {
     pub cfg: Arc<config::Config>,
     pub auth: Arc<auth::Auth>,
     pub logconfig: Arc<logconfig::LogConfig>,
+    pub catalog: Arc<catalog::Catalog>,
+}
+
+/// APM retention filters, service definitions, teams and scorecards, on
+/// Datadog's paths (`v2`: `/api/v2` for the public API, empty for the UI's).
+fn catalog_routes(r: Router<AppState>, v2: &str) -> Router<AppState> {
+    use catalog::{definitions, retention, scorecards, teams};
+    r.route(
+        &format!("{v2}/apm/config/retention-filters"),
+        get(retention::list).post(retention::create),
+    )
+    .route(
+        &format!("{v2}/apm/config/retention-filters/{{id}}"),
+        get(retention::get)
+            .put(retention::update)
+            .delete(retention::delete),
+    )
+    .route(
+        &format!("{v2}/apm/config/retention-filters-execution-order"),
+        axum::routing::put(retention::reorder),
+    )
+    .route(
+        &format!("{v2}/services/definitions"),
+        get(definitions::list).post(definitions::upsert),
+    )
+    .route(
+        &format!("{v2}/services/definitions/{{name}}"),
+        get(definitions::get).delete(definitions::delete),
+    )
+    .route(&format!("{v2}/team"), get(teams::list).post(teams::create))
+    .route(
+        &format!("{v2}/team/{{id}}"),
+        get(teams::get).patch(teams::update).delete(teams::delete),
+    )
+    .route(
+        &format!("{v2}/team/{{id}}/memberships"),
+        get(teams::members).post(teams::add_member),
+    )
+    .route(
+        &format!("{v2}/team/{{id}}/memberships/{{user}}"),
+        delete(teams::remove_member),
+    )
+    .route(
+        &format!("{v2}/team/{{id}}/links"),
+        get(teams::links).post(teams::add_link),
+    )
+    .route(
+        &format!("{v2}/team/{{id}}/links/{{link}}"),
+        delete(teams::remove_link),
+    )
+    .route(
+        &format!("{v2}/scorecard/rules"),
+        get(scorecards::list_rules).post(scorecards::create_rule),
+    )
+    .route(
+        &format!("{v2}/scorecard/rules/{{id}}"),
+        axum::routing::put(scorecards::update_rule).delete(scorecards::delete_rule),
+    )
+    .route(
+        &format!("{v2}/scorecard/outcomes"),
+        get(scorecards::list_outcomes).post(scorecards::post_outcomes),
+    )
+    .route(
+        &format!("{v2}/scorecard/outcomes/batch"),
+        post(scorecards::post_outcomes),
+    )
 }
 
 /// Indexes, archives, the Sensitive Data Scanner and Reference Tables, on
@@ -385,7 +452,16 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             "/metrics/{name}",
             get(api::metrics::detail).patch(api::metrics::update),
         );
-    logconfig_routes(r, "", "")
+    let r = r
+        .route("/apm/ingestion", get(catalog::retention::ingestion))
+        .route("/apm/resource", get(api::apm::resource))
+        .route(
+            "/apm/definition-template/{name}",
+            get(api::apm::definition_template),
+        )
+        .route("/teams", get(catalog::teams::ui_list))
+        .route("/scorecards", get(catalog::scorecards::ui));
+    catalog_routes(logconfig_routes(r, "", ""), "")
 }
 
 /// Datadog's public API, for its clients and Terraform: `DD-API-KEY` auth.
@@ -645,10 +721,9 @@ fn public_api(st: AppState) -> Router<AppState> {
             "/api/v1/logs/config/pipeline-order",
             get(api::pipelines::order).put(api::pipelines::set_order),
         );
-    logconfig_routes(r, "/api/v1", "/api/v2").layer(axum::middleware::from_fn_with_state(
-        st,
-        intake::logs::require_api_key,
-    ))
+    catalog_routes(logconfig_routes(r, "/api/v1", "/api/v2"), "/api/v2").layer(
+        axum::middleware::from_fn_with_state(st, intake::logs::require_api_key),
+    )
 }
 
 fn app(st: AppState) -> Router {
@@ -788,7 +863,11 @@ async fn main() -> anyhow::Result<()> {
         cfg: cfg.clone(),
         auth: Arc::new(auth::Auth::new()),
         logconfig: Arc::new(logconfig::LogConfig::default()),
+        catalog: Arc::new(catalog::Catalog::default()),
     };
+    if let Err(e) = catalog::init(&st).await {
+        tracing::warn!(error = %e, "could not load the retention filters");
+    }
     if let Err(e) = logconfig::init(&st).await {
         tracing::warn!(error = %e, "could not load the log configuration");
     }

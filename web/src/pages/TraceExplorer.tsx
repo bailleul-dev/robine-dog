@@ -33,7 +33,10 @@ export const APM_TABS = [
   { to: "/apm/services", label: "Service Catalog" },
   { to: "/apm/traces", label: "Traces" },
   { to: "/apm/map", label: "Service Map" },
+  { to: "/apm/scorecards", label: "Scorecards" },
   { to: "/apm/generate-metrics", label: "Generate Metrics" },
+  { to: "/apm/retention-filters", label: "Retention Filters" },
+  { to: "/apm/ingestion-control", label: "Ingestion Control" },
 ];
 
 const SPAN_SCOPES = [

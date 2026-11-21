@@ -25,6 +25,13 @@ import { ErrorTracking, IssuePage } from "./pages/ErrorTracking";
 import { ManageMonitors, MonitorEditor, MonitorPage, TriggeredMonitors, Webhooks } from "./pages/Monitors";
 import { GenerateMetrics } from "./pages/GenerateMetrics";
 import {
+  IngestionControl,
+  ResourcePage,
+  RetentionFilters,
+  Scorecards,
+  Teams,
+} from "./pages/Catalog";
+import {
   LogArchives,
   LogIndexes,
   ReferenceTables,
@@ -119,6 +126,11 @@ function App() {
         <Route path="/monitors/:id/edit" element={<MonitorEditor key="edit" />} />
         <Route path="/apm/services" element={<ServiceCatalog />} />
         <Route path="/apm/services/:name" element={<ServicePage />} />
+        <Route path="/apm/services/:name/resource" element={<ResourcePage />} />
+        <Route path="/apm/scorecards" element={<Scorecards />} />
+        <Route path="/apm/retention-filters" element={<RetentionFilters />} />
+        <Route path="/apm/ingestion-control" element={<IngestionControl />} />
+        <Route path="/teams" element={<Teams />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />

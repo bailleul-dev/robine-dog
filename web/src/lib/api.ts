@@ -901,6 +901,95 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type RetentionFilter = {
+  id: string;
+  type: string;
+  attributes: {
+    name: string;
+    filter: { query: string };
+    rate: number;
+    enabled: boolean;
+    filter_type: string;
+    execution_order: number;
+    modified_at: number;
+  };
+};
+export type IngestionService = {
+  service: string;
+  last_hour: { spans: number; kept_spans: number; traces: number; kept_traces: number; bytes: number };
+  spans_per_second: number;
+  mechanisms: Record<string, number>;
+  tracers: Record<string, number>;
+  last_seen: number;
+};
+export type ApmPoint = { t: number; hits: number; errors: number; p50: number; p95: number; p99: number; max: number };
+export type TraceSample = {
+  trace_id: string;
+  span_id: string;
+  start: number;
+  duration: number;
+  error: boolean;
+  status_code: string | null;
+};
+export type ResourceDetail = {
+  service: string;
+  resource: string;
+  operation: string;
+  summary: { hits: number; errors: number; error_rate: number; p50: number; p75: number; p90: number; p95: number; p99: number; max: number; avg: number; total_time: number };
+  interval_ms: number;
+  timeseries: ApmPoint[];
+  distribution: [number, number][];
+  spans: { service: string; name: string; traces: number; spans_per_trace: number; avg: number; p95: number; time_share: number }[];
+  slowest: TraceSample[];
+  errors: TraceSample[];
+  status_codes: [string, number][];
+};
+export type ServiceDefinition = {
+  id: string;
+  attributes: {
+    schema: {
+      "schema-version": string;
+      "dd-service": string;
+      team?: string;
+      tier?: string | number;
+      lifecycle?: string;
+      description?: string;
+      application?: string;
+      languages?: string[];
+      contacts?: { name?: string; type: string; contact: string }[];
+      links?: { name: string; type: string; url: string; provider?: string }[];
+      repos?: { name: string; url: string }[];
+      docs?: { name: string; url: string }[];
+    };
+    meta: { "last-modified-time": string };
+  };
+};
+export type TeamView = {
+  id: string;
+  name: string;
+  handle: string;
+  description: string | null;
+  members: { user: string; role: string | null; created_at: number }[];
+  links: { id: string; label: string; url: string; position: number }[];
+  services: string[];
+  updated_at: number;
+};
+export type ScorecardRule = {
+  id: string;
+  attributes: { name: string; scorecard_name: string; description: string; enabled: boolean; custom: boolean; owner: string | null };
+};
+export type Scorecards = {
+  rules: ScorecardRule[];
+  services: {
+    service: string;
+    team: string | null;
+    has_definition: boolean;
+    score: number | null;
+    scorecards: Record<string, number | null>;
+    outcomes: Record<string, { state: string; remarks: string }>;
+  }[];
+};
+
 export type LogIndex = {
   name: string;
   filter: { query: string };
@@ -1415,6 +1504,58 @@ export const api = {
     call<{ data: { id: string; attributes: { values: Record<string, unknown> } }[]; meta: { total: number } }>(
       `/reference-tables/tables/${id}/rows?limit=100&search=${encodeURIComponent(search)}`,
     ),
+  retentionFilters: () =>
+    call<{ data: RetentionFilter[] }>("/apm/config/retention-filters").then((r) => r.data),
+  saveRetentionFilter: (id: string | null, a: { name: string; filter: { query: string }; rate: number; enabled: boolean }) => {
+    const body = { data: { type: "apm_retention_filter", attributes: { ...a, filter_type: "spans-sampling-processor" } } };
+    return id
+      ? put<unknown>(`/apm/config/retention-filters/${id}`, body)
+      : post<unknown>("/apm/config/retention-filters", body);
+  },
+  deleteRetentionFilter: (id: string) => del<unknown>(`/apm/config/retention-filters/${id}`),
+  reorderRetentionFilters: (ids: string[]) =>
+    put<unknown>("/apm/config/retention-filters-execution-order", {
+      data: ids.map((id) => ({ id, type: "apm_retention_filter" })),
+    }),
+  apmIngestion: () => call<{ services: IngestionService[] }>("/apm/ingestion").then((r) => r.services),
+  apmResource: (service: string, resource: string, from: number, to: number, env?: string) =>
+    call<ResourceDetail>(
+      `/apm/resource?service=${encodeURIComponent(service)}&resource=${encodeURIComponent(resource)}&from=${from}&to=${to}${env ? `&env=${encodeURIComponent(env)}` : ""}`,
+    ),
+  serviceDefinitions: () =>
+    call<{ data: ServiceDefinition[] }>("/services/definitions").then((r) => r.data),
+  definitionYaml: (service: string) =>
+    call<{ yaml: string; exists: boolean }>(`/apm/definition-template/${encodeURIComponent(service)}`),
+  saveDefinition: (yaml: string) =>
+    call<unknown>("/services/definitions", {
+      method: "POST",
+      body: yaml,
+      headers: { "content-type": "application/yaml" },
+    }),
+  deleteDefinition: (service: string) => del<unknown>(`/services/definitions/${encodeURIComponent(service)}`),
+  teams: () => call<TeamView[]>("/teams"),
+  saveTeam: (id: string | null, a: { name: string; handle: string; description: string }) =>
+    id
+      ? call<unknown>(`/team/${id}`, { method: "PATCH", body: JSON.stringify({ data: { type: "team", attributes: a } }) })
+      : post<unknown>("/team", { data: { type: "team", attributes: a } }),
+  deleteTeam: (id: string) => del<unknown>(`/team/${id}`),
+  addTeamMember: (id: string, user: string, admin: boolean) =>
+    post<unknown>(`/team/${id}/memberships`, {
+      data: {
+        type: "team_memberships",
+        attributes: { role: admin ? "admin" : null },
+        relationships: { user: { data: { id: user, type: "users" } } },
+      },
+    }),
+  removeTeamMember: (id: string, user: string) =>
+    del<unknown>(`/team/${id}/memberships/${encodeURIComponent(user)}`),
+  addTeamLink: (id: string, label: string, url: string) =>
+    post<unknown>(`/team/${id}/links`, { data: { type: "team_links", attributes: { label, url } } }),
+  removeTeamLink: (id: string, link: string) => del<unknown>(`/team/${id}/links/${link}`),
+  scorecards: () => call<Scorecards>("/scorecards"),
+  createScorecardRule: (a: { name: string; scorecard_name: string; description: string }) =>
+    post<unknown>("/scorecard/rules", { data: { type: "rule", attributes: { ...a, enabled: true } } }),
+  deleteScorecardRule: (id: string) => del<unknown>(`/scorecard/rules/${id}`),
   monitors: () => call<Monitor[]>("/monitors"),
   monitor: (id: number) => call<Monitor>(`/monitors/${id}`),
   createMonitor: (m: MonitorDraft) => post<Monitor>("/monitors", m),

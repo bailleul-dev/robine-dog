@@ -303,62 +303,8 @@ pub async fn service(
     let min_d = f64_at(&summary_row, 10).unwrap_or(1.0).max(1.0);
     let max_d = (summary.max.max(1)) as f64;
 
-    let mut distribution = Vec::new();
-    if summary.hits > 0 {
-        let lo = min_d.log10().floor();
-        let hi = max_d.log10().ceil().max(lo + 1.0);
-        let step = (hi - lo) / DISTRIBUTION_BUCKETS as f64;
-        let rows = gt
-            .query(&format!(
-                "SELECT LEAST(CAST(floor((log10(CAST(GREATEST(duration, 1) AS DOUBLE)) - {lo:?}) / {step:?}) AS BIGINT), {last}) AS i, count(*)
-                 FROM spans WHERE {filter} GROUP BY i",
-                last = DISTRIBUTION_BUCKETS - 1
-            ))
-            .await?;
-        let mut counts = vec![0i64; DISTRIBUTION_BUCKETS as usize];
-        for row in &rows {
-            counts[i64_at(row, 0).clamp(0, DISTRIBUTION_BUCKETS - 1) as usize] += i64_at(row, 1);
-        }
-        distribution = counts
-            .into_iter()
-            .enumerate()
-            .map(|(i, c)| (10f64.powf(lo + step * (i + 1) as f64) as i64, c))
-            .collect();
-    }
-
-    let mut by_bucket: BTreeMap<i64, Point> = BTreeMap::new();
-    let mut t = r.from - r.from.rem_euclid(interval);
-    while t <= r.to {
-        by_bucket.insert(
-            t,
-            Point {
-                t,
-                hits: 0,
-                errors: 0,
-                p50: 0,
-                p95: 0,
-                p99: 0,
-                max: 0,
-            },
-        );
-        t += interval;
-    }
-    for row in &series {
-        let t = i64_at(row, 0) / 1_000_000;
-        let s = stats_at(row, 1);
-        by_bucket.insert(
-            t,
-            Point {
-                t,
-                hits: s.hits,
-                errors: s.errors,
-                p50: s.p50,
-                p95: s.p95,
-                p99: s.p99,
-                max: s.max,
-            },
-        );
-    }
+    let distribution = distribution(gt, &filter, summary.hits, min_d, max_d).await?;
+    let timeseries = timeseries(&series, r.from, r.to, interval);
 
     let mut resources: Vec<ResourceRow> = resources
         .iter()
@@ -376,7 +322,7 @@ pub async fn service(
         operations,
         summary,
         interval_ms: interval,
-        timeseries: by_bucket.into_values().collect(),
+        timeseries,
         resources,
         distribution,
         deployments,
@@ -442,4 +388,259 @@ pub async fn envs(State(st): State<AppState>) -> ApiResult<Vec<String>> {
         .query("SELECT DISTINCT env FROM spans WHERE env IS NOT NULL ORDER BY env")
         .await?;
     Ok(Json(rows.iter().filter_map(|r| str_at(r, 0)).collect()))
+}
+
+/// Latency distribution of the spans of `filter`: `[upper bound in ns, count]`
+/// over log-scaled buckets.
+async fn distribution(
+    gt: &crate::store::greptime::Greptime,
+    filter: &str,
+    hits: i64,
+    min_d: f64,
+    max_d: f64,
+) -> anyhow::Result<Vec<(i64, i64)>> {
+    if hits == 0 {
+        return Ok(Vec::new());
+    }
+    let lo = min_d.log10().floor();
+    let hi = max_d.log10().ceil().max(lo + 1.0);
+    let step = (hi - lo) / DISTRIBUTION_BUCKETS as f64;
+    let rows = gt
+        .query(&format!(
+            "SELECT LEAST(CAST(floor((log10(CAST(GREATEST(duration, 1) AS DOUBLE)) - {lo:?}) / {step:?}) AS BIGINT), {last}) AS i, count(*)
+             FROM spans WHERE {filter} GROUP BY i",
+            last = DISTRIBUTION_BUCKETS - 1
+        ))
+        .await?;
+    let mut counts = vec![0i64; DISTRIBUTION_BUCKETS as usize];
+    for row in &rows {
+        counts[i64_at(row, 0).clamp(0, DISTRIBUTION_BUCKETS - 1) as usize] += i64_at(row, 1);
+    }
+    Ok(counts
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| (10f64.powf(lo + step * (i + 1) as f64) as i64, c))
+        .collect())
+}
+
+/// Rows of `bucket, STATS` as points, empty buckets included.
+fn timeseries(series: &[Row], from: i64, to: i64, interval: i64) -> Vec<Point> {
+    let empty = |t| Point {
+        t,
+        hits: 0,
+        errors: 0,
+        p50: 0,
+        p95: 0,
+        p99: 0,
+        max: 0,
+    };
+    let mut by_bucket: BTreeMap<i64, Point> = BTreeMap::new();
+    let mut t = from - from.rem_euclid(interval);
+    while t <= to {
+        by_bucket.insert(t, empty(t));
+        t += interval;
+    }
+    for row in series {
+        let t = i64_at(row, 0) / 1_000_000;
+        let s = stats_at(row, 1);
+        by_bucket.insert(
+            t,
+            Point {
+                t,
+                hits: s.hits,
+                errors: s.errors,
+                p50: s.p50,
+                p95: s.p95,
+                p99: s.p99,
+                max: s.max,
+            },
+        );
+    }
+    by_bucket.into_values().collect()
+}
+
+#[derive(Deserialize)]
+pub struct ResourceQuery {
+    service: String,
+    resource: String,
+    from: i64,
+    to: i64,
+    env: Option<String>,
+}
+
+/// A span under the resource's entry spans, grouped by service and name.
+#[derive(Serialize)]
+pub struct SpanSummary {
+    service: String,
+    name: String,
+    /// Traces of the resource with this span.
+    traces: i64,
+    spans_per_trace: f64,
+    avg: i64,
+    p95: i64,
+    /// Its share of the resource's time.
+    time_share: f64,
+}
+
+#[derive(Serialize)]
+pub struct TraceSample {
+    trace_id: String,
+    span_id: String,
+    start: i64,
+    duration: i64,
+    error: bool,
+    status_code: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ResourceDetail {
+    service: String,
+    resource: String,
+    operation: String,
+    summary: Stats,
+    interval_ms: i64,
+    timeseries: Vec<Point>,
+    distribution: Vec<(i64, i64)>,
+    spans: Vec<SpanSummary>,
+    slowest: Vec<TraceSample>,
+    errors: Vec<TraceSample>,
+    /// Status codes of the resource's requests.
+    status_codes: Vec<(String, i64)>,
+}
+
+fn samples(rows: &[Row]) -> Vec<TraceSample> {
+    rows.iter()
+        .map(|r| TraceSample {
+            trace_id: str_at(r, 0).unwrap_or_default(),
+            span_id: str_at(r, 1).unwrap_or_default(),
+            start: i64_at(r, 2) / 1_000_000,
+            duration: i64_at(r, 3),
+            error: str_at(r, 4).is_some_and(|e| e == "true") || i64_at(r, 4) == 1,
+            status_code: str_at(r, 5),
+        })
+        .collect()
+}
+
+/// `GET /api/ui/apm/resource`: a resource of a service, as Datadog's
+/// resource page.
+pub async fn resource(
+    State(st): State<AppState>,
+    Query(q): Query<ResourceQuery>,
+) -> ApiResult<ResourceDetail> {
+    let r = Range {
+        from: q.from,
+        to: q.to,
+        env: q.env.clone(),
+    };
+    let filter = format!(
+        "{} AND resource = {}",
+        r.entry_filter(Some(&q.service)),
+        lit(&q.resource)
+    );
+    let interval = interval_ms(q.from, q.to, 60);
+    let gt = &st.store.gt;
+    let window = time_clause(Dataset::Spans, q.from, q.to);
+    let sample_cols = "trace_id, span_id, CAST(ts AS BIGINT) AS t, duration, \
+        CASE WHEN error THEN 1 ELSE 0 END, json_get(meta, '$[\"http.status_code\"]')";
+    let summary_sql = format!("SELECT {STATS} FROM spans WHERE {filter}");
+    let series_sql = format!(
+        "SELECT CAST(date_bin(INTERVAL '{interval} milliseconds', ts) AS BIGINT) AS b, {STATS}
+         FROM spans WHERE {filter} GROUP BY b"
+    );
+    let ops_sql = format!(
+        "SELECT name, count(*) AS n FROM spans WHERE {filter} GROUP BY name ORDER BY n DESC LIMIT 1"
+    );
+    let slowest_sql =
+        format!("SELECT {sample_cols} FROM spans WHERE {filter} ORDER BY duration DESC LIMIT 15");
+    let errors_sql = format!(
+        "SELECT {sample_cols} FROM spans WHERE {filter} AND error ORDER BY t DESC LIMIT 15"
+    );
+    let codes_sql = format!(
+        "SELECT json_get(meta, '$[\"http.status_code\"]') AS c, count(*) AS n
+         FROM spans WHERE {filter} GROUP BY c ORDER BY n DESC LIMIT 10"
+    );
+    let (summary, series, ops, slowest, errors, codes) = tokio::try_join!(
+        gt.query(&summary_sql),
+        gt.query(&series_sql),
+        gt.query(&ops_sql),
+        gt.query(&slowest_sql),
+        gt.query(&errors_sql),
+        gt.query(&codes_sql),
+    )?;
+    let summary_row = summary.first().cloned().unwrap_or_default();
+    let stats = stats_at(&summary_row, 0);
+    let min_d = f64_at(&summary_row, 10).unwrap_or(1.0).max(1.0);
+    let max_d = (stats.max.max(1)) as f64;
+    let distribution = distribution(gt, &filter, stats.hits, min_d, max_d).await?;
+
+    // Spans under the resource's last 500 entry spans (within their time),
+    // by service and name. The entry span's own group gives the number of
+    // traces and their time.
+    let spans_sql = format!(
+        "SELECT s.service, s.name, count(DISTINCT s.trace_id), count(*), avg(s.duration),
+                approx_percentile_cont(s.duration, 0.95), sum(s.duration),
+                sum(CASE WHEN s.top_level AND s.resource = {res} AND s.service = {svc} THEN s.duration ELSE 0 END),
+                count(DISTINCT CASE WHEN s.top_level AND s.resource = {res} AND s.service = {svc} THEN s.trace_id END)
+         FROM spans s
+         JOIN (SELECT trace_id, CAST(ts AS BIGINT) AS es, duration AS ed FROM spans
+               WHERE {filter} ORDER BY ts DESC LIMIT 500) e ON s.trace_id = e.trace_id
+         WHERE s.{w} AND CAST(s.ts AS BIGINT) >= e.es
+           AND CAST(s.ts AS BIGINT) + s.duration <= e.es + e.ed
+         GROUP BY s.service, s.name",
+        w = window,
+        res = lit(&q.resource),
+        svc = lit(&q.service),
+    );
+    let rows = gt.query(&spans_sql).await?;
+    let traces = rows.iter().map(|r| i64_at(r, 8)).sum::<i64>().max(1);
+    let total_time = rows.iter().map(|r| i64_at(r, 7)).sum::<i64>().max(1);
+    let mut spans: Vec<SpanSummary> = rows
+        .iter()
+        .map(|row| SpanSummary {
+            service: str_at(row, 0).unwrap_or_default(),
+            name: str_at(row, 1).unwrap_or_default(),
+            traces: i64_at(row, 2),
+            spans_per_trace: i64_at(row, 3) as f64 / traces as f64,
+            avg: f64_at(row, 4).unwrap_or(0.0) as i64,
+            p95: f64_at(row, 5).unwrap_or(0.0) as i64,
+            time_share: (f64_at(row, 6).unwrap_or(0.0) / total_time as f64).min(1.0),
+        })
+        .collect();
+    spans.sort_by(|a, b| b.time_share.total_cmp(&a.time_share));
+    spans.truncate(30);
+
+    Ok(Json(ResourceDetail {
+        operation: ops.first().and_then(|r| str_at(r, 0)).unwrap_or_default(),
+        summary: stats,
+        interval_ms: interval,
+        timeseries: timeseries(&series, q.from, q.to, interval),
+        distribution,
+        spans,
+        slowest: samples(&slowest),
+        errors: samples(&errors),
+        status_codes: codes
+            .iter()
+            .filter_map(|r| Some((str_at(r, 0)?, i64_at(r, 1))))
+            .collect(),
+        service: q.service,
+        resource: q.resource,
+    }))
+}
+
+/// `GET /api/ui/apm/definition-template/{name}`: the service's definition in
+/// YAML, or a starting one.
+pub async fn definition_template(
+    State(st): State<AppState>,
+    Path(name): Path<String>,
+) -> ApiResult<serde_json::Value> {
+    let stored = st
+        .store
+        .pg
+        .doc(crate::catalog::definitions::KIND, &name)
+        .await?;
+    let (yaml, exists) = match stored {
+        Some(d) => (serde_yaml::to_string(&d.body).unwrap_or_default(), true),
+        None => (crate::catalog::definitions::template(&name), false),
+    };
+    Ok(Json(serde_json::json!({"yaml": yaml, "exists": exists})))
 }

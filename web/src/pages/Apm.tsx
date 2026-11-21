@@ -8,6 +8,7 @@ import { TimePicker } from "../components/TimePicker";
 import { api, type ServiceSummary } from "../lib/api";
 import { ago, compact, duration, percent, rate, serviceColor, spanTypeIcon } from "../lib/format";
 import { useTimeRange } from "../lib/time";
+import { ServiceOwnership } from "./Catalog";
 import { APM_TABS } from "./TraceExplorer";
 
 export function useEnv(): [string, (v: string) => void] {
@@ -51,6 +52,8 @@ export function ServiceCatalog() {
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "hits", desc: true });
   const navigate = useNavigate();
+  const defs = useQuery({ queryKey: ["service-definitions"], queryFn: api.serviceDefinitions });
+  const teamOf = Object.fromEntries((defs.data ?? []).map((d) => [d.attributes.schema["dd-service"], d.attributes.schema.team]));
   const services = useQuery({
     queryKey: ["services", time.from, time.to, env],
     queryFn: () => api.services(time.from, time.to, env || undefined),
@@ -92,6 +95,7 @@ export function ServiceCatalog() {
         <table className="list">
           <colgroup>
             <col />
+            <col style={{ width: 140 }} />
             <col style={{ width: 90 }} />
             <col style={{ width: 230 }} />
             <col style={{ width: 120 }} />
@@ -101,6 +105,7 @@ export function ServiceCatalog() {
           <thead>
             <tr>
               {th("name", "Service")}
+              <th>Team</th>
               {th("type", "Type")}
               {th("hits", "Requests")}
               {th("p95", "P95 Latency", true)}
@@ -117,6 +122,7 @@ export function ServiceCatalog() {
                     {s.operation}
                   </div>
                 </td>
+                <td className="muted">{teamOf[s.name] ? `@${teamOf[s.name]}` : ""}</td>
                 <td>
                   <span className="type-badge">{spanTypeIcon(s.type)}</span>
                 </td>
@@ -244,6 +250,7 @@ export function ServicePage() {
               </div>
             </div>
             <div className="page-padding">
+              <ServiceOwnership service={name} />
               <div className="cards">
                 <div className="card">
                   <div className="card-title">
@@ -421,7 +428,15 @@ export function ServicePage() {
                 </thead>
                 <tbody>
                   {d.resources.map((r) => (
-                    <tr key={`${r.operation}/${r.resource}`} onClick={() => navigate(tracesLink(`resource_name:"${r.resource.replace(/"/g, '\\"')}"`))}>
+                    <tr
+                      key={`${r.operation}/${r.resource}`}
+                      className="resource-row"
+                      onClick={() => {
+                        const p = new URLSearchParams(window.location.search);
+                        p.set("resource", r.resource);
+                        navigate(`/apm/services/${encodeURIComponent(name)}/resource?${p}`);
+                      }}
+                    >
                       <td title={r.resource}>
                         {r.resource} <span className="faint mono">{r.operation}</span>
                       </td>
@@ -447,7 +462,7 @@ export function ServicePage() {
   );
 }
 
-function Distribution({ data, p50, p95, p99 }: { data: [number, number][]; p50: number; p95: number; p99: number }) {
+export function Distribution({ data, p50, p95, p99 }: { data: [number, number][]; p50: number; p95: number; p99: number }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   if (!data.length) return <div ref={ref} className="faint">No requests.</div>;
   const height = 150;

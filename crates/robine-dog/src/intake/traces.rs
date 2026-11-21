@@ -370,16 +370,21 @@ impl Insertable for SpanRow {
 }
 
 /// Stores trace chunks: service entry spans marked, trace metrics derived.
-pub async fn ingest(st: &AppState, chunks: Vec<Vec<SpanRow>>) -> anyhow::Result<usize> {
-    let mut spans = Vec::new();
-    for mut chunk in chunks {
-        mark_top_level(&mut chunk);
-        for s in &chunk {
+/// Every span feeds the trace metrics and span-based metrics; retention
+/// filters then decide which traces are stored.
+pub async fn ingest(st: &AppState, mut chunks: Vec<Vec<SpanRow>>) -> anyhow::Result<usize> {
+    for chunk in &mut chunks {
+        mark_top_level(chunk);
+        for s in chunk.iter() {
             crate::metrics::trace_metrics(&st.aggregator, s);
             st.generated.on_span(&st.aggregator, s);
         }
-        spans.extend(chunk);
     }
+    let now = crate::intake::logs::now_ms();
+    let spans: Vec<SpanRow> = crate::catalog::retention::filter(st, chunks, now)
+        .into_iter()
+        .flatten()
+        .collect();
     let n = spans.len();
     st.store.spans.send(spans).await?;
     Ok(n)

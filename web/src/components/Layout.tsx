@@ -169,7 +169,7 @@ const SECTIONS: Item[][] = [
       label: "APM",
       icon: <ApmIcon />,
       to: "/apm/services",
-      match: ["/apm"],
+      match: ["/apm", "/teams"],
       links: [
         {
           label: "Software Catalog",
@@ -187,6 +187,12 @@ const SECTIONS: Item[][] = [
           hint: "How services call each other",
         },
         {
+          label: "Scorecards",
+          to: "/apm/scorecards",
+          hint: "Production readiness, observability, ownership",
+        },
+        { label: "Teams", to: "/teams", hint: "Owners of services" },
+        {
           label: "Error Tracking",
           to: "/error-tracking",
           hint: "Errors grouped into issues",
@@ -201,8 +207,8 @@ const SECTIONS: Item[][] = [
           title: "Settings",
           links: [
             { label: "Generate Metrics", to: "/apm/generate-metrics" },
-            { label: "Ingestion Control" },
-            { label: "Retention Filters" },
+            { label: "Ingestion Control", to: "/apm/ingestion-control", hint: "Spans received per service, and sampling" },
+            { label: "Retention Filters", to: "/apm/retention-filters", hint: "Which traces are stored" },
             { label: "Dynamic Instrumentation" },
           ],
         },
