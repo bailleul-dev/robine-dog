@@ -1,0 +1,66 @@
+name: CI
+
+# main, branches and pull requests: the checks (`make check`: fmt, clippy, the Rust tests, the web
+# app's typecheck). A v* tag (`make release RELEASE=v0.2.0`): the checks, then the image built and
+# pushed with that tag and rolled out by robine-actions (silo01's robine-dog-deploy). The
+# standard procedure: ../silo01/roles/robine_actions/README.md.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Runners are ephemeral Kata micro-VMs on silo59 (robine-actions), each with its own Docker
+# daemon. A pending run is replaced by a newer one of its group: releases get their own.
+concurrency:
+  group: robine-dog-ci-${{ github.ref_type == 'tag' && 'release' || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  check:
+    name: Checks (fmt, clippy, tests, typecheck)
+    runs-on: [self-hosted, robine]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      # The runner image is a bare Ubuntu 24.04 (passwordless sudo).
+      - name: System libraries
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            build-essential pkg-config
+      # The Dockerfile's: Rust 1.98, Node 26.
+      - uses: dtolnay/rust-toolchain@1.98
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci --no-fund --no-audit
+      - run: make check
+
+  # Once the checks pass on a v* tag: builds and pushes the image tagged with it, then robine
+  # (silo59) rolls it out. The job only proves who it is (GitHub's OIDC token, hence id-token:
+  # write): robine hands it the registry's CI account, no secret lives here.
+  deploy:
+    name: Deploy
+    needs: [check]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, robine]
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: robine-registry-login
+      - run: make image VERSION=${{ github.ref_name }}
+      - run: robine-deploy

@@ -1,12 +1,21 @@
 # Deployment
 
 Production runs in silo01's k3s at https://robinedog.bailleul.dev, through
-silo01's `robine_dog` role:
+silo01's `robine_dog` role. The CI (`.github/workflows/ci.yml`, on
+robine-actions' runners) runs `make check` on every push. A release is a `v*`
+tag of main:
 
 ```sh
+make release RELEASE=v0.2.0   # pushes the tag: its CI checks, builds and pushes the image,
+                              # then robine-actions rolls it out (silo01's robine-dog-deploy)
+```
+
+silo01 never builds. By hand, or to roll back:
+
+```sh
+make image                                       # here: build and push HEAD's image
 cd ../silo01
-make robine-dog                                  # check, build, push, deploy, wait for /health
-make robine-dog-deploy ROBINE_DOG_VERSION=<tag>  # roll out (or back) a pushed image
+make robine-dog-deploy ROBINE_DOG_VERSION=<tag>  # roll out (or back) a pushed image, wait for /health
 ```
 
 The Robine ID clients `robine-dog` and `robine-dog-dev` are declared in silo01
