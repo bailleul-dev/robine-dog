@@ -50,6 +50,10 @@ export const LOG_TABS = [
   { to: "/logs/livetail", label: "Live Tail" },
   { to: "/logs/pipelines", label: "Pipelines" },
   { to: "/logs/generate-metrics", label: "Generate Metrics" },
+  { to: "/logs/indexes", label: "Indexes" },
+  { to: "/logs/archives", label: "Archives" },
+  { to: "/logs/sensitive-data-scanner", label: "Sensitive Data" },
+  { to: "/logs/reference-tables", label: "Reference Tables" },
 ];
 
 /** Every leaf path of an attributes object, as `@a.b.c`. */

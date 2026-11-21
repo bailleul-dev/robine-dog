@@ -45,13 +45,6 @@ pub struct ValuesResp {
     facets: Vec<FacetValues>,
 }
 
-fn table(ds: Dataset) -> &'static str {
-    match ds {
-        Dataset::Spans => "spans",
-        _ => "logs",
-    }
-}
-
 async fn facet_values(
     gt: &Greptime,
     ds: Dataset,
@@ -60,12 +53,15 @@ async fn facet_values(
     limit: i64,
 ) -> anyhow::Result<FacetValues> {
     let expr = without_key(
-        crate::query::parser::parse(&scope.query).map_err(|e| anyhow::anyhow!(e.0))?,
+        parse_query(&scope.query).map_err(|e| match e {
+            ApiError::BadQuery(m) => anyhow::anyhow!(m),
+            e => anyhow::anyhow!("{e:?}"),
+        })?,
         path,
     );
     let base = format!(
         "FROM {} WHERE {} AND {}",
-        table(ds),
+        super::table_of(ds, &scope.query),
         time_clause(ds, scope.from, scope.to),
         sql::compile(&expr, ds)
     );

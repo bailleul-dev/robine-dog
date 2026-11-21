@@ -14,6 +14,7 @@ mod config;
 mod events;
 mod hosts;
 mod intake;
+mod logconfig;
 mod mcp;
 mod metrics;
 mod monitors;
@@ -41,6 +42,80 @@ pub struct AppState {
     pub hosts: Arc<hosts::Hosts>,
     pub cfg: Arc<config::Config>,
     pub auth: Arc<auth::Auth>,
+    pub logconfig: Arc<logconfig::LogConfig>,
+}
+
+/// Indexes, archives, the Sensitive Data Scanner and Reference Tables, on
+/// Datadog's paths (`v1`, `v2`: `/api/v1`, `/api/v2` for the public API, empty
+/// for the UI's).
+fn logconfig_routes(r: Router<AppState>, v1: &str, v2: &str) -> Router<AppState> {
+    use logconfig::{archives, indexes, reftables, sds};
+    r.route(
+        &format!("{v1}/logs/config/indexes"),
+        get(indexes::list).post(indexes::create),
+    )
+    .route(
+        &format!("{v1}/logs/config/indexes/{{name}}"),
+        get(indexes::get)
+            .put(indexes::update)
+            .delete(indexes::delete),
+    )
+    .route(
+        &format!("{v1}/logs/config/index-order"),
+        get(indexes::get_order).put(indexes::set_order),
+    )
+    .route(
+        &format!("{v2}/logs/config/archives"),
+        get(archives::list).post(archives::create),
+    )
+    .route(
+        &format!("{v2}/logs/config/archives/{{id}}"),
+        get(archives::get)
+            .put(archives::update)
+            .delete(archives::delete),
+    )
+    .route(
+        &format!("{v2}/logs/config/archive-order"),
+        get(archives::get_order).put(archives::set_order),
+    )
+    .route(
+        &format!("{v2}/sensitive-data-scanner/config"),
+        get(sds::config).patch(sds::reorder_groups),
+    )
+    .route(
+        &format!("{v2}/sensitive-data-scanner/config/groups"),
+        post(sds::create_group),
+    )
+    .route(
+        &format!("{v2}/sensitive-data-scanner/config/groups/{{id}}"),
+        axum::routing::patch(sds::update_group).delete(sds::delete_group),
+    )
+    .route(
+        &format!("{v2}/sensitive-data-scanner/config/rules"),
+        post(sds::create_rule),
+    )
+    .route(
+        &format!("{v2}/sensitive-data-scanner/config/rules/{{id}}"),
+        axum::routing::patch(sds::update_rule).delete(sds::delete_rule),
+    )
+    .route(
+        &format!("{v2}/sensitive-data-scanner/config/standard-patterns"),
+        get(sds::standard_patterns),
+    )
+    .route(
+        &format!("{v2}/reference-tables/tables"),
+        get(reftables::list).post(reftables::create),
+    )
+    .route(
+        &format!("{v2}/reference-tables/tables/{{id}}"),
+        get(reftables::get)
+            .patch(reftables::update)
+            .delete(reftables::delete),
+    )
+    .route(
+        &format!("{v2}/reference-tables/tables/{{id}}/rows"),
+        get(reftables::rows),
+    )
 }
 
 fn ui_api(st: AppState) -> Router<AppState> {
@@ -49,7 +124,7 @@ fn ui_api(st: AppState) -> Router<AppState> {
 
 /// The API of the UI, before authentication: also what the MCP tools call.
 pub(crate) fn ui_routes() -> Router<AppState> {
-    Router::new()
+    let r = Router::new()
         .route("/me", get(auth::me))
         .route("/logs/search", post(api::logs::search))
         .route("/logs/histogram", post(api::logs::histogram))
@@ -292,6 +367,15 @@ pub(crate) fn ui_routes() -> Router<AppState> {
                 .delete(api::pipelines::delete),
         )
         .route("/pipelines/{id}/clone", post(api::pipelines::clone))
+        .route(
+            "/logs/rehydrations",
+            get(logconfig::archives::list_views).post(logconfig::archives::create_view),
+        )
+        .route(
+            "/logs/rehydrations/{id}",
+            delete(logconfig::archives::delete_view),
+        )
+        .route("/sensitive-data-scanner/test", post(logconfig::sds::test))
         .route("/metrics", get(api::metrics::list))
         .route("/hosts", get(api::metrics::hosts))
         .route("/checks", get(checks::list))
@@ -300,12 +384,13 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route(
             "/metrics/{name}",
             get(api::metrics::detail).patch(api::metrics::update),
-        )
+        );
+    logconfig_routes(r, "", "")
 }
 
 /// Datadog's public API, for its clients and Terraform: `DD-API-KEY` auth.
 fn public_api(st: AppState) -> Router<AppState> {
-    Router::new()
+    let r = Router::new()
         .route(
             "/api/v1/logs/config/pipelines",
             get(api::pipelines::list).post(api::pipelines::create),
@@ -559,11 +644,11 @@ fn public_api(st: AppState) -> Router<AppState> {
         .route(
             "/api/v1/logs/config/pipeline-order",
             get(api::pipelines::order).put(api::pipelines::set_order),
-        )
-        .layer(axum::middleware::from_fn_with_state(
-            st,
-            intake::logs::require_api_key,
-        ))
+        );
+    logconfig_routes(r, "/api/v1", "/api/v2").layer(axum::middleware::from_fn_with_state(
+        st,
+        intake::logs::require_api_key,
+    ))
 }
 
 fn app(st: AppState) -> Router {
@@ -702,7 +787,11 @@ async fn main() -> anyhow::Result<()> {
         hosts: Arc::new(hosts::Hosts::load(&store.pg).await?),
         cfg: cfg.clone(),
         auth: Arc::new(auth::Auth::new()),
+        logconfig: Arc::new(logconfig::LogConfig::default()),
     };
+    if let Err(e) = logconfig::init(&st).await {
+        tracing::warn!(error = %e, "could not load the log configuration");
+    }
     if let Err(e) = api::dashboards::ensure_default(&st).await {
         tracing::warn!(error = %e, "could not install the default dashboard");
     }
@@ -758,11 +847,14 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(cfg.listen).await?;
     tracing::info!(addr = %cfg.listen, base_url = %cfg.base_url, "robine-dog listening");
+    let logconf = st.logconfig.clone();
     axum::serve(listener, app(st))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
-    // Nothing buffered is lost on a restart: the aggregator, then the writers.
+    // Nothing buffered is lost on a restart: the aggregator, the archives,
+    // then the writers.
     aggregator.flush(&store).await;
+    logconf.archives.flush().await;
     store.flush().await;
     tracing::info!("stopped");
     Ok(())

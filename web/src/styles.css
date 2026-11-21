@@ -4526,3 +4526,23 @@ table.list td.infra-bad {
 .rum-retention td.num, .rum-retention th.num { min-width: 56px; }
 .rum-retention-avg td { font-weight: 600; }
 @media (max-width: 900px) { .rum-replay { grid-template-columns: 1fr; } }
+
+/* Logs configuration: indexes, archives, scanner, reference tables. */
+.pill.ok { background: var(--green); }
+.pill.warn { background: var(--orange); }
+.pill.error { background: var(--red); }
+.pill:not(.ok):not(.warn):not(.error) { background: var(--text-faint); }
+.quota-bar {
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+.quota-bar > div { height: 100%; }
+.sds-test-result {
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}

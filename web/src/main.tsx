@@ -24,6 +24,12 @@ import { DashboardList, DashboardPage } from "./pages/Dashboards";
 import { ErrorTracking, IssuePage } from "./pages/ErrorTracking";
 import { ManageMonitors, MonitorEditor, MonitorPage, TriggeredMonitors, Webhooks } from "./pages/Monitors";
 import { GenerateMetrics } from "./pages/GenerateMetrics";
+import {
+  LogArchives,
+  LogIndexes,
+  ReferenceTables,
+  SensitiveDataScanner,
+} from "./pages/LogsConfig";
 import { Pipelines } from "./pages/Pipelines";
 import { ServiceMap } from "./pages/ServiceMap";
 import { TraceExplorer } from "./pages/TraceExplorer";
@@ -93,6 +99,10 @@ function App() {
         <Route path="/logs/livetail" element={<LiveTail />} />
         <Route path="/logs/pipelines" element={<Pipelines />} />
         <Route path="/logs/generate-metrics" element={<GenerateMetrics source="logs" key="logs" />} />
+        <Route path="/logs/indexes" element={<LogIndexes />} />
+        <Route path="/logs/archives" element={<LogArchives />} />
+        <Route path="/logs/sensitive-data-scanner" element={<SensitiveDataScanner />} />
+        <Route path="/logs/reference-tables" element={<ReferenceTables />} />
         <Route path="/apm/generate-metrics" element={<GenerateMetrics source="spans" key="spans" />} />
         <Route path="/dashboard" element={<Navigate to="/dashboard/lists" replace />} />
         <Route path="/dashboard/lists" element={<DashboardList />} />

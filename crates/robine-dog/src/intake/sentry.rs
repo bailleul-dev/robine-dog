@@ -439,12 +439,11 @@ pub async fn ingest(
             let mut row = event_to_log(e, &project, service.as_deref(), now);
             st.hosts.apply(&mut row.host, &mut row.tags);
             st.pipelines.apply(&mut row);
-            st.generated.on_log(&st.aggregator, &row);
             row
         })
         .collect();
     tracing::debug!(count = rows.len(), project = %project, "sentry events received");
-    if let Err(e) = st.store.logs.send(rows).await {
+    if let Err(e) = crate::logconfig::ingest(&st, rows).await {
         tracing::error!(error = %e, "storing sentry events");
         return cors(StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }

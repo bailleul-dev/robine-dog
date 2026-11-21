@@ -401,6 +401,40 @@ function Check({
   );
 }
 
+/** The Reference Table of a lookup processor: the target gets the row of
+ * the source's key. */
+function RefTableSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const tables = useQuery({
+    queryKey: ["reference-tables"],
+    queryFn: api.referenceTables,
+  });
+  return (
+    <Field
+      label="Reference Table"
+      hint="The target attribute gets the row whose primary key is the source's value."
+    >
+      <select
+        className="input"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">None: a key,value list</option>
+        {(tables.data ?? []).map((t) => (
+          <option key={t.id} value={t.attributes.table_name}>
+            {t.attributes.table_name}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
 function ProcessorFields({
   p,
   set,
@@ -596,21 +630,28 @@ function ProcessorFields({
         <>
           {text("source", "Source attribute")}
           {text("target", "Target attribute")}
-          <Field label="Lookup table" hint="One key,value pair per line">
-            <textarea
-              className="input mono"
-              rows={5}
-              value={list(p.lookup_table).join("\n")}
-              onChange={(e) =>
-                set({
-                  lookup_table: e.target.value
-                    .split("\n")
-                    .filter((l) => l.trim()),
-                })
-              }
-            />
-          </Field>
-          {text("default_lookup", "Default value (optional)")}
+          <RefTableSelect
+            value={str(p.lookup_enrichment_table)}
+            onChange={(v) => set({ lookup_enrichment_table: v || undefined })}
+          />
+          {!p.lookup_enrichment_table && (
+            <Field label="Lookup table" hint="One key,value pair per line">
+              <textarea
+                className="input mono"
+                rows={5}
+                value={list(p.lookup_table).join("\n")}
+                onChange={(e) =>
+                  set({
+                    lookup_table: e.target.value
+                      .split("\n")
+                      .filter((l) => l.trim()),
+                  })
+                }
+              />
+            </Field>
+          )}
+          {!p.lookup_enrichment_table &&
+            text("default_lookup", "Default value (optional)")}
         </>
       );
     case "pipeline":

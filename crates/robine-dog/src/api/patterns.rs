@@ -219,7 +219,8 @@ pub async fn patterns(State(st): State<AppState>, Json(s): Json<Scope>) -> ApiRe
         .store
         .gt
         .query(&format!(
-            "SELECT id, message, status, service FROM logs WHERE {} AND {filter} ORDER BY ts DESC LIMIT {SAMPLE}",
+            "SELECT id, message, status, service FROM {} WHERE {} AND {filter} ORDER BY ts DESC LIMIT {SAMPLE}",
+            super::table_of(Dataset::Logs, &s.query),
             time_clause(Dataset::Logs, s.from, s.to)
         ))
         .await?;

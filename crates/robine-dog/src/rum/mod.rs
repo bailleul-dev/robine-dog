@@ -243,9 +243,8 @@ async fn store_rum(st: &AppState, raw: &[u8], q: &HashMap<String, String>, agent
     }
     for row in &mut errors {
         st.pipelines.apply(row);
-        st.generated.on_log(&st.aggregator, row);
     }
-    if let Err(e) = st.store.logs.send(errors).await {
+    if let Err(e) = crate::logconfig::ingest(st, errors).await {
         tracing::warn!(error = %e, "storing rum errors");
     }
 }
@@ -270,11 +269,10 @@ async fn store_logs(st: &AppState, raw: &[u8], q: &HashMap<String, String>) {
         .map(|o| {
             let mut row = process(o, &defaults, now);
             st.pipelines.apply(&mut row);
-            st.generated.on_log(&st.aggregator, &row);
             row
         })
         .collect();
-    if let Err(e) = st.store.logs.send(rows).await {
+    if let Err(e) = crate::logconfig::ingest(st, rows).await {
         tracing::warn!(error = %e, "storing browser logs");
     }
 }

@@ -466,12 +466,11 @@ pub async fn intake(
             let mut row = process(o, &defaults, now);
             st.hosts.apply(&mut row.host, &mut row.tags);
             st.pipelines.apply(&mut row);
-            st.generated.on_log(&st.aggregator, &row);
             row
         })
         .collect();
     let n = rows.len();
-    if let Err(e) = st.store.logs.send(rows).await {
+    if let Err(e) = crate::logconfig::ingest(&st, rows).await {
         tracing::error!(error = %e, "storing logs");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,

@@ -209,6 +209,11 @@ pub fn opt_lit(s: Option<&str>) -> String {
 }
 
 /// A quoted identifier.
+/// The `CREATE TABLE` of a table with the columns of logs (no TTL).
+pub fn logs_like(table: &str) -> String {
+    SCHEMA[0].replacen("\"logs\"", &ident(table), 1)
+}
+
 pub fn ident(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
 }

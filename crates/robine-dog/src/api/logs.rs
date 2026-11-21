@@ -60,8 +60,12 @@ pub struct SearchResp {
     total: Option<i64>,
 }
 
+/// Logs, or a historical view's (`index:<view>`).
 pub async fn search(st: State<AppState>, req: Json<SearchReq>) -> ApiResult<SearchResp> {
-    search_table(st, req, "logs").await
+    match crate::logconfig::archives::view_table(&req.scope.query) {
+        Some(t) => search_table(st, req, &t).await,
+        None => search_table(st, req, "logs").await,
+    }
 }
 
 /// Events have the columns of logs, in their own table.
@@ -154,7 +158,10 @@ pub fn fill(from: i64, to: i64, interval: i64, rows: Vec<(i64, String, i64)>) ->
 }
 
 pub async fn histogram(st: State<AppState>, req: Json<HistogramReq>) -> ApiResult<HistogramResp> {
-    histogram_table(st, req, "logs").await
+    match crate::logconfig::archives::view_table(&req.scope.query) {
+        Some(t) => histogram_table(st, req, &t).await,
+        None => histogram_table(st, req, "logs").await,
+    }
 }
 
 pub async fn histogram_table(

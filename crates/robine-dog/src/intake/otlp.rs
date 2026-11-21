@@ -1380,11 +1380,10 @@ pub async fn logs_handler(
         .map(|o| {
             let mut row = process(o, &defaults, now);
             st.pipelines.apply(&mut row);
-            st.generated.on_log(&st.aggregator, &row);
             row
         })
         .collect();
-    match st.store.logs.send(rows).await {
+    match crate::logconfig::ingest(&st, rows).await {
         Ok(_) => reply(format, StatusCode::OK, None),
         Err(e) => reply(format, StatusCode::SERVICE_UNAVAILABLE, Some(e.to_string())),
     }

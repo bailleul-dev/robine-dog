@@ -77,13 +77,30 @@ pub struct Scope {
     pub to: i64,
 }
 
+/// A search, with its Reference Table terms expanded
+/// (`@usr.id:reference_table(customers, tier:gold)`).
 pub fn parse_query(q: &str) -> Result<Expr, ApiError> {
-    parser::parse(q).map_err(|e| ApiError::BadQuery(e.0))
+    let q = crate::logconfig::reftables::expand(q).map_err(ApiError::BadQuery)?;
+    parser::parse(&q).map_err(|e| ApiError::BadQuery(e.0))
 }
 
-/// The query as a `WHERE` fragment.
+/// The table a query on `ds` reads: a historical view's for logs searched
+/// with `index:<view>`.
+pub fn table_of(ds: Dataset, query: &str) -> String {
+    match ds {
+        Dataset::Spans => "spans".into(),
+        _ => crate::logconfig::archives::view_table(query).unwrap_or_else(|| "logs".into()),
+    }
+}
+
+/// The query as a `WHERE` fragment. On logs, it also hides what is past
+/// its index's retention.
 pub fn compile(q: &str, ds: Dataset) -> Result<String, ApiError> {
-    Ok(sql::compile(&parse_query(q)?, ds))
+    let w = sql::compile(&parse_query(q)?, ds);
+    Ok(match (ds, crate::logconfig::indexes::retention_clause()) {
+        (Dataset::Logs, Some(r)) => format!("({w}) AND {r}"),
+        _ => w,
+    })
 }
 
 /// The time clause of a dataset, from a range in epoch milliseconds (spans

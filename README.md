@@ -78,6 +78,10 @@ state (facets, metric metadata) is in PostgreSQL.
 | Monitors and webhooks APIs `/api/v1/monitor` (CRUD, partial update, validate, mute/unmute), `/api/v1/integration/webhooks/configuration/webhooks` | port 8080 |
 | Log Pipelines: grok parser (Datadog matchers and filters, helper rules, live sample preview), date / status / service / message / trace id / span id remappers, attribute remapper, URL and user-agent parsers, category, arithmetic, string builder and lookup processors, nested pipelines; read-only integration pipelines (Nginx, PostgreSQL, Kubernetes, Traefik, CoreDNS, Redis, Datadog Agent, Go logfmt / klog) | `/logs/pipelines`, applied at intake |
 | Logs pipelines API `/api/v1/logs/config/pipelines`, `/pipeline-order` (Datadog's JSON, `DD-API-KEY`) | port 8080 |
+| Log Indexes: ordered filters, exclusion filters with a sampling rate, daily quotas (reset time and UTC offset, warning threshold, usage of the day) and per-index retention; excluded logs still feed log-based metrics and archives; `index:<name>` in searches | `/api/v1/logs/config/indexes`, `/index-order`, `/logs/indexes` |
+| Log Archives: logs written in Datadog's format (gzipped JSON lines, `dt=YYYYMMDD/hour=HH/`) to an S3-compatible bucket (AWS, MinIO, Garage, R2…) or a local directory, before index exclusions; rehydration into historical views searched with `index:<view>` | `/api/v2/logs/config/archives`, `/archive-order`, `/logs/archives` |
+| Sensitive Data Scanner: scanning groups and rules (custom regex or 14 standard patterns: card numbers with Luhn, IBAN, e-mail, SSN, AWS / GitHub / Slack / Stripe keys, JWT, private keys…), on the whole event or some attributes; redact, hash or partially mask, and tag `sensitive_data:<rule>`, at intake | `/api/v2/sensitive-data-scanner/config`, `/logs/sensitive-data-scanner` |
+| Reference Tables: CSV tables (typed columns, primary key) enriching logs through the lookup processor (`lookup_enrichment_table`) and filtering searches (`@usr.id:reference_table(customers, tier:gold)`) | `/api/v2/reference-tables/tables`, `/logs/reference-tables` |
 | Host tags and host aliases from the Agent's metadata (`env`, `kube_cluster_name`, `DD_TAGS`…), joined to the logs and metrics of that host as Datadog does | `/intake/`, applied at ingestion |
 | Datadog Agent: protobuf traces `/api/v0.2/traces` (classic and indexed formats), protobuf series, sketches `/api/beta/sketches`, logs, zstd | port 8080 |
 | Trace metrics `trace.<span>.hits`, `.errors` and `trace.<span>` (distribution, seconds), tagged `service`, `resource_name`, `env`, `version`, `http.status_code` | computed at ingestion |
@@ -238,7 +242,10 @@ months) applied as table TTLs, `ROBINE_DOG_API_KEY`,
 otherwise; the image has one), `ROBINE_DOG_CHROMIUM_ARGS` (extra flags,
 `--no-sandbox` in the image) and `ROBINE_DOG_REPLAY_SAMPLE_RATE` (the share
 of robine-dog's own UI sessions recorded by Session Replay, 0 to 100, default
-0; with `ROBINE_DOG_CLIENT_TOKEN` set).
+0; with `ROBINE_DOG_CLIENT_TOKEN` set), `ROBINE_DOG_ARCHIVE_FLUSH_SECONDS`
+(how often log archives are written, default 300) and the S3 credentials of
+archives, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (or the instance's
+role).
 
 Rows are written in batches (every 200 ms or 5,000 rows) and metric buckets
 every 10 seconds; on SIGTERM both are flushed before exiting.

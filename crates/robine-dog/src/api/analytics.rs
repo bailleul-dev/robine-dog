@@ -139,13 +139,6 @@ pub fn parse_span_ms(s: &str) -> Option<i64> {
     Some(n * unit)
 }
 
-fn table(ds: Dataset) -> &'static str {
-    match ds {
-        Dataset::Spans => "spans",
-        _ => "logs",
-    }
-}
-
 /// A facet's value as text (NULL when absent).
 fn text_expr(facet: &str, ds: Dataset) -> String {
     match sql::resolve(facet, ds) {
@@ -537,7 +530,8 @@ fn now_ms() -> i64 {
 }
 
 async fn respond(st: AppState, ds: Dataset, req: AggregateReq) -> Result<Json<Value>, ApiError> {
-    respond_in(st, ds, table(ds), req).await
+    let table = super::table_of(ds, &req.filter.query);
+    respond_in(st, ds, &table, req).await
 }
 
 async fn respond_in(

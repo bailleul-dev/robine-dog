@@ -148,9 +148,13 @@ pub enum Kind {
     LookupProcessor {
         source: String,
         target: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
         lookup_table: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default_lookup: Option<String>,
+        /// A Reference Table: the target gets the row of the source's key.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lookup_enrichment_table: Option<String>,
     },
     TraceIdRemapper {
         sources: Vec<String>,
@@ -190,6 +194,8 @@ enum Step {
     Arithmetic(Arith, String, bool),
     Builder(Vec<Part>, String, bool),
     Lookup(String, String, HashMap<String, String>, Option<String>),
+    /// Source, target and Reference Table.
+    RefLookup(String, String, String),
     TraceId(Vec<String>),
     SpanId(Vec<String>),
     Nested(Compiled),
@@ -278,8 +284,15 @@ fn compile_steps(ps: &[ProcessorDef], nested: bool) -> Result<Vec<Step>, String>
             Kind::LookupProcessor {
                 source,
                 target,
+                lookup_enrichment_table: Some(table),
+                ..
+            } => Step::RefLookup(source.clone(), target.clone(), table.clone()),
+            Kind::LookupProcessor {
+                source,
+                target,
                 lookup_table,
                 default_lookup,
+                lookup_enrichment_table: None,
             } => Step::Lookup(
                 source.clone(),
                 target.clone(),
@@ -515,6 +528,12 @@ impl Step {
                 let Some(v) = read(log, source) else { return };
                 if let Some(x) = table.get(&text(&v)).or(default.as_ref()) {
                     set_path(&mut log.attributes, target, json!(x));
+                }
+            }
+            Step::RefLookup(source, target, table) => {
+                let Some(v) = read(log, source) else { return };
+                if let Some(row) = crate::logconfig::reftables::lookup(table, &text(&v)) {
+                    set_path(&mut log.attributes, target, Value::Object(row));
                 }
             }
             Step::TraceId(sources) => {
@@ -933,6 +952,7 @@ pub fn integration_pipelines() -> Vec<PipelineDef> {
                             "WARNING,warn", "ERROR,error", "FATAL,critical", "PANIC,emergency",
                         ]),
                         default_lookup: Some("debug".into()),
+                        lookup_enrichment_table: None,
                     },
                 ),
                 processor("Define `level` as the official status of the log", Kind::StatusRemapper { sources: s(&["level"]) }),
@@ -1026,6 +1046,7 @@ pub fn integration_pipelines() -> Vec<PipelineDef> {
                         target: "level".into(),
                         lookup_table: s(&[".,debug", "-,info", "*,notice", "#,warn"]),
                         default_lookup: None,
+                        lookup_enrichment_table: None,
                     },
                 ),
                 processor("Define `level` as the official status of the log", Kind::StatusRemapper { sources: s(&["level"]) }),
@@ -1083,6 +1104,7 @@ pub fn integration_pipelines() -> Vec<PipelineDef> {
                         target: "klog.level".into(),
                         lookup_table: s(&["I,info", "W,warn", "E,error", "F,critical"]),
                         default_lookup: None,
+                        lookup_enrichment_table: None,
                     },
                 ),
                 // Only what the parser above extracted: a `level` attribute
@@ -1349,6 +1371,7 @@ mod tests {
                         target: "country_name".into(),
                         lookup_table: s(&["fr, France", "de, Germany"]),
                         default_lookup: Some("Unknown".into()),
+                        lookup_enrichment_table: None,
                     },
                 ),
                 processor(

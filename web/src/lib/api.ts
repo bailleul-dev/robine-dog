@@ -901,6 +901,100 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type LogIndex = {
+  name: string;
+  filter: { query: string };
+  exclusion_filters: {
+    name: string;
+    is_enabled: boolean;
+    filter: { query: string; sample_rate?: number };
+  }[];
+  daily_limit?: number | null;
+  daily_limit_reset?: { reset_time: string; reset_utc_offset: string } | null;
+  daily_limit_warning_threshold_percentage?: number | null;
+  num_retention_days?: number | null;
+  is_rate_limited?: boolean;
+  usage?: { window_start: number; indexed: number; excluded: number; over_quota: number };
+};
+export type ArchiveAttributes = {
+  name: string;
+  query: string;
+  destination: {
+    type: string;
+    bucket?: string;
+    path: string;
+    region?: string;
+    endpoint?: string;
+  };
+  include_tags: boolean;
+  rehydration_tags: string[];
+  rehydration_max_scan_size_in_gb?: number | null;
+  state?: string;
+  status?: {
+    state: string;
+    archived: number;
+    files: number;
+    bytes: number;
+    last_flush: number | null;
+    last_error: string | null;
+  };
+};
+export type LogArchive = { id: string; type: string; attributes: ArchiveAttributes };
+export type HistoricalView = {
+  id: string;
+  name: string;
+  archive_id: string;
+  query: string;
+  from: number;
+  to: number;
+  max_logs: number | null;
+  status: string;
+  files: number;
+  scanned_bytes: number;
+  scanned_logs: number;
+  rehydrated: number;
+  error: string | null;
+  created_at: number;
+  finished_at: number | null;
+};
+export type SdsReplacement = {
+  type: string;
+  replacement_string?: string;
+  number_of_chars?: number;
+};
+export type SdsRuleAttributes = {
+  name: string;
+  description: string;
+  pattern: string;
+  namespaces: string[];
+  excluded_namespaces: string[];
+  tags: string[];
+  text_replacement: SdsReplacement;
+  is_enabled: boolean;
+  priority?: number;
+};
+export type SdsJson = {
+  id: string;
+  type: string;
+  attributes: Record<string, unknown>;
+  relationships?: Record<string, { data: { id: string; type: string } | { id: string; type: string }[] }>;
+};
+export type SdsConfig = { data: SdsJson; included: SdsJson[]; meta: { version: number } };
+export type SdsStandardPattern = {
+  id: string;
+  attributes: { name: string; pattern: string; description: string; tags: string[] };
+};
+export type ReferenceTable = {
+  id: string;
+  attributes: {
+    table_name: string;
+    description: string;
+    row_count: number;
+    schema: { primary_keys: string[]; fields: { name: string; type: string }[] };
+    updated_at: string;
+  };
+};
+
 
 export const api = {
   me: () => call<Identity>("/me"),
@@ -1230,6 +1324,97 @@ export const api = {
     ),
   deleteGeneratedMetric: (source: GeneratedSource, id: string) =>
     del<unknown>(`${generatedPath(source)}/${encodeURIComponent(id)}`),
+  logIndexes: () => call<{ indexes: LogIndex[] }>("/logs/config/indexes").then((r) => r.indexes),
+  createLogIndex: (i: LogIndex) => post<LogIndex>("/logs/config/indexes", i),
+  updateLogIndex: (name: string, i: LogIndex) =>
+    put<LogIndex>(`/logs/config/indexes/${encodeURIComponent(name)}`, i),
+  deleteLogIndex: (name: string) => del<unknown>(`/logs/config/indexes/${encodeURIComponent(name)}`),
+  setLogIndexOrder: (names: string[]) =>
+    put<unknown>("/logs/config/index-order", { index_names: names }),
+  logArchives: () => call<{ data: LogArchive[] }>("/logs/config/archives").then((r) => r.data),
+  createLogArchive: (a: ArchiveAttributes) =>
+    post<{ data: LogArchive }>("/logs/config/archives", { data: { type: "archives", attributes: a } }),
+  updateLogArchive: (id: string, a: ArchiveAttributes) =>
+    put<{ data: LogArchive }>(`/logs/config/archives/${id}`, { data: { type: "archives", attributes: a } }),
+  deleteLogArchive: (id: string) => del<unknown>(`/logs/config/archives/${id}`),
+  setLogArchiveOrder: (ids: string[]) =>
+    put<unknown>("/logs/config/archive-order", {
+      data: { type: "archive_order", attributes: { archive_ids: ids } },
+    }),
+  historicalViews: () => call<HistoricalView[]>("/logs/rehydrations"),
+  rehydrate: (v: { name: string; archive_id: string; query: string; from: number; to: number; max_logs?: number }) =>
+    post<HistoricalView>("/logs/rehydrations", v),
+  deleteHistoricalView: (id: string) => del<unknown>(`/logs/rehydrations/${id}`),
+  sdsConfig: () => call<SdsConfig>("/sensitive-data-scanner/config"),
+  sdsStandardPatterns: () =>
+    call<{ data: SdsStandardPattern[] }>("/sensitive-data-scanner/config/standard-patterns").then((r) => r.data),
+  sdsReorderGroups: (ids: string[]) =>
+    call<unknown>("/sensitive-data-scanner/config", {
+      method: "PATCH",
+      body: JSON.stringify({
+        data: {
+          id: "robine-dog",
+          type: "sensitive_data_scanner_configuration",
+          relationships: { groups: { data: ids.map((id) => ({ id, type: "sensitive_data_scanner_group" })) } },
+        },
+        meta: {},
+      }),
+    }),
+  sdsSaveGroup: (id: string | null, attributes: Record<string, unknown>, ruleOrder?: string[]) =>
+    id
+      ? call<unknown>(`/sensitive-data-scanner/config/groups/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            data: {
+              id,
+              type: "sensitive_data_scanner_group",
+              attributes,
+              ...(ruleOrder
+                ? { relationships: { rules: { data: ruleOrder.map((r) => ({ id: r, type: "sensitive_data_scanner_rule" })) } } }
+                : {}),
+            },
+            meta: {},
+          }),
+        })
+      : post<unknown>("/sensitive-data-scanner/config/groups", {
+          data: {
+            type: "sensitive_data_scanner_group",
+            attributes,
+            relationships: {
+              configuration: { data: { type: "sensitive_data_scanner_configuration", id: "robine-dog" } },
+              rules: { data: [] },
+            },
+          },
+          meta: {},
+        }),
+  sdsDeleteGroup: (id: string) => del<unknown>(`/sensitive-data-scanner/config/groups/${id}`),
+  sdsSaveRule: (id: string | null, groupId: string, attributes: Record<string, unknown>, standard: string | null) => {
+    const relationships: Record<string, unknown> = {
+      group: { data: { type: "sensitive_data_scanner_group", id: groupId } },
+    };
+    if (standard)
+      relationships.standard_pattern = { data: { type: "sensitive_data_scanner_standard_pattern", id: standard } };
+    const body = JSON.stringify({ data: { type: "sensitive_data_scanner_rule", attributes, relationships }, meta: {} });
+    return id
+      ? call<unknown>(`/sensitive-data-scanner/config/rules/${id}`, { method: "PATCH", body })
+      : call<unknown>("/sensitive-data-scanner/config/rules", { method: "POST", body });
+  },
+  sdsDeleteRule: (id: string) => del<unknown>(`/sensitive-data-scanner/config/rules/${id}`),
+  sdsTest: (t: { pattern: string; standard_pattern_id: string | null; text_replacement: SdsReplacement; text: string }) =>
+    post<{ matches: { start: number; end: number; text: string }[]; result: string }>("/sensitive-data-scanner/test", t),
+  referenceTables: () => call<{ data: ReferenceTable[] }>("/reference-tables/tables").then((r) => r.data),
+  createReferenceTable: (t: { table_name: string; description: string; primary_key: string; csv: string }) =>
+    post<{ data: ReferenceTable }>("/reference-tables/tables", t),
+  replaceReferenceTable: (id: string, csv: string, description: string) =>
+    call<{ data: ReferenceTable }>(`/reference-tables/tables/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ csv, description }),
+    }),
+  deleteReferenceTable: (id: string) => del<unknown>(`/reference-tables/tables/${id}`),
+  referenceTableRows: (id: string, search: string) =>
+    call<{ data: { id: string; attributes: { values: Record<string, unknown> } }[]; meta: { total: number } }>(
+      `/reference-tables/tables/${id}/rows?limit=100&search=${encodeURIComponent(search)}`,
+    ),
   monitors: () => call<Monitor[]>("/monitors"),
   monitor: (id: number) => call<Monitor>(`/monitors/${id}`),
   createMonitor: (m: MonitorDraft) => post<Monitor>("/monitors", m),
