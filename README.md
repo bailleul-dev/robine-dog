@@ -43,6 +43,8 @@ state (facets, metric metadata) is in PostgreSQL.
 | Error Tracking: error spans (`error.type`, `error.message`, `error.stack`) and error logs (`error.kind`, `error.stack`) grouped into issues by service, type, masked message and top stack frame; volume, first / last seen, stack trace with app frames highlighted, breakdown by version, env, host and resource, links to the trace or log; For Review / Reviewed / Ignored / Resolved, with regressions | `/error-tracking` |
 | Sentry SDKs: envelope and store endpoints, the DSN's key being a client token; events become error logs (`error.kind`, `error.message`, `error.stack`, `usr.*`, `http.*`, trace ids) and Error Tracking issues | `/api/<project>/envelope/`, `/sentry/<service>/api/<project>/envelope/` |
 | Monitors: metric (`avg(last_5m):avg:system.cpu.user{*} by {host} > 80`), logs (`logs("…").rollup(…).by(…).last("5m") > 10`) and APM (`trace-analytics(…)`) queries, evaluated every minute per group, OK / Warn / Alert / No Data, recovery thresholds, renotify, mute by scope, priority, event history and value graph, Manage / Triggered Monitors pages, an editor with live evaluation | `/monitors` |
+| More monitor types: change (`pct_change(avg(last_5m),last_1h):…`), anomaly, outlier and forecast (`avg(last_4h):anomalies(avg:cpu{*} by {host}, 'agile', 2, direction='above', alert_window='last_15m') >= 1`, `max(next_1w):forecast(…) >= 90`), RUM (`rum("…")`), events (`events("…")`), Error Tracking (`error-tracking-traces("…").rollup("count").by("@issue.id")`), service checks (`"http.can_connect".over("env:prod").by("host").last(3).count_by_status()`, consecutive-run thresholds) and composites (`12 && (34 \|\| !56)`, per group, over the stored states); synthetic tests listed as `synthetics alert` monitors; `new_group_delay`, `evaluation_delay`, `escalation_message`; e-mail notifications to the addresses a message names (`@ops@example.com`) | `/monitors/create` |
+| Service checks: the Agent's check runs and DogStatsD's `_sc\|name\|status\|…`, stored per check and host | `/api/v1/check_run`, UDP 8125 |
 | Events: monitor state changes, Agent events and `POST /api/v1/events`, searched like logs (`source:alert status:error @monitor.id:12`) | `/api/v1/events` |
 | Metrics volume (points and series stored per metric) and the integrations reporting, found from log sources and metric prefixes | — |
 | Real User Monitoring: Datadog's browser SDK (`proxy: "https://<robine-dog>/rum/proxy"`, the client token as key): views with their web vitals, actions, resources, errors (also filed in Error Tracking), long tasks; browser logs through the same proxy. Sites install the SDK as Datadog documents it (npm or its CDN), with `proxy` added | `/rum/proxy`, `/api/v2/rum` |
@@ -218,7 +220,10 @@ All in the environment (see [`.env.example`](.env.example)): listen addresses
 default 15) and `ROBINE_DOG_METRICS_RETENTION_DAYS` (default 455, i.e. 15
 months) applied as table TTLs, `ROBINE_DOG_API_KEY`,
 `ROBINE_DOG_TRACE_REQUIRE_KEY`, the OIDC client, `ROBINE_DOG_SESSION_SECRET`,
-`ROBINE_DOG_LOG_FORMAT=json` (robine-dog's own logs, one JSON object per line).
+`ROBINE_DOG_LOG_FORMAT=json` (robine-dog's own logs, one JSON object per line),
+`ROBINE_DOG_SMTP_URL` (e-mail notifications, e.g.
+`smtps://user:password@smtp.example.com` or `smtp://localhost:1025`) and
+`ROBINE_DOG_SMTP_FROM` (default `robine-dog <robine-dog@localhost>`).
 
 Rows are written in batches (every 200 ms or 5,000 rows) and metric buckets
 every 10 seconds; on SIGTERM both are flushed before exiting.

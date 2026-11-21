@@ -393,9 +393,10 @@ async fn alert(st: &AppState, t: &Test, id: &str, res: &RunResult) {
     let link = format!("{}/synthetics/tests", st.cfg.base_url.trim_end_matches('/'));
     let mut tags = t.tags.clone();
     tags.push(format!("check_id:{id}"));
-    let notified =
+    let mut notified =
         crate::monitors::webhooks::notify_plain(st, id, &title, &text, !triggered, &link, &tags)
             .await;
+    notified.extend(crate::monitors::email::notify(st, &title, &text).await);
     tracing::info!(test = %t.name, triggered, ?notified, "synthetic test alert");
     let mut attributes = Map::new();
     attributes.insert("evt".into(), json!({"title": title, "text": text}));
@@ -419,6 +420,54 @@ async fn alert(st: &AppState, t: &Test, id: &str, res: &RunResult) {
         }],
     )
     .await;
+}
+
+/// The monitor id a test shows under in Manage Monitors: stable, above the
+/// ids of stored monitors.
+pub fn monitor_id(public_id: &str) -> i64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in public_id.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    SYNTHETIC_MONITOR_BASE + (h % 1_000_000_000) as i64
+}
+
+pub const SYNTHETIC_MONITOR_BASE: i64 = 2_000_000_000;
+
+/// Each test as the `synthetics alert` monitor Datadog creates with it.
+pub async fn as_monitors(st: &AppState) -> anyhow::Result<Vec<Value>> {
+    let tests = stored(st).await?;
+    Ok(tests
+        .into_iter()
+        .filter_map(|t| {
+            let pid = t.public_id.clone()?;
+            let last = last_result(&pid);
+            let status = match (alerting(&pid), &last) {
+                (Some(true), _) => "Alert",
+                (_, Some(_)) => "OK",
+                _ => "No Data",
+            };
+            let ts = last.as_ref().map(|r| r.ts / 1000);
+            Some(json!({
+                "id": monitor_id(&pid),
+                "name": format!("[Synthetics] {}", t.name),
+                "type": "synthetics alert",
+                "query": format!("\"synthetics.check_status\".over(\"public_id:{pid}\").last(1).count_by_status()"),
+                "message": t.message,
+                "tags": t.tags,
+                "priority": null,
+                "options": {"thresholds": {}, "notify_no_data": false, "silenced": {}},
+                "overall_state": status,
+                "overall_state_modified": null,
+                "multi": false,
+                "state": {"groups": {"*": {"name": "*", "status": status, "value": null, "last_data_ts": ts, "since_ts": ts}}},
+                "synthetics_test_id": pid,
+                "deleted": null,
+                "org_id": 1,
+            }))
+        })
+        .collect())
 }
 
 /// Whether a test is alerting, if it ran since this server started.

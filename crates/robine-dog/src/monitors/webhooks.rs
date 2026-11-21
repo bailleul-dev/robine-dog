@@ -4,7 +4,7 @@
 //! JSON or form encoding. API: `/api/v1/integration/webhooks/configuration/webhooks`.
 
 use super::template::Context;
-use super::{ALERT, NO_DATA, OK, Source, WARN};
+use super::{ALERT, NO_DATA, OK, WARN};
 use crate::AppState;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -85,10 +85,7 @@ pub fn variables(
         OK => "success",
         _ => "info",
     };
-    let metric = match &ctx.parsed.source {
-        Source::Metric { query, .. } => query.metric.clone(),
-        Source::Events { .. } => String::new(),
-    };
+    let metric = ctx.parsed.source.metric().unwrap_or_default().to_string();
     let tags: Vec<String> = ctx
         .def
         .tags

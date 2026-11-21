@@ -9,6 +9,7 @@
 
 mod api;
 mod auth;
+mod checks;
 mod config;
 mod events;
 mod hosts;
@@ -213,6 +214,7 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/pipelines/{id}/clone", post(api::pipelines::clone))
         .route("/metrics", get(api::metrics::list))
         .route("/hosts", get(api::metrics::hosts))
+        .route("/checks", get(checks::list))
         .route("/metrics-volume", get(api::metrics::volume))
         .route("/metrics/query", post(api::metrics::query))
         .route(
@@ -399,6 +401,7 @@ fn app(st: AppState) -> Router {
             "/rum/proxy",
             post(rum::proxy).options(intake::sentry::preflight),
         )
+        .route("/api/v1/check_run", post(checks::intake))
         .route("/api/v1/series", post(intake::series::v1))
         .route("/api/v2/series", post(intake::series::v2))
         .route("/api/v1/validate", get(intake::series::validate))
@@ -525,8 +528,9 @@ async fn main() -> anyhow::Result<()> {
 
     if let Some(addr) = cfg.dogstatsd_listen {
         let agg = aggregator.clone();
+        let store_for_sc = st.store.clone();
         tokio::spawn(async move {
-            if let Err(e) = metrics::dogstatsd::listen(addr, agg).await {
+            if let Err(e) = metrics::dogstatsd::listen(addr, agg, store_for_sc).await {
                 tracing::error!(error = %e, "DogStatsD listener stopped");
             }
         });

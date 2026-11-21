@@ -409,7 +409,6 @@ fn basic_band(cur: &[Option<f64>], prev: &[Option<f64>], bounds: f64) -> Band {
 }
 
 /// Whether a point leaves its band (`direction`: both, above, below).
-#[allow(dead_code)] // anomaly monitors
 pub fn is_anomalous(v: f64, lower: f64, upper: f64, direction: &str) -> bool {
     match direction {
         "above" => v > upper,
@@ -420,7 +419,6 @@ pub fn is_anomalous(v: f64, lower: f64, upper: f64, direction: &str) -> bool {
 
 /// The share of the known points of `cur` outside the band (0 to 1), as an
 /// anomaly monitor evaluates its window.
-#[allow(dead_code)] // anomaly monitors
 pub fn anomalous_share(cur: &[Option<f64>], band: &Band, direction: &str) -> Option<f64> {
     let judged: Vec<bool> = cur
         .iter()

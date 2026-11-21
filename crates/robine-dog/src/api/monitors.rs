@@ -33,8 +33,9 @@ fn present(def: &MonitorDef, doc: &Doc, groups: &[GroupState]) -> Value {
     let mut v = serde_json::to_value(def).unwrap_or_default();
     let multi = monitors::parse(&def.query)
         .map(|p| match &p.source {
-            monitors::Source::Metric { query, .. } => !query.by.is_empty(),
-            monitors::Source::Events { by, .. } => !by.is_empty(),
+            // A composite follows the groups of the monitors it combines.
+            monitors::Source::Composite(_) => groups.iter().any(|g| g.group != "*"),
+            s => !s.group_keys().is_empty(),
         })
         .unwrap_or(false);
     let secs = |ms: Option<i64>| ms.map(|m| m / 1000);
@@ -147,11 +148,36 @@ pub async fn list(
         out.push(present(&def, doc, &groups));
     }
     out.sort_by_key(|m| std::cmp::Reverse(m["id"].as_i64().unwrap_or(0)));
+    // Synthetic tests alert by themselves; they show as monitors, as in
+    // Datadog.
+    for m in crate::synthetics::as_monitors(&st).await? {
+        let name = m["name"].as_str().unwrap_or("").to_lowercase();
+        let tags: Vec<&str> = m["tags"]
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        if q.name
+            .as_ref()
+            .is_none_or(|n| name.contains(&n.to_lowercase()))
+            && wanted.iter().all(|t| tags.contains(t))
+        {
+            out.push(m);
+        }
+    }
     Ok(Json(out))
 }
 
 pub async fn get(State(st): State<AppState>, Path(id): Path<String>) -> ApiResult<Value> {
-    Ok(Json(presented(&st, parse_id(&id)?).await?))
+    let id = parse_id(&id)?;
+    if id >= crate::synthetics::SYNTHETIC_MONITOR_BASE {
+        return crate::synthetics::as_monitors(&st)
+            .await?
+            .into_iter()
+            .find(|m| m["id"].as_i64() == Some(id))
+            .map(Json)
+            .ok_or(ApiError::NotFound);
+    }
+    Ok(Json(presented(&st, id).await?))
 }
 
 /// Checks a definition and normalizes it (type, critical threshold).
@@ -161,7 +187,14 @@ fn check(mut def: MonitorDef) -> Result<MonitorDef, ApiError> {
     if !(inferred == "metric alert" && def.typ == "query alert") {
         def.typ = inferred.into();
     }
-    def.options.thresholds.critical = Some(p.threshold);
+    // The query's threshold is the critical one; composites and service
+    // checks have none (their thresholds count consecutive check runs).
+    if !matches!(
+        p.source,
+        monitors::Source::Composite(_) | monitors::Source::ServiceCheck { .. }
+    ) {
+        def.options.thresholds.critical = Some(p.threshold);
+    }
     if def.name.trim().is_empty() {
         return Err(ApiError::BadQuery("a monitor needs a name".into()));
     }
@@ -171,6 +204,29 @@ fn check(mut def: MonitorDef) -> Result<MonitorDef, ApiError> {
         return Err(ApiError::BadQuery("priority is 1 to 5".into()));
     }
     Ok(def)
+}
+
+/// A composite names monitors that exist, other than itself.
+async fn check_refs(st: &AppState, id: Option<i64>, def: &MonitorDef) -> Result<(), ApiError> {
+    let Ok(p) = monitors::parse(&def.query) else {
+        return Ok(());
+    };
+    let monitors::Source::Composite(expr) = &p.source else {
+        return Ok(());
+    };
+    let mut ids = Vec::new();
+    expr.ids(&mut ids);
+    for i in ids {
+        if Some(i) == id {
+            return Err(ApiError::BadQuery(
+                "a composite can't include itself".into(),
+            ));
+        }
+        if st.store.pg.doc(KIND, &i.to_string()).await?.is_none() {
+            return Err(ApiError::BadQuery(format!("no monitor {i}")));
+        }
+    }
+    Ok(())
 }
 
 async fn save(st: &AppState, id: i64, mut def: MonitorDef) -> Result<Value, ApiError> {
@@ -184,6 +240,7 @@ async fn save(st: &AppState, id: i64, mut def: MonitorDef) -> Result<Value, ApiE
 
 pub async fn create(State(st): State<AppState>, Json(def): Json<MonitorDef>) -> ApiResult<Value> {
     let def = check(def)?;
+    check_refs(&st, None, &def).await?;
     let id = st.store.pg.next_monitor_id().await?;
     Ok(Json(save(&st, id, def).await?))
 }
@@ -214,7 +271,9 @@ pub async fn update(
     }
     let def: MonitorDef =
         serde_json::from_value(merged).map_err(|e| ApiError::BadQuery(e.to_string()))?;
-    Ok(Json(save(&st, id, check(def)?).await?))
+    let def = check(def)?;
+    check_refs(&st, Some(id), &def).await?;
+    Ok(Json(save(&st, id, def).await?))
 }
 
 pub async fn delete(State(st): State<AppState>, Path(id): Path<String>) -> ApiResult<Value> {
@@ -356,8 +415,12 @@ pub async fn preview(State(st): State<AppState>, Json(p): Json<Preview>) -> ApiR
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-    let samples = monitors::evaluate(&st, &parsed, now).await?;
     let th = p.thresholds;
+    let options = monitors::Options {
+        thresholds: th.clone(),
+        ..Default::default()
+    };
+    let samples = monitors::evaluate(&st, &parsed, now, &options).await?;
     Ok(Json(json!({
         "type": monitors::type_of(&parsed),
         "window_ms": parsed.window_ms,
@@ -366,7 +429,12 @@ pub async fn preview(State(st): State<AppState>, Json(p): Json<Preview>) -> ApiR
         "groups": samples.iter().map(|s| json!({
             "group": s.group,
             "value": s.value,
-            "status": s.value.map(|v| monitors::next_status(&parsed, &th, monitors::OK, v)).unwrap_or(monitors::NO_DATA),
+            "status": match (s.status, s.value) {
+                (Some(monitors::KEEP), _) => monitors::OK,
+                (Some(decided), _) => decided,
+                (None, Some(v)) => monitors::next_status(&parsed, &th, monitors::OK, v),
+                (None, None) => monitors::NO_DATA,
+            },
         })).collect::<Vec<_>>(),
     })))
 }

@@ -40,6 +40,12 @@ const TYPE_LABELS: Record<string, string> = {
   "query alert": "Metric",
   "log alert": "Logs",
   "trace-analytics alert": "APM",
+  "rum alert": "RUM",
+  "event-v2 alert": "Events",
+  "error-tracking alert": "Error Tracking",
+  "service check": "Service Check",
+  composite: "Composite",
+  "synthetics alert": "Synthetics",
 };
 
 export function MonitorPill({
@@ -475,7 +481,11 @@ export function MonitorPage() {
             </span>
           )}
           <div className="spacer" />
-          {isMuted(m) ? (
+          {m.type === "synthetics alert" ? (
+            <Link className="btn primary" to="/synthetics/tests">
+              Open the test
+            </Link>
+          ) : isMuted(m) ? (
             <button
               className="btn"
               onClick={() => act(() => api.unmuteMonitor(m.id))}
@@ -490,25 +500,29 @@ export function MonitorPage() {
               <MuteIcon /> Mute
             </button>
           )}
-          <Link className="btn" to={`/monitors/create?clone=${m.id}`}>
-            Clone
-          </Link>
-          <Link className="btn primary" to={`/monitors/${m.id}/edit`}>
-            Edit
-          </Link>
-          <button
-            className="btn"
-            title="Delete"
-            onClick={() => {
-              if (window.confirm(`Delete the monitor "${m.name}"?`))
-                act(async () => {
-                  await api.deleteMonitor(m.id);
-                  navigate("/monitors/manage");
-                });
-            }}
-          >
-            <TrashIcon />
-          </button>
+          {m.type !== "synthetics alert" && (
+            <>
+              <Link className="btn" to={`/monitors/create?clone=${m.id}`}>
+                Clone
+              </Link>
+              <Link className="btn primary" to={`/monitors/${m.id}/edit`}>
+                Edit
+              </Link>
+              <button
+                className="btn"
+                title="Delete"
+                onClick={() => {
+                  if (window.confirm(`Delete the monitor "${m.name}"?`))
+                    act(async () => {
+                      await api.deleteMonitor(m.id);
+                      navigate("/monitors/manage");
+                    });
+                }}
+              >
+                <TrashIcon />
+              </button>
+            </>
+          )}
         </div>
         {error && <div className="error-box">{error}</div>}
         <div className="monitor-props">
@@ -620,8 +634,65 @@ export function MonitorPage() {
 
 // --- editor ------------------------------------------------------------------------------
 
-type Kind = "metric" | "logs" | "apm";
-const WINDOWS = ["1m", "5m", "10m", "15m", "30m", "1h", "2h", "4h", "1d"];
+type Kind =
+  | "metric"
+  | "change"
+  | "anomaly"
+  | "outlier"
+  | "forecast"
+  | "logs"
+  | "apm"
+  | "rum"
+  | "events"
+  | "errors"
+  | "check"
+  | "composite";
+
+/** Kinds built from a metric query. */
+const METRIC_KINDS: Kind[] = [
+  "metric",
+  "change",
+  "anomaly",
+  "outlier",
+  "forecast",
+];
+/** Kinds built from a search over logs-like events. */
+const EVENT_KINDS: Kind[] = ["logs", "apm", "rum", "events", "errors"];
+const EVENT_FN: Record<string, string> = {
+  logs: "logs",
+  apm: "trace-analytics",
+  rum: "rum",
+  events: "events",
+  errors: "error-tracking",
+};
+const KIND_OF_FN: Record<string, Kind> = {
+  logs: "logs",
+  "trace-analytics": "apm",
+  spans: "apm",
+  rum: "rum",
+  events: "events",
+  "error-tracking": "errors",
+  "error-tracking-traces": "errors",
+  "error-tracking-logs": "errors",
+  "error-tracking-rum": "errors",
+};
+
+const KINDS: [Kind, string, string][] = [
+  ["metric", "Metric", "Compare a metric with a threshold"],
+  ["change", "Change", "Alert on how much a metric moved"],
+  ["anomaly", "Anomaly", "Alert when a metric leaves its usual range"],
+  ["outlier", "Outlier", "Alert when one group strays from the others"],
+  ["forecast", "Forecast", "Alert before a metric crosses a threshold"],
+  ["logs", "Logs", "Alert on log counts or measures"],
+  ["apm", "APM", "Alert on span counts or latency"],
+  ["rum", "RUM", "Alert on browser views, actions, errors"],
+  ["events", "Events", "Alert on events (deploys, monitors, Agents)"],
+  ["errors", "Error Tracking", "Alert on the errors of issues"],
+  ["check", "Service Check", "Alert on an Agent check's status"],
+  ["composite", "Composite", "Combine other monitors"],
+];
+
+const WINDOWS = ["1m", "5m", "10m", "15m", "30m", "1h", "2h", "4h", "1d", "1w"];
 const WINDOW_LABELS: Record<string, string> = {
   "1m": "1 minute",
   "5m": "5 minutes",
@@ -632,6 +703,7 @@ const WINDOW_LABELS: Record<string, string> = {
   "2h": "2 hours",
   "4h": "4 hours",
   "1d": "1 day",
+  "1w": "1 week",
 };
 const COMPARATORS: [string, string][] = [
   [">", "above"],
@@ -653,6 +725,28 @@ const EVENT_AGGS: [string, string][] = [
   ["pc95", "pc95 of"],
   ["pc99", "pc99 of"],
 ];
+const ALGOS: Partial<Record<Kind, [string, string][]>> = {
+  anomaly: [
+    ["basic", "Basic: no seasonality, adapts fast"],
+    ["agile", "Agile: seasonal, follows level shifts"],
+    ["robust", "Robust: seasonal, stable"],
+  ],
+  outlier: [
+    ["dbscan", "DBSCAN"],
+    ["scaledbscan", "Scaled DBSCAN"],
+    ["mad", "MAD"],
+    ["scaledmad", "Scaled MAD"],
+  ],
+  forecast: [
+    ["linear", "Linear"],
+    ["seasonal", "Seasonal"],
+  ],
+};
+const PARAM_LABEL: Partial<Record<Kind, string>> = {
+  anomaly: "Bounds (deviations)",
+  outlier: "Tolerance",
+  forecast: "Deviations",
+};
 
 type Form = {
   kind: Kind;
@@ -669,6 +763,8 @@ type Form = {
   warning: string;
   criticalRecovery: string;
   warningRecovery: string;
+  /** Service checks: consecutive OK runs to recover. */
+  ok: string;
   notifyNoData: boolean;
   noDataTimeframe: string;
   name: string;
@@ -676,28 +772,77 @@ type Form = {
   tags: string;
   priority: string;
   renotify: string;
+  escalation: string;
+  newGroupDelay: string;
+  evaluationDelay: string;
+  // change
+  changeMode: string;
+  compareWindow: string;
+  // anomalies / outliers / forecast
+  algo: string;
+  param: string;
+  direction: string;
+  alertWindow: string;
+  seasonality: string;
+  // service check
+  check: string;
+  over: string;
+  // composite
+  composite: string;
 };
 
 const blank = (kind: Kind): Form => ({
   kind,
   raw: null,
-  metric: kind === "metric" ? "avg:system.cpu.user{*} by {host}" : "",
-  timeAgg: "avg",
+  metric: METRIC_KINDS.includes(kind)
+    ? kind === "forecast"
+      ? "avg:system.disk.in_use{*} by {host}"
+      : "avg:system.cpu.user{*} by {host}"
+    : "",
+  timeAgg: kind === "forecast" ? "max" : "avg",
   search:
     kind === "logs"
       ? "status:error"
       : kind === "apm"
         ? "service:web-store"
-        : "",
+        : kind === "rum"
+          ? "@type:error"
+          : kind === "events"
+            ? "source:alert"
+            : kind === "errors"
+              ? "service:*"
+              : "",
   agg: kind === "apm" ? "pc95" : "count",
   measure: kind === "apm" ? "@duration" : "",
-  by: kind === "metric" ? "" : "service",
-  window: "5m",
-  cmp: ">",
-  critical: "",
-  warning: "",
+  by:
+    kind === "errors"
+      ? "@issue.id"
+      : EVENT_KINDS.includes(kind)
+        ? "service"
+        : kind === "check"
+          ? "host"
+          : "",
+  window:
+    kind === "anomaly"
+      ? "4h"
+      : kind === "outlier"
+        ? "1h"
+        : kind === "forecast"
+          ? "1w"
+          : "5m",
+  cmp: kind === "anomaly" ? ">=" : ">",
+  critical:
+    kind === "anomaly"
+      ? "1"
+      : kind === "outlier"
+        ? "0"
+        : kind === "check"
+          ? "1"
+          : "",
+  warning: kind === "check" ? "1" : "",
   criticalRecovery: "",
   warningRecovery: "",
+  ok: "1",
   notifyNoData: false,
   noDataTimeframe: "10",
   name: "",
@@ -705,42 +850,149 @@ const blank = (kind: Kind): Form => ({
   tags: "",
   priority: "",
   renotify: "0",
+  escalation: "",
+  newGroupDelay: "",
+  evaluationDelay: "",
+  changeMode: "change",
+  compareWindow: "1h",
+  algo: ALGOS[kind]?.[0][0] ?? "",
+  param: kind === "outlier" ? "3" : kind === "forecast" ? "1" : "2",
+  direction: "both",
+  alertWindow: "15m",
+  seasonality: "weekly",
+  check: "datadog.agent.up",
+  over: "*",
+  composite: "",
 });
 
 const quote = (s: string) =>
   `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 const unquote = (s: string) => s.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+const list = (s: string) =>
+  s
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
 
 function buildQuery(f: Form): string {
   if (f.raw !== null) return f.raw;
   const tail = ` ${f.cmp} ${f.critical || "0"}`;
-  if (f.kind === "metric")
-    return `${f.timeAgg}(last_${f.window}):${f.metric.trim()}${tail}`;
-  const fn = f.kind === "logs" ? "logs" : "trace-analytics";
+  const metric = f.metric.trim();
+  switch (f.kind) {
+    case "metric":
+      return `${f.timeAgg}(last_${f.window}):${metric}${tail}`;
+    case "change":
+      return `${f.changeMode}(${f.timeAgg}(last_${f.window}),last_${f.compareWindow}):${metric}${tail}`;
+    case "anomaly": {
+      const season =
+        f.algo === "basic" ? "" : `, seasonality='${f.seasonality}'`;
+      return `avg(last_${f.window}):anomalies(${metric}, '${f.algo}', ${f.param || "2"}, direction='${f.direction}', alert_window='last_${f.alertWindow}'${season})${tail}`;
+    }
+    case "outlier":
+      return `avg(last_${f.window}):outliers(${metric}, '${f.algo}', ${f.param || "3"})${tail}`;
+    case "forecast":
+      return `${f.timeAgg}(next_${f.window}):forecast(${metric}, '${f.algo}', ${f.param || "1"})${tail}`;
+    case "check": {
+      const over = list(f.over).map(quote).join(",") || '"*"';
+      const by = list(f.by).map(quote).join(",");
+      return `${quote(f.check.trim())}.over(${over})${by ? `.by(${by})` : ""}.last(${Math.max(
+        Number(f.critical) || 1,
+        Number(f.warning) || 1,
+        Number(f.ok) || 1,
+      )}).count_by_status()`;
+    }
+    case "composite":
+      return f.composite.trim();
+  }
+  const fn = EVENT_FN[f.kind];
   const rollup =
-    f.agg === "count"
+    f.agg === "count" || f.kind === "errors"
       ? `.rollup("count")`
       : `.rollup("${f.agg}", ${quote(f.measure)})`;
-  const by = f.by.trim()
-    ? `.by(${quote(
-        f.by
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .join(","),
-      )})`
-    : "";
+  const by = f.by.trim() ? `.by(${quote(list(f.by).join(","))})` : "";
   const index = f.kind === "logs" ? `.index("*")` : "";
   return `${fn}(${quote(f.search)})${index}${rollup}${by}.last("${f.window}")${tail}`;
 }
 
+/** Named options of a function call: `direction='above'` → {direction: "above"}. */
+function namedArgs(args: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of args.matchAll(/(\w+)\s*=\s*'([^']*)'|(\w+)\s*=\s*([\w.]+)/g))
+    if (m[1]) out[m[1]] = m[2];
+    else out[m[3]] = m[4];
+  return out;
+}
+
 /** The form fields of a query this editor can build; `raw` otherwise. */
 function parseInto(q: string, f: Form): Form {
+  const trimmed = q.trim();
+  if (/^[\d\s()&|!]+$/.test(trimmed) && /\d/.test(trimmed))
+    return { ...f, kind: "composite", raw: null, composite: trimmed };
+  const sc = trimmed.match(/^"([^"]+)"\s*((?:\.\w+\([^()]*\))*)$/);
+  if (sc) {
+    const out: Form = {
+      ...f,
+      kind: "check",
+      raw: null,
+      check: sc[1],
+      over: "*",
+      by: "",
+    };
+    for (const c of sc[2].matchAll(/\.(\w+)\(([^()]*)\)/g)) {
+      const args = [...c[2].matchAll(/"([^"]*)"/g)].map((a) => a[1]);
+      if (c[1] === "over") out.over = args.join(",");
+      else if (c[1] === "by") out.by = args.join(",");
+    }
+    return out;
+  }
   const tail = q.match(/^([\s\S]*?)\s*(>=|<=|==|!=|>|<)\s*(-?[\d.eE+-]+)\s*$/);
   if (!tail) return { ...f, raw: q };
   const [, head, cmp, critical] = tail;
+  const change = head.match(
+    /^(change|pct_change)\(\s*(avg|min|max|sum)\(last_(\w+)\)\s*,\s*last_(\w+)\s*\):(.+)$/,
+  );
+  if (change && WINDOWS.includes(change[3]) && WINDOWS.includes(change[4]))
+    return {
+      ...f,
+      kind: "change",
+      raw: null,
+      changeMode: change[1],
+      timeAgg: change[2],
+      window: change[3],
+      compareWindow: change[4],
+      metric: change[5],
+      cmp,
+      critical,
+    };
+  const fnq = head.match(
+    /^(avg|min|max|sum)\((last|next)_(\w+)\):(anomalies|outliers|forecast)\((.+?),\s*'(\w+)'\s*(?:,\s*([\d.]+))?(.*)\)$/,
+  );
+  if (fnq && WINDOWS.includes(fnq[3])) {
+    const kind: Kind =
+      fnq[4] === "anomalies"
+        ? "anomaly"
+        : fnq[4] === "outliers"
+          ? "outlier"
+          : "forecast";
+    const opts = namedArgs(fnq[8] ?? "");
+    return {
+      ...f,
+      kind,
+      raw: null,
+      timeAgg: fnq[1],
+      window: fnq[3],
+      metric: fnq[5],
+      algo: fnq[6],
+      param: fnq[7] ?? f.param,
+      direction: opts.direction ?? "both",
+      alertWindow: (opts.alert_window ?? "last_15m").replace(/^last_/, ""),
+      seasonality: opts.seasonality ?? "weekly",
+      cmp,
+      critical,
+    };
+  }
   const metric = head.match(/^(avg|min|max|sum)\(last_(\d+[smhdw])\):(.+)$/);
-  if (metric && WINDOWS.includes(metric[2]))
+  if (metric && WINDOWS.includes(metric[2]) && !/^\w+\(/.test(metric[3]))
     return {
       ...f,
       kind: "metric",
@@ -752,12 +1004,12 @@ function parseInto(q: string, f: Form): Form {
       critical,
     };
   const ev = head.match(
-    /^(logs|trace-analytics|spans)\("((?:[^"\\]|\\.)*)"\)(.*)$/,
+    /^(logs|trace-analytics|spans|rum|events|error-tracking(?:-traces|-logs|-rum)?)\("((?:[^"\\]|\\.)*)"\)(.*)$/,
   );
   if (!ev) return { ...f, raw: q };
   const out: Form = {
     ...f,
-    kind: ev[1] === "logs" ? "logs" : "apm",
+    kind: KIND_OF_FN[ev[1]],
     raw: null,
     search: unquote(ev[2]),
     cmp,
@@ -782,23 +1034,30 @@ function parseInto(q: string, f: Form): Form {
   return out;
 }
 
+const TYPE_KIND: Record<string, Kind> = {
+  "log alert": "logs",
+  "trace-analytics alert": "apm",
+  "rum alert": "rum",
+  "event-v2 alert": "events",
+  "error-tracking alert": "errors",
+  "service check": "check",
+  composite: "composite",
+};
+
 function fromMonitor(m: Monitor | MonitorDraft): Form {
-  const kind: Kind =
-    m.type === "log alert"
-      ? "logs"
-      : m.type === "trace-analytics alert"
-        ? "apm"
-        : "metric";
-  const f = parseInto(m.query, blank(kind));
+  const f = parseInto(m.query, blank(TYPE_KIND[m.type] ?? "metric"));
   const th = m.options.thresholds;
   const s = (v: number | undefined) =>
     v === undefined || v === null ? "" : String(v);
+  const o = m.options as Record<string, unknown>;
+  const counted = f.kind === "check";
   return {
     ...f,
-    critical: f.raw === null ? f.critical : s(th.critical),
+    critical: f.raw === null && !counted ? f.critical : s(th.critical),
     warning: s(th.warning),
     criticalRecovery: s(th.critical_recovery),
     warningRecovery: s(th.warning_recovery),
+    ok: s(th.ok) || "1",
     notifyNoData: !!m.options.notify_no_data,
     noDataTimeframe: String(m.options.no_data_timeframe ?? 10),
     name: m.name,
@@ -806,37 +1065,71 @@ function fromMonitor(m: Monitor | MonitorDraft): Form {
     tags: m.tags.join(", "),
     priority: m.priority ? String(m.priority) : "",
     renotify: String(m.options.renotify_interval ?? 0),
+    escalation:
+      typeof o.escalation_message === "string" ? o.escalation_message : "",
+    newGroupDelay: o.new_group_delay ? String(o.new_group_delay) : "",
+    evaluationDelay: m.options.evaluation_delay
+      ? String(m.options.evaluation_delay)
+      : "",
   };
+}
+
+function monitorType(f: Form): string {
+  if (f.raw !== null) return "query alert";
+  switch (f.kind) {
+    case "metric":
+      return "metric alert";
+    case "logs":
+      return "log alert";
+    case "apm":
+      return "trace-analytics alert";
+    case "rum":
+      return "rum alert";
+    case "events":
+      return "event-v2 alert";
+    case "errors":
+      return "error-tracking alert";
+    case "check":
+      return "service check";
+    case "composite":
+      return "composite";
+    default:
+      return "query alert";
+  }
 }
 
 function toDraft(f: Form, base?: Monitor): MonitorDraft {
   const n = (s: string) => (s.trim() === "" ? undefined : Number(s));
   return {
     name: f.name.trim(),
-    type:
-      f.kind === "logs"
-        ? "log alert"
-        : f.kind === "apm"
-          ? "trace-analytics alert"
-          : "metric alert",
+    type: monitorType(f),
     query: buildQuery(f),
     message: f.message,
-    tags: f.tags
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean),
+    tags: list(f.tags),
     priority: n(f.priority) ?? null,
     options: {
       ...(base?.options ?? {}),
-      thresholds: {
-        critical: n(f.critical),
-        warning: n(f.warning),
-        critical_recovery: n(f.criticalRecovery),
-        warning_recovery: n(f.warningRecovery),
-      },
+      thresholds:
+        f.kind === "composite"
+          ? {}
+          : f.kind === "check"
+            ? {
+                critical: n(f.critical) ?? 1,
+                warning: n(f.warning) ?? 1,
+                ok: n(f.ok) ?? 1,
+              }
+            : {
+                critical: n(f.critical),
+                warning: n(f.warning),
+                critical_recovery: n(f.criticalRecovery),
+                warning_recovery: n(f.warningRecovery),
+              },
       notify_no_data: f.notifyNoData,
       no_data_timeframe: f.notifyNoData ? n(f.noDataTimeframe) : undefined,
       renotify_interval: n(f.renotify) ?? 0,
+      escalation_message: f.escalation.trim() || undefined,
+      new_group_delay: n(f.newGroupDelay),
+      evaluation_delay: n(f.evaluationDelay),
     },
   };
 }
@@ -925,6 +1218,199 @@ function Preview({
   );
 }
 
+function WindowSelect({
+  value,
+  onChange,
+  only,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  only?: string[];
+}) {
+  return (
+    <select
+      className="input"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {(only ?? WINDOWS).map((w) => (
+        <option key={w} value={w}>
+          {WINDOW_LABELS[w]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function MetricFields({
+  form,
+  set,
+}: {
+  form: Form;
+  set: (p: Partial<Form>) => void;
+}) {
+  const k = form.kind;
+  return (
+    <>
+      <label className="form-field">
+        <span className="form-label">Metric query</span>
+        <input
+          className="input mono"
+          value={form.metric}
+          onChange={(e) => set({ metric: e.target.value })}
+          placeholder="avg:system.cpu.user{env:prod} by {host}"
+        />
+        <span className="form-hint">
+          As in the Metrics Explorer: aggregation, metric, filter, `by {"{tag}"}
+          ` for one alert per group
+          {k === "outlier" &&
+            " (outliers compare the groups: group by something)"}
+          .
+        </span>
+      </label>
+      {k === "metric" && (
+        <div className="form-row inline">
+          Evaluate the
+          <select
+            className="input"
+            value={form.timeAgg}
+            onChange={(e) => set({ timeAgg: e.target.value })}
+          >
+            <option value="avg">average</option>
+            <option value="max">maximum</option>
+            <option value="min">minimum</option>
+            <option value="sum">sum</option>
+          </select>
+          of the query over the last
+          <WindowSelect
+            value={form.window}
+            onChange={(window) => set({ window })}
+          />
+        </div>
+      )}
+      {k === "change" && (
+        <div className="form-row inline">
+          Alert on the
+          <select
+            className="input"
+            value={form.changeMode}
+            onChange={(e) => set({ changeMode: e.target.value })}
+          >
+            <option value="change">change</option>
+            <option value="pct_change">% change</option>
+          </select>
+          of the
+          <select
+            className="input"
+            value={form.timeAgg}
+            onChange={(e) => set({ timeAgg: e.target.value })}
+          >
+            <option value="avg">average</option>
+            <option value="max">maximum</option>
+            <option value="min">minimum</option>
+            <option value="sum">sum</option>
+          </select>
+          over the last
+          <WindowSelect
+            value={form.window}
+            onChange={(window) => set({ window })}
+          />
+          compared with
+          <WindowSelect
+            value={form.compareWindow}
+            onChange={(compareWindow) => set({ compareWindow })}
+          />
+          before
+        </div>
+      )}
+      {(k === "anomaly" || k === "outlier" || k === "forecast") && (
+        <div className="form-row inline">
+          {k === "forecast" ? "Forecast the" : "Over the last"}
+          {k === "forecast" && (
+            <>
+              <select
+                className="input"
+                value={form.timeAgg}
+                onChange={(e) => set({ timeAgg: e.target.value })}
+              >
+                <option value="max">maximum</option>
+                <option value="min">minimum</option>
+              </select>
+              over the next
+            </>
+          )}
+          <WindowSelect
+            value={form.window}
+            onChange={(window) => set({ window })}
+            only={
+              k === "forecast"
+                ? ["1h", "4h", "1d", "1w"]
+                : ["15m", "30m", "1h", "2h", "4h", "1d", "1w"]
+            }
+          />
+          with the
+          <select
+            className="input"
+            value={form.algo}
+            onChange={(e) => set({ algo: e.target.value })}
+          >
+            {(ALGOS[k] ?? []).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+          algorithm,
+          <span className="faint">{PARAM_LABEL[k]}</span>
+          <input
+            className="input"
+            type="number"
+            step="0.5"
+            value={form.param}
+            onChange={(e) => set({ param: e.target.value })}
+            style={{ width: 70 }}
+          />
+        </div>
+      )}
+      {k === "anomaly" && (
+        <div className="form-row inline">
+          Values
+          <select
+            className="input"
+            value={form.direction}
+            onChange={(e) => set({ direction: e.target.value })}
+          >
+            <option value="both">above or below</option>
+            <option value="above">above</option>
+            <option value="below">below</option>
+          </select>
+          the bounds over the last
+          <WindowSelect
+            value={form.alertWindow}
+            onChange={(alertWindow) => set({ alertWindow })}
+            only={["5m", "10m", "15m", "30m", "1h", "2h", "4h"]}
+          />
+          {form.algo !== "basic" && (
+            <>
+              , with a
+              <select
+                className="input"
+                value={form.seasonality}
+                onChange={(e) => set({ seasonality: e.target.value })}
+              >
+                <option value="hourly">hourly</option>
+                <option value="daily">daily</option>
+                <option value="weekly">weekly</option>
+              </select>
+              season
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function MonitorEditor() {
   const { id } = useParams();
   const editing = id ? Number(id) : null;
@@ -942,6 +1428,16 @@ export function MonitorEditor() {
   const [form, setForm] = useState<Form | null>(
     sourceId ? null : blank((params.get("type") as Kind) || "metric"),
   );
+  const others = useQuery({
+    queryKey: ["monitors"],
+    queryFn: () => api.monitors(),
+    enabled: form?.kind === "composite",
+  });
+  const checks = useQuery({
+    queryKey: ["checks"],
+    queryFn: () => api.checks(),
+    enabled: form?.kind === "check",
+  });
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (source.data && !form) {
@@ -956,6 +1452,9 @@ export function MonitorEditor() {
     set({
       message: `${form.message}${form.message.endsWith("\n") || !form.message ? "" : " "}${text}`,
     });
+  const k = form.kind;
+  const counted = k === "check";
+  const thresholded = k !== "composite" && !counted;
 
   const save = async () => {
     setError(null);
@@ -972,6 +1471,10 @@ export function MonitorEditor() {
     }
   };
 
+  const checkNames = [
+    ...new Set((checks.data ?? []).map((c) => c.check)),
+  ].sort();
+
   return (
     <>
       <PageHeader title="Monitors" tabs={MONITOR_TABS} />
@@ -979,19 +1482,13 @@ export function MonitorEditor() {
         <h2>{editing ? `Edit ${form.name || "monitor"}` : "New Monitor"}</h2>
         {!editing && (
           <div className="monitor-kinds">
-            {(
-              [
-                ["metric", "Metric", "Compare a metric with a threshold"],
-                ["logs", "Logs", "Alert on log counts or measures"],
-                ["apm", "APM", "Alert on span counts or latency"],
-              ] as [Kind, string, string][]
-            ).map(([k, label, help]) => (
+            {KINDS.map(([kind, label, help]) => (
               <button
-                key={k}
-                className={`monitor-kind${form.kind === k ? " selected" : ""}`}
+                key={kind}
+                className={`monitor-kind${form.kind === kind ? " selected" : ""}`}
                 onClick={() =>
                   setForm({
-                    ...blank(k),
+                    ...blank(kind),
                     name: form.name,
                     message: form.message,
                   })
@@ -1008,9 +1505,13 @@ export function MonitorEditor() {
             <Step
               n={1}
               title={
-                form.kind === "metric"
+                METRIC_KINDS.includes(k)
                   ? "Define the metric"
-                  : "Define the search query"
+                  : k === "check"
+                    ? "Pick the check"
+                    : k === "composite"
+                      ? "Combine monitors"
+                      : "Define the search query"
               }
             >
               {form.raw !== null ? (
@@ -1028,79 +1529,137 @@ export function MonitorEditor() {
                     Back to the editor
                   </button>
                 </>
-              ) : form.kind === "metric" ? (
+              ) : METRIC_KINDS.includes(k) ? (
+                <MetricFields form={form} set={set} />
+              ) : k === "check" ? (
                 <>
                   <label className="form-field">
-                    <span className="form-label">Metric query</span>
+                    <span className="form-label">Check</span>
                     <input
                       className="input mono"
-                      value={form.metric}
-                      onChange={(e) => set({ metric: e.target.value })}
-                      placeholder="avg:system.cpu.user{env:prod} by {host}"
+                      list="check-names"
+                      value={form.check}
+                      onChange={(e) => set({ check: e.target.value })}
+                      placeholder="datadog.agent.up"
                     />
-                    <span className="form-hint">
-                      As in the Metrics Explorer: aggregation, metric, filter,
-                      `by {"{tag}"}` for one alert per group.
-                    </span>
+                    <datalist id="check-names">
+                      {checkNames.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
                   </label>
                   <div className="form-row inline">
-                    Evaluate the
-                    <select
-                      className="input"
-                      value={form.timeAgg}
-                      onChange={(e) => set({ timeAgg: e.target.value })}
-                    >
-                      <option value="avg">average</option>
-                      <option value="max">maximum</option>
-                      <option value="min">minimum</option>
-                      <option value="sum">sum</option>
-                    </select>
-                    of the query over the last
-                    <select
-                      className="input"
-                      value={form.window}
-                      onChange={(e) => set({ window: e.target.value })}
-                    >
-                      {WINDOWS.map((w) => (
-                        <option key={w} value={w}>
-                          {WINDOW_LABELS[w]}
-                        </option>
+                    Reported by
+                    <input
+                      className="input mono"
+                      value={form.over}
+                      onChange={(e) => set({ over: e.target.value })}
+                      placeholder="* or env:prod,role:db"
+                      style={{ width: 220 }}
+                    />
+                    one alert per
+                    <input
+                      className="input mono"
+                      value={form.by}
+                      onChange={(e) => set({ by: e.target.value })}
+                      placeholder="host"
+                      style={{ width: 160 }}
+                    />
+                  </div>
+                  <span className="form-hint">
+                    Check runs come from the Agent (
+                    <code>/api/v1/check_run</code>) and DogStatsD (
+                    <code>_sc|name|status</code>).
+                  </span>
+                </>
+              ) : k === "composite" ? (
+                <>
+                  <label className="form-field">
+                    <span className="form-label">Expression</span>
+                    <input
+                      className="input mono"
+                      value={form.composite}
+                      onChange={(e) => set({ composite: e.target.value })}
+                      placeholder="1001 && (1002 || !1003)"
+                    />
+                    <span className="form-hint">
+                      Monitor ids with <code>&&</code>, <code>||</code>,{" "}
+                      <code>!</code> and parentheses. Multi-alert monitors are
+                      matched group by group.
+                    </span>
+                  </label>
+                  <div className="composite-picker">
+                    {(others.data ?? [])
+                      .filter(
+                        (m) =>
+                          m.id !== editing &&
+                          m.type !== "composite" &&
+                          m.type !== "synthetics alert",
+                      )
+                      .map((m) => (
+                        <button
+                          key={m.id}
+                          className="btn small ghost"
+                          onClick={() =>
+                            set({
+                              composite: form.composite.trim()
+                                ? `${form.composite.trim()} && ${m.id}`
+                                : String(m.id),
+                            })
+                          }
+                        >
+                          <MonitorPill status={m.overall_state} small />{" "}
+                          <span className="mono">{m.id}</span> {m.name}
+                        </button>
                       ))}
-                    </select>
                   </div>
                 </>
               ) : (
                 <>
                   <label className="form-field">
                     <span className="form-label">
-                      {form.kind === "logs"
+                      {k === "logs"
                         ? "Logs matching"
-                        : "Spans matching"}
+                        : k === "apm"
+                          ? "Spans matching"
+                          : k === "rum"
+                            ? "RUM events matching"
+                            : k === "events"
+                              ? "Events matching"
+                              : "Errors matching"}
                     </span>
                     <input
                       className="input mono"
                       value={form.search}
                       onChange={(e) => set({ search: e.target.value })}
                       placeholder={
-                        form.kind === "logs"
+                        k === "logs"
                           ? "service:web status:error"
-                          : "service:web env:prod"
+                          : k === "rum"
+                            ? "@type:error @view.name:/checkout"
+                            : k === "events"
+                              ? "source:alert status:error"
+                              : "service:web env:prod"
                       }
                     />
                   </label>
                   <div className="form-row inline">
-                    <select
-                      className="input"
-                      value={form.agg}
-                      onChange={(e) => set({ agg: e.target.value })}
-                    >
-                      {EVENT_AGGS.map(([v, l]) => (
-                        <option key={v} value={v}>
-                          {l}
-                        </option>
-                      ))}
-                    </select>
-                    {form.agg !== "count" && (
+                    {k === "errors" ? (
+                      <span>Count of errors</span>
+                    ) : (
+                      <select
+                        className="input"
+                        value={form.agg}
+                        onChange={(e) => set({ agg: e.target.value })}
+                      >
+                        {EVENT_AGGS.map(([v, l]) => (
+                          <option key={v} value={v}>
+                            {l}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {form.agg !== "count" && k !== "errors" && (
                       <input
                         className="input mono"
                         value={form.measure}
@@ -1110,30 +1669,36 @@ export function MonitorEditor() {
                       />
                     )}
                     by
-                    <input
-                      className="input mono"
-                      value={form.by}
-                      onChange={(e) => set({ by: e.target.value })}
-                      placeholder="(everything)"
-                      style={{ width: 200 }}
-                    />
+                    {k === "errors" ? (
+                      <select
+                        className="input"
+                        value={form.by}
+                        onChange={(e) => set({ by: e.target.value })}
+                      >
+                        <option value="@issue.id">issue</option>
+                        <option value="service">service</option>
+                        <option value="error.type">error type</option>
+                        <option value="">(everything)</option>
+                      </select>
+                    ) : (
+                      <input
+                        className="input mono"
+                        value={form.by}
+                        onChange={(e) => set({ by: e.target.value })}
+                        placeholder="(everything)"
+                        style={{ width: 200 }}
+                      />
+                    )}
                     over the last
-                    <select
-                      className="input"
+                    <WindowSelect
                       value={form.window}
-                      onChange={(e) => set({ window: e.target.value })}
-                    >
-                      {WINDOWS.map((w) => (
-                        <option key={w} value={w}>
-                          {WINDOW_LABELS[w]}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(window) => set({ window })}
+                    />
                   </div>
                   <span className="form-hint">
                     Grouping by facets (`service,host`) sends one alert per
                     group.
-                    {form.kind === "apm" && " Durations are in nanoseconds."}
+                    {k === "apm" && " Durations are in nanoseconds."}
                   </span>
                 </>
               )}
@@ -1147,84 +1712,171 @@ export function MonitorEditor() {
               )}
             </Step>
             <Step n={2} title="Set alert conditions">
+              {thresholded && (
+                <>
+                  <div className="form-row inline">
+                    Trigger when the{" "}
+                    {k === "anomaly"
+                      ? "share of the alert window outside the bounds (0 to 1)"
+                      : k === "outlier"
+                        ? "outlier flag (1: an outlier)"
+                        : k === "forecast"
+                          ? "forecast bound"
+                          : "evaluated value"}{" "}
+                    is
+                    <select
+                      className="input"
+                      value={form.cmp}
+                      onChange={(e) => set({ cmp: e.target.value })}
+                      disabled={form.raw !== null}
+                    >
+                      {COMPARATORS.map(([v, l]) => (
+                        <option key={v} value={v}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+                    the threshold
+                  </div>
+                  <div className="threshold-grid">
+                    <label>
+                      <span className="threshold-label alert">
+                        Alert threshold
+                      </span>
+                      <input
+                        className="input"
+                        type="number"
+                        value={form.critical}
+                        onChange={(e) => set({ critical: e.target.value })}
+                        disabled={form.raw !== null}
+                      />
+                    </label>
+                    <label>
+                      <span className="threshold-label warn">
+                        Warning threshold
+                      </span>
+                      <input
+                        className="input"
+                        type="number"
+                        value={form.warning}
+                        onChange={(e) => set({ warning: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span className="threshold-label">
+                        Alert recovery threshold
+                      </span>
+                      <input
+                        className="input"
+                        type="number"
+                        value={form.criticalRecovery}
+                        onChange={(e) =>
+                          set({ criticalRecovery: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span className="threshold-label">
+                        Warning recovery threshold
+                      </span>
+                      <input
+                        className="input"
+                        type="number"
+                        value={form.warningRecovery}
+                        onChange={(e) =>
+                          set({ warningRecovery: e.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
+              {counted && (
+                <div className="threshold-grid">
+                  <label>
+                    <span className="threshold-label alert">
+                      Alert after consecutive CRITICAL
+                    </span>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      value={form.critical}
+                      onChange={(e) => set({ critical: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="threshold-label warn">
+                      Warn after consecutive WARNING
+                    </span>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      value={form.warning}
+                      onChange={(e) => set({ warning: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="threshold-label">
+                      Recover after consecutive OK
+                    </span>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      value={form.ok}
+                      onChange={(e) => set({ ok: e.target.value })}
+                    />
+                  </label>
+                </div>
+              )}
+              {k === "composite" && (
+                <div className="faint">
+                  The composite alerts when its expression is true (warns when
+                  only warnings make it true), and recovers when it is false.
+                </div>
+              )}
+              {k !== "composite" && (
+                <label className="form-check">
+                  <input
+                    type="checkbox"
+                    checked={form.notifyNoData}
+                    onChange={(e) => set({ notifyNoData: e.target.checked })}
+                  />
+                  Notify if data is missing for more than
+                  <input
+                    className="input"
+                    type="number"
+                    value={form.noDataTimeframe}
+                    onChange={(e) => set({ noDataTimeframe: e.target.value })}
+                    disabled={!form.notifyNoData}
+                    style={{ width: 70 }}
+                  />
+                  minutes
+                </label>
+              )}
               <div className="form-row inline">
-                Trigger when the evaluated value is
-                <select
-                  className="input"
-                  value={form.cmp}
-                  onChange={(e) => set({ cmp: e.target.value })}
-                  disabled={form.raw !== null}
-                >
-                  {COMPARATORS.map(([v, l]) => (
-                    <option key={v} value={v}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-                the threshold
-              </div>
-              <div className="threshold-grid">
-                <label>
-                  <span className="threshold-label alert">Alert threshold</span>
-                  <input
-                    className="input"
-                    type="number"
-                    value={form.critical}
-                    onChange={(e) => set({ critical: e.target.value })}
-                    disabled={form.raw !== null}
-                  />
-                </label>
-                <label>
-                  <span className="threshold-label warn">
-                    Warning threshold
-                  </span>
-                  <input
-                    className="input"
-                    type="number"
-                    value={form.warning}
-                    onChange={(e) => set({ warning: e.target.value })}
-                  />
-                </label>
-                <label>
-                  <span className="threshold-label">
-                    Alert recovery threshold
-                  </span>
-                  <input
-                    className="input"
-                    type="number"
-                    value={form.criticalRecovery}
-                    onChange={(e) => set({ criticalRecovery: e.target.value })}
-                  />
-                </label>
-                <label>
-                  <span className="threshold-label">
-                    Warning recovery threshold
-                  </span>
-                  <input
-                    className="input"
-                    type="number"
-                    value={form.warningRecovery}
-                    onChange={(e) => set({ warningRecovery: e.target.value })}
-                  />
-                </label>
-              </div>
-              <label className="form-check">
-                <input
-                  type="checkbox"
-                  checked={form.notifyNoData}
-                  onChange={(e) => set({ notifyNoData: e.target.checked })}
-                />
-                Notify if data is missing for more than
+                Delay evaluation by
                 <input
                   className="input"
                   type="number"
-                  value={form.noDataTimeframe}
-                  onChange={(e) => set({ noDataTimeframe: e.target.value })}
-                  disabled={!form.notifyNoData}
-                  style={{ width: 70 }}
+                  value={form.evaluationDelay}
+                  onChange={(e) => set({ evaluationDelay: e.target.value })}
+                  placeholder="0"
+                  style={{ width: 80 }}
                 />
-                minutes
-              </label>
+                seconds; leave new groups alone for
+                <input
+                  className="input"
+                  type="number"
+                  value={form.newGroupDelay}
+                  onChange={(e) => set({ newGroupDelay: e.target.value })}
+                  placeholder="0"
+                  style={{ width: 80 }}
+                />
+                seconds
+              </div>
             </Step>
             <Step n={3} title="Configure notifications">
               <label className="form-field">
@@ -1244,6 +1896,10 @@ export function MonitorEditor() {
                   value={form.message}
                   onChange={(e) => set({ message: e.target.value })}
                 />
+                <span className="form-hint">
+                  Notify with <code>@webhook-name</code> or an e-mail address (
+                  <code>@ops@example.com</code>).
+                </span>
               </label>
               <div className="template-help">
                 <span className="faint">Insert</span>
@@ -1326,6 +1982,20 @@ export function MonitorEditor() {
                   </select>
                 </label>
               </div>
+              {form.renotify !== "0" && (
+                <label className="form-field">
+                  <span className="form-label">
+                    Escalation message (added to reminders)
+                  </span>
+                  <textarea
+                    className="input mono"
+                    rows={2}
+                    value={form.escalation}
+                    onChange={(e) => set({ escalation: e.target.value })}
+                    placeholder="Still failing: @oncall@example.com"
+                  />
+                </label>
+              )}
             </Step>
           </div>
           <aside className="monitor-side">

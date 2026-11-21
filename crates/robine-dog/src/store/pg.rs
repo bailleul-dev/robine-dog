@@ -81,6 +81,10 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX monitor_events_by_monitor ON monitor_events (monitor_id, ts DESC);
     "#,
+    // When each group was first seen (`new_group_delay`).
+    r#"
+    ALTER TABLE monitor_groups ADD COLUMN first_seen TIMESTAMPTZ NOT NULL DEFAULT now();
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.
@@ -95,6 +99,7 @@ pub struct GroupState {
     pub last_notified: Option<i64>,
     pub last_resolved: Option<i64>,
     pub since: i64,
+    pub first_seen: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -384,7 +389,7 @@ impl Pg {
         let c = self.pool.get().await?;
         let rows = c
             .query(
-                "SELECT grp, status, value, last_data, last_triggered, last_notified, last_resolved, since
+                "SELECT grp, status, value, last_data, last_triggered, last_notified, last_resolved, since, first_seen
                  FROM monitor_groups WHERE monitor_id = $1 ORDER BY grp",
                 &[&monitor_id],
             )
@@ -400,6 +405,7 @@ impl Pg {
                 last_notified: ms(r.get(5)),
                 last_resolved: ms(r.get(6)),
                 since: ms(r.get(7)).unwrap_or(0),
+                first_seen: ms(r.get(8)).unwrap_or(0),
             })
             .collect())
     }
@@ -407,8 +413,8 @@ impl Pg {
     pub async fn put_monitor_group(&self, monitor_id: i64, g: &GroupState) -> Result<()> {
         let c = self.pool.get().await?;
         c.execute(
-            "INSERT INTO monitor_groups (monitor_id, grp, status, value, last_data, last_triggered, last_notified, last_resolved, since)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            "INSERT INTO monitor_groups (monitor_id, grp, status, value, last_data, last_triggered, last_notified, last_resolved, since, first_seen)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              ON CONFLICT (monitor_id, grp) DO UPDATE SET status = excluded.status, value = excluded.value,
                last_data = excluded.last_data, last_triggered = excluded.last_triggered,
                last_notified = excluded.last_notified, last_resolved = excluded.last_resolved, since = excluded.since",
@@ -422,6 +428,7 @@ impl Pg {
                 &time(g.last_notified),
                 &time(g.last_resolved),
                 &time(Some(g.since)),
+                &time(Some(g.first_seen)),
             ],
         )
         .await?;

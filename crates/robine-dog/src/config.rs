@@ -33,6 +33,10 @@ pub struct Config {
     pub session_secret: Vec<u8>,
     pub oidc: Option<Oidc>,
     pub auth_disabled: bool,
+    /// Notification e-mails: `smtp://user:pass@host:587` (STARTTLS),
+    /// `smtps://…:465` or `smtp://host:25?tls=none`.
+    pub smtp_url: Option<String>,
+    pub smtp_from: String,
 }
 
 fn var(k: &str) -> Option<String> {
@@ -120,6 +124,9 @@ impl Config {
                 .unwrap_or(455),
             api_key: var("ROBINE_DOG_API_KEY"),
             client_token: var("ROBINE_DOG_CLIENT_TOKEN"),
+            smtp_url: var("ROBINE_DOG_SMTP_URL"),
+            smtp_from: var("ROBINE_DOG_SMTP_FROM")
+                .unwrap_or_else(|| "robine-dog <robine-dog@localhost>".into()),
             trace_require_key: var("ROBINE_DOG_TRACE_REQUIRE_KEY")
                 .is_some_and(|v| v == "1" || v == "true"),
             session_secret,

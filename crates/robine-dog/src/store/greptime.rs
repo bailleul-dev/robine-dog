@@ -86,6 +86,7 @@ impl Greptime {
             ("spans", logs_ttl_days),
             ("metric_points", metrics_ttl_days),
             ("monitor_values", metrics_ttl_days),
+            ("check_runs", logs_ttl_days),
         ] {
             self.exec(&format!("ALTER TABLE {table} SET 'ttl' = '{days}d'"))
                 .await?;
@@ -163,6 +164,15 @@ const SCHEMA: &[&str] = &[
         "value" DOUBLE,
         "weight" DOUBLE DEFAULT 1,
         PRIMARY KEY ("metric", "host", "tags")
+    ) WITH ('append_mode' = 'true')"#,
+    // Service checks: the Agent's check runs and DogStatsD's `_sc`.
+    r#"CREATE TABLE IF NOT EXISTS "check_runs" (
+        "ts" TIMESTAMP(3) TIME INDEX,
+        "check" STRING INVERTED INDEX,
+        "host" STRING INVERTED INDEX,
+        "status" BIGINT,
+        "message" STRING,
+        "tags" STRING
     ) WITH ('append_mode' = 'true')"#,
     // Every monitor evaluation, per group: the monitor page's graph.
     r#"CREATE TABLE IF NOT EXISTS "monitor_values" (

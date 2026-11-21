@@ -447,6 +447,7 @@ export type MonitorOptions = {
     warning?: number;
     critical_recovery?: number;
     warning_recovery?: number;
+    ok?: number;
   };
   notify_no_data?: boolean;
   no_data_timeframe?: number;
@@ -487,6 +488,14 @@ export type MonitorDraft = Pick<
   Monitor,
   "name" | "type" | "query" | "message" | "tags" | "priority" | "options"
 >;
+export type CheckSummary = {
+  check: string;
+  host: string | null;
+  status: string;
+  message: string;
+  last: number;
+  tags: string[];
+};
 export type MonitorEvent = {
   id: number;
   monitor_id: number;
@@ -781,6 +790,7 @@ export const api = {
     signal?: AbortSignal,
   ) => post<MonitorPreview>("/monitors/preview", { query, thresholds }, signal),
   webhooks: () => call<Webhook[]>("/webhooks"),
+  checks: () => call<CheckSummary[]>("/checks"),
   createWebhook: (w: Webhook) => post<Webhook>("/webhooks", w),
   updateWebhook: (name: string, w: Webhook) =>
     put<Webhook>(`/webhooks/${encodeURIComponent(name)}`, w),

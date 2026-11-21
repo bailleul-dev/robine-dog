@@ -975,6 +975,22 @@ impl Statsd {
         lines.push(format!(
             "shop.queue.depth:{depth}|g|#env:prod,queue:orders{t}"
         ));
+        // Service checks: the Agent's own, and an HTTP check that the
+        // payment service fails a few minutes each hour.
+        for (host, service) in HOSTS {
+            lines.push(format!(
+                "_sc|datadog.agent.up|0|d:{ts_s}|h:{host}|#env:prod,service:{service}"
+            ));
+            let down = *service == "payment-service" && (20..24).contains(&((ts_s / 60) % 60));
+            let (status, msg) = if down {
+                (2, "m:connection refused")
+            } else {
+                (0, "m:200 OK")
+            };
+            lines.push(format!(
+                "_sc|http.can_connect|{status}|d:{ts_s}|h:{host}|#env:prod,service:{service},url:http://{service}/health|{msg}"
+            ));
+        }
         for chunk in lines.chunks(20) {
             let _ = self.sock.send_to(chunk.join("\n").as_bytes(), &self.addr);
         }

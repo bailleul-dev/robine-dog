@@ -23,6 +23,7 @@ pub struct Store {
     pub rum: Writer<crate::rum::RumRow>,
     pub spans: Writer<SpanRow>,
     pub points: Writer<Point>,
+    pub checks: Writer<crate::checks::CheckRun>,
 }
 
 /// Retries `f` for about two minutes: in a cluster the databases may start
@@ -65,6 +66,7 @@ impl Store {
             rum: Writer::spawn(gt.clone()),
             spans: Writer::spawn(gt.clone()),
             points: Writer::spawn(gt.clone()),
+            checks: Writer::spawn(gt.clone()),
             gt,
             pg,
         })
@@ -77,7 +79,8 @@ impl Store {
             self.events.flush(),
             self.rum.flush(),
             self.spans.flush(),
-            self.points.flush()
+            self.points.flush(),
+            self.checks.flush()
         );
     }
 }

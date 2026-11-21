@@ -163,17 +163,21 @@ fn status_of(doc: &IssueDoc, last_seen: i64) -> (String, bool) {
     }
 }
 
-pub async fn issues(
-    State(st): State<AppState>,
-    Json(req): Json<ListReq>,
-) -> Result<Json<Value>, ApiError> {
-    let interval = interval_ms(req.from, req.to, 40);
-    let buckets = ((req.to - req.from) / interval + 1).clamp(1, 200) as usize;
-    let start = req.from.div_euclid(interval) * interval;
+/// Errors grouped by issue (fingerprint) over `[from, to]`, from the given
+/// sources (`spans`, `logs`), with their counts per bucket of `grid`
+/// (interval, start, buckets).
+async fn aggregate(
+    st: &AppState,
+    sources: &[&str],
+    query: &str,
+    from: i64,
+    to: i64,
+    (interval, start, buckets): (i64, i64, usize),
+) -> Result<HashMap<String, Agg>, ApiError> {
     let mut groups: HashMap<String, Agg> = HashMap::new();
-    for source in ["spans", "logs"] {
+    for &source in sources {
         let e = exprs(source);
-        let filter = compile(&req.query, e.ds)?;
+        let filter = compile(query, e.ds)?;
         let sql = format!(
             "SELECT svc, et, nm, fr, b, count(*) AS c, max(msg) AS m, min(t) AS f, max(t) AS l FROM (
                 SELECT COALESCE(service, '') AS svc, {typ} AS et, {msg} AS msg, {pattern} AS nm, {frame} AS fr,
@@ -185,7 +189,7 @@ pub async fn issues(
             pattern = e.pattern,
             frame = e.frame,
             table = e.table,
-            time = time_clause(e.ds, req.from, req.to),
+            time = time_clause(e.ds, from, to),
             is_error = e.is_error,
         );
         for r in st.store.gt.query(&sql).await? {
@@ -218,6 +222,53 @@ pub async fn issues(
             g.series[i] += c;
         }
     }
+    Ok(groups)
+}
+
+/// An issue's errors over a window, for Error Tracking monitors.
+#[derive(Debug, Clone)]
+pub struct IssueCount {
+    pub id: String,
+    pub service: String,
+    pub typ: String,
+    pub count: i64,
+}
+
+pub async fn issue_counts(
+    st: &AppState,
+    sources: &[&str],
+    query: &str,
+    from: i64,
+    to: i64,
+) -> Result<Vec<IssueCount>, ApiError> {
+    let groups = aggregate(st, sources, query, from, to, (to - from + 1, from, 1)).await?;
+    Ok(groups
+        .into_iter()
+        .map(|(id, g)| IssueCount {
+            service: g.service,
+            typ: g.typ,
+            count: g.count,
+            id,
+        })
+        .collect())
+}
+
+pub async fn issues(
+    State(st): State<AppState>,
+    Json(req): Json<ListReq>,
+) -> Result<Json<Value>, ApiError> {
+    let interval = interval_ms(req.from, req.to, 40);
+    let buckets = ((req.to - req.from) / interval + 1).clamp(1, 200) as usize;
+    let start = req.from.div_euclid(interval) * interval;
+    let groups = aggregate(
+        &st,
+        &["spans", "logs"],
+        &req.query,
+        req.from,
+        req.to,
+        (interval, start, buckets),
+    )
+    .await?;
     let docs: HashMap<String, IssueDoc> = st
         .store
         .pg

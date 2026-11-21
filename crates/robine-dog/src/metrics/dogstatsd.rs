@@ -1,6 +1,7 @@
 //! DogStatsD over UDP (port 8125), as a local Datadog Agent receives it:
 //! `<name>:<value>[:<value>…]|<type>[|@<rate>][|#<tag>,…][|T<unix ts>]`, one
-//! metric per line. Events (`_e{`) and service checks (`_sc|`) are ignored.
+//! metric per line. Service checks (`_sc|`) are stored as check runs; events
+//! (`_e{`) are ignored.
 
 use super::{Aggregator, Sample, normalize_tags};
 use std::net::SocketAddr;
@@ -96,14 +97,28 @@ pub fn ingest(agg: &Aggregator, packet: &str, now_ms: i64) -> usize {
     n
 }
 
-pub async fn listen(addr: SocketAddr, agg: Arc<Aggregator>) -> anyhow::Result<()> {
+pub async fn listen(
+    addr: SocketAddr,
+    agg: Arc<Aggregator>,
+    store: Arc<crate::store::Store>,
+) -> anyhow::Result<()> {
     let sock = tokio::net::UdpSocket::bind(addr).await?;
     tracing::info!(%addr, "DogStatsD listening (UDP)");
     let mut buf = vec![0u8; 65_535];
     loop {
         let (len, _) = sock.recv_from(&mut buf).await?;
         let packet = String::from_utf8_lossy(&buf[..len]);
-        ingest(&agg, &packet, crate::intake::logs::now_ms());
+        let now = crate::intake::logs::now_ms();
+        ingest(&agg, &packet, now);
+        let checks: Vec<_> = packet
+            .lines()
+            .filter_map(|l| crate::checks::parse_dogstatsd(l, now))
+            .collect();
+        if !checks.is_empty()
+            && let Err(e) = store.checks.send(checks).await
+        {
+            tracing::warn!(error = %e, "storing DogStatsD service checks");
+        }
     }
 }
 
