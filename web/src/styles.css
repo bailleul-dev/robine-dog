@@ -3631,6 +3631,174 @@ table.list td.infra-bad {
   padding-left: 18px;
 }
 
+.synth-new {
+  position: relative;
+}
+
+.synth-new-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 300px;
+}
+
+.synth-hint {
+  display: block;
+  font-size: 11.5px;
+}
+
+.synth-small {
+  font-size: 11.5px;
+}
+
+.synth-form {
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.synth-subtypes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.synth-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.synth-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.synth-row .checkbox,
+.synth-form .checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.synth-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.synth-step {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+}
+
+.synth-step-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.synth-step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--purple-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.synth-history {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 26px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.synth-bar {
+  flex: 0 0 6px;
+  height: 22px;
+  border: 0;
+  padding: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--green);
+  opacity: 0.75;
+}
+
+.synth-bar.alert {
+  background: var(--red);
+}
+
+.synth-bar:hover,
+.synth-bar.picked {
+  opacity: 1;
+  height: 26px;
+}
+
+.synth-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.synth-dot.alert {
+  background: var(--red);
+}
+
+.synth-dot.warn {
+  background: #e0a020;
+}
+
+.synth-failure {
+  color: var(--red);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.synth-shot {
+  width: 120px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: zoom-in;
+  display: block;
+}
+
+.synth-steps-table {
+  margin-bottom: 12px;
+}
+
+.synth-details pre {
+  max-height: 260px;
+  overflow: auto;
+  font-size: 11.5px;
+  background: var(--bg-subtle);
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.synth-batch {
+  margin-bottom: 12px;
+}
+
 /* SLOs */
 .slo-ok {
   color: #2a9d63;

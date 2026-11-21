@@ -66,6 +66,9 @@ state (facets, metric metadata) is in PostgreSQL.
 | Downtimes: scheduled silences by monitor, monitor tags and scope | `/api/v1/downtime` |
 | Infrastructure: hosts, containers and Kubernetes resources (pods, deployments, stateful sets, daemon sets, nodes, namespaces), from the Agent's `system.*`, `container.*`, `kubernetes.*` and `kubernetes_state.*` metrics | — |
 | Synthetic API tests: HTTP requests on a schedule with assertions (status code, response time, body, headers); each run is a `source:synthetics` log and the `synthetics.http.response.time` and `synthetics.test_runs` metrics | `/api/v1/synthetics/tests` |
+| Synthetic tests of every protocol: SSL (certificate expiry, TLS version, issuer), TCP, DNS (`recordSome` / `recordEvery`, any server), UDP, WebSocket, gRPC (health check, metadata) and ICMP (latency, packet loss; needs `NET_RAW` or `net.ipv4.ping_group_range`); multistep API tests whose steps pass values on (`extractedValues` by JSONPath, regex, header or status, `allowFailure`, waits); test variables from patterns (`{{ numeric(6) }}`, `{{ uuid }}`, `{{ date(1d, YYYY-MM-DD) }}`) and global variables (`/api/v1/synthetics/variables`, secure ones never shown); retries; every run stored with its steps, browsable per test | `/api/v1/synthetics/tests` |
+| Synthetic browser tests: steps (go to URL, click, type, press key, select, hover, scroll, wait, assert element / content / attribute / page text / URL, JavaScript assertions and extractions) run in a headless Chromium over the DevTools protocol, on a device size, with a screenshot of every step; `synthetics.browser.test_duration` | `/api/v1/synthetics/tests/browser` |
+| Continuous Testing: `datadog-ci synthetics run-tests` with `DD_API_HOST_OVERRIDE` pointed here runs stored or local test definitions with their overrides (`startUrl`, `variables`, `headers`, `basicAuth`, `cookies`, `executionRule`, `deviceIds`, `retry`…), and reads back batches and results | `/api/v1/synthetics/tests/trigger/ci`, `/api/v1/synthetics/ci/batch/{id}`, `/api/v2/synthetics/tests/poll_results` |
 | SLOs: metric-based (good over total events), monitor-based (time out of `Alert`, optionally some groups) and time-slice (1- or 5-minute slices whose value meets a condition); targets and warnings over 7, 30 and 90 days, error budget, burndown and burn-rate graphs on each SLO's page; status corrections, one-off or recurring (`RRULE` daily, weekly, monthly, in a time zone); history, search (`type:monitor team:shop`) and `can_delete`; burn-rate (`burn_rate("id").over("30d").long_window("1h").short_window("5m") > 14.4`) and error-budget (`error_budget("id").over("30d") > 75`) monitors | `/api/v1/slo`, `/api/v1/slo/correction`, `/slo/manage` |
 | Notifications: Datadog message templates (`{{#is_alert}}`, `{{value}}`, `{{host.name}}`, `{{#is_match}}`…) to `@webhook-<name>` (Webhooks integration format: `$EVENT_TITLE`… payloads, custom headers, JSON or form) | `/monitors/webhooks` |
 | Monitors and webhooks APIs `/api/v1/monitor` (CRUD, partial update, validate, mute/unmute), `/api/v1/integration/webhooks/configuration/webhooks` | port 8080 |
@@ -226,7 +229,10 @@ months) applied as table TTLs, `ROBINE_DOG_API_KEY`,
 `ROBINE_DOG_LOG_FORMAT=json` (robine-dog's own logs, one JSON object per line),
 `ROBINE_DOG_SMTP_URL` (e-mail notifications, e.g.
 `smtps://user:password@smtp.example.com` or `smtp://localhost:1025`) and
-`ROBINE_DOG_SMTP_FROM` (default `robine-dog <robine-dog@localhost>`).
+`ROBINE_DOG_SMTP_FROM` (default `robine-dog <robine-dog@localhost>`),
+`ROBINE_DOG_CHROMIUM` (the browser of browser tests, found in the `PATH`
+otherwise; the image has one) and `ROBINE_DOG_CHROMIUM_ARGS` (extra flags,
+`--no-sandbox` in the image).
 
 Rows are written in batches (every 200 ms or 5,000 rows) and metric buckets
 every 10 seconds; on SIGTERM both are flushed before exiting.

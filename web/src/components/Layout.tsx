@@ -215,7 +215,7 @@ const SECTIONS: Item[][] = [
       to: "/synthetics/tests",
       match: ["/synthetics", "/rum"],
       links: [
-        { label: "Synthetic Monitoring", to: "/synthetics/tests", hint: "HTTP tests run on a schedule" },
+        { label: "Synthetic Monitoring", to: "/synthetics/tests", hint: "API, multistep and browser tests, from CI too" },
         { label: "Real User Monitoring", to: "/rum/performance-monitoring", hint: "Page performance, sessions and browser errors" },
         { label: "Session Replay" },
         { label: "Product Analytics" },

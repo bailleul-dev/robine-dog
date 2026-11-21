@@ -5,7 +5,7 @@ import { Integrations } from "./pages/Integrations";
 import { EventsExplorer, RumExplorer } from "./pages/Events";
 import { RumAnalytics, RumPerformancePage, RumSessions } from "./pages/Rum";
 import { SloPage, Slos } from "./pages/Slos";
-import { Synthetics } from "./pages/Synthetics";
+import { SyntheticCi, Synthetics, SyntheticVariables } from "./pages/Synthetics";
 import { Downtimes } from "./pages/Downtimes";
 import { Containers, HostMap, Hosts, Kubernetes } from "./pages/Infrastructure";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
@@ -110,6 +110,8 @@ function App() {
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />
+        <Route path="/synthetics/variables" element={<SyntheticVariables />} />
+        <Route path="/synthetics/ci" element={<SyntheticCi />} />
         <Route path="/slo/manage" element={<Slos />} />
         <Route path="/slo/:id" element={<SloPage />} />
         <Route path="/event/explorer" element={<EventsExplorer />} />

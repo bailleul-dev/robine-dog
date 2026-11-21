@@ -118,33 +118,137 @@ export type SyntheticAssertion = {
   type: string;
   operator: string;
   property?: string | null;
-  target: string | number;
+  // A number, a text, or `{jsonPath, operator, targetValue}`.
+  target: unknown;
+};
+export type SyntheticRequest = {
+  method?: string;
+  url?: string;
+  headers?: Record<string, string>;
+  body?: string | null;
+  timeout?: number | null;
+  host?: string;
+  port?: number | string | null;
+  servername?: string;
+  dnsServer?: string;
+  dnsServerPort?: number | string;
+  message?: string;
+  service?: string;
+  callType?: string;
+  numberOfPackets?: number;
+  [key: string]: unknown;
+};
+export type SyntheticExtract = {
+  name: string;
+  type: string;
+  field?: string;
+  parser: { type: string; value?: string };
+  secure?: boolean;
+};
+export type SyntheticApiStep = {
+  name: string;
+  subtype: string;
+  request: SyntheticRequest;
+  assertions: SyntheticAssertion[];
+  extractedValues?: SyntheticExtract[];
+  allowFailure?: boolean;
+  isCritical?: boolean;
+  value?: number;
+};
+export type SyntheticBrowserStep = {
+  name?: string;
+  type: string;
+  params: Record<string, any>;
+  allowFailure?: boolean;
+  isCritical?: boolean;
+  timeout?: number;
+};
+export type SyntheticConfigVariable = {
+  name: string;
+  type: string;
+  pattern?: string;
+  id?: string;
+  example?: string;
+  secure?: boolean;
+};
+export type SyntheticStepResult = {
+  name: string;
+  type: string;
+  passed: boolean;
+  duration_ms: number;
+  failure?: string;
+  allow_failure: boolean;
+  status_code?: number;
+  url?: string;
+  details?: Record<string, unknown>;
+  extracted?: Record<string, unknown>;
+  screenshot?: boolean;
+};
+export type SyntheticResult = {
+  result_id: string;
+  ts: number;
+  passed: boolean;
+  status_code: number | null;
+  duration_ms: number;
+  failure: string | null;
+  steps?: SyntheticStepResult[];
+  details?: Record<string, unknown>;
+  batch_id?: string;
+  retries?: number;
 };
 export type SyntheticTest = {
   public_id?: string;
   name: string;
+  type?: string;
+  subtype?: string;
   status: string;
   config: {
-    request: {
-      method: string;
-      url: string;
-      headers?: Record<string, string>;
-      body?: string | null;
-      timeout?: number | null;
-    };
+    request: SyntheticRequest;
     assertions: SyntheticAssertion[];
+    steps?: SyntheticApiStep[];
+    configVariables?: SyntheticConfigVariable[];
+    variables?: SyntheticConfigVariable[];
   };
-  options: { tick_every?: number | null; min_failure_duration?: number | null };
+  options: {
+    tick_every?: number | null;
+    min_failure_duration?: number | null;
+    follow_redirects?: boolean;
+    accept_self_signed?: boolean;
+    device_ids?: string[];
+    retry?: { count: number; interval?: number };
+    [key: string]: unknown;
+  };
+  steps?: SyntheticBrowserStep[];
+  locations?: string[];
   monitor_status?: string;
   message: string;
   tags: string[];
-  last_result?: {
-    ts: number;
-    passed: boolean;
-    status_code: number | null;
-    duration_ms: number;
-    failure: string | null;
-  };
+  last_result?: SyntheticResult;
+};
+export type SyntheticVariable = {
+  id?: string;
+  name: string;
+  description: string;
+  tags: string[];
+  value: { value?: string; secure: boolean };
+};
+export type SyntheticBatchRun = {
+  result_id?: string;
+  test_public_id: string;
+  test_name: string;
+  test_type: string;
+  execution_rule: string;
+  status: string;
+  duration: number;
+  timed_out: boolean;
+  device?: { id: string };
+};
+export type SyntheticBatch = {
+  batch_id: string;
+  created: number;
+  status: string;
+  metadata?: Record<string, unknown>;
+  results: SyntheticBatchRun[];
 };
 export type SloThreshold = {
   timeframe: string;
@@ -848,7 +952,25 @@ export const api = {
     put<SyntheticTest>(`/synthetics/tests/${id}`, t),
   deleteSynthetic: (id: string) => del<unknown>(`/synthetics/tests/${id}`),
   triggerSynthetic: (id: string) =>
-    post<unknown>(`/synthetics/tests/${id}/trigger`, {}),
+    post<SyntheticResult>(`/synthetics/tests/${id}/trigger`, {}),
+  setSyntheticStatus: (id: string, status: string) =>
+    put<boolean>(`/synthetics/tests/${id}/status`, { new_status: status }),
+  syntheticResults: (id: string, from: number, to: number) =>
+    call<{ results: SyntheticResult[] }>(
+      `/synthetics/tests/${id}/results?from_ts=${from}&to_ts=${to}&limit=200`,
+    ),
+  syntheticScreenshot: (resultId: string, step: number) =>
+    `/api/ui/synthetics/results/${resultId}/screenshots/${step}`,
+  syntheticVariables: () =>
+    call<{ variables: SyntheticVariable[] }>("/synthetics/variables"),
+  createSyntheticVariable: (v: SyntheticVariable) =>
+    post<SyntheticVariable>("/synthetics/variables", v),
+  updateSyntheticVariable: (id: string, v: SyntheticVariable) =>
+    put<SyntheticVariable>(`/synthetics/variables/${id}`, v),
+  deleteSyntheticVariable: (id: string) =>
+    del<unknown>(`/synthetics/variables/${id}`),
+  syntheticBatches: () =>
+    call<{ batches: SyntheticBatch[] }>("/synthetics/ci/batches"),
   slos: () => call<{ data: Slo[] }>("/slos"),
   createSlo: (s: Slo) => post<unknown>("/slos", s),
   updateSlo: (id: string, s: Slo) => put<unknown>(`/slos/${id}`, s),

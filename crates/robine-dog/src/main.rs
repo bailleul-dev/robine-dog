@@ -79,6 +79,24 @@ pub(crate) fn ui_routes() -> Router<AppState> {
                 .delete(synthetics::delete),
         )
         .route("/synthetics/tests/{id}/trigger", post(synthetics::trigger))
+        .route("/synthetics/tests/{id}/status", put(synthetics::set_status))
+        .route("/synthetics/tests/{id}/results", get(synthetics::results))
+        .route("/synthetics/results/{result_id}", get(synthetics::result))
+        .route(
+            "/synthetics/results/{result_id}/screenshots/{step}",
+            get(synthetics::screenshot),
+        )
+        .route("/synthetics/ci/batches", get(synthetics::ci::batches))
+        .route(
+            "/synthetics/variables",
+            get(synthetics::variables::list).post(synthetics::variables::create),
+        )
+        .route(
+            "/synthetics/variables/{id}",
+            get(synthetics::variables::get)
+                .put(synthetics::variables::update)
+                .delete(synthetics::variables::delete),
+        )
         .route("/slos", get(api::slos::list).post(api::slos::create))
         .route("/slos/search", get(api::slos::search))
         .route("/slos/can_delete", get(api::slos::can_delete))
@@ -293,14 +311,62 @@ fn public_api(st: AppState) -> Router<AppState> {
             "/api/v1/synthetics/tests",
             get(synthetics::list).post(synthetics::create),
         )
-        .route("/api/v1/synthetics/tests/api", post(synthetics::create))
+        .route("/api/v1/synthetics/tests/api", post(synthetics::create_api))
         .route(
-            "/api/v1/synthetics/tests/api/{id}",
-            get(synthetics::get).put(synthetics::update),
+            "/api/v1/synthetics/tests/browser",
+            post(synthetics::create_browser),
+        )
+        .route(
+            "/api/v1/synthetics/tests/{typ}/{id}",
+            get(synthetics::get_typed).put(synthetics::update_typed),
         )
         .route(
             "/api/v1/synthetics/tests/{id}",
             get(synthetics::get).delete(synthetics::delete),
+        )
+        .route(
+            "/api/v1/synthetics/tests/delete",
+            post(synthetics::delete_many),
+        )
+        .route("/api/v1/synthetics/tests/search", get(synthetics::search))
+        .route(
+            "/api/v1/synthetics/tests/{id}/status",
+            put(synthetics::set_status),
+        )
+        .route(
+            "/api/v1/synthetics/tests/{id}/results",
+            get(synthetics::results),
+        )
+        .route(
+            "/api/v1/synthetics/tests/trigger/ci",
+            post(synthetics::ci::trigger),
+        )
+        .route(
+            "/api/v1/synthetics/tests/trigger",
+            post(synthetics::ci::trigger),
+        )
+        .route(
+            "/api/v1/synthetics/ci/batch/{id}",
+            get(synthetics::ci::batch),
+        )
+        .route(
+            "/api/v2/synthetics/tests/poll_results",
+            get(synthetics::ci::poll_results),
+        )
+        .route("/api/v1/synthetics/settings", get(synthetics::ci::settings))
+        .route(
+            "/api/v1/synthetics/locations",
+            get(synthetics::ci::locations),
+        )
+        .route(
+            "/api/v1/synthetics/variables",
+            get(synthetics::variables::list).post(synthetics::variables::create),
+        )
+        .route(
+            "/api/v1/synthetics/variables/{id}",
+            get(synthetics::variables::get)
+                .put(synthetics::variables::update)
+                .delete(synthetics::variables::delete),
         )
         .route("/api/v1/slo", get(api::slos::list).post(api::slos::create))
         .route("/api/v1/slo/search", get(api::slos::search))

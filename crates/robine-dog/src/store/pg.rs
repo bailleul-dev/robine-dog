@@ -85,6 +85,26 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE monitor_groups ADD COLUMN first_seen TIMESTAMPTZ NOT NULL DEFAULT now();
     "#,
+    // Synthetic test results, and the screenshots of browser tests' steps.
+    r#"
+    CREATE TABLE synthetics_results (
+        result_id TEXT PRIMARY KEY,
+        public_id TEXT NOT NULL,
+        ts BIGINT NOT NULL,
+        passed BOOLEAN NOT NULL,
+        batch_id TEXT,
+        body JSONB NOT NULL
+    );
+    CREATE INDEX synthetics_results_by_test ON synthetics_results (public_id, ts DESC);
+    CREATE INDEX synthetics_results_by_batch ON synthetics_results (batch_id)
+        WHERE batch_id IS NOT NULL;
+    CREATE TABLE synthetics_screenshots (
+        result_id TEXT NOT NULL REFERENCES synthetics_results ON DELETE CASCADE,
+        step INT NOT NULL,
+        image BYTEA NOT NULL,
+        PRIMARY KEY (result_id, step)
+    );
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.
@@ -123,6 +143,18 @@ fn ms(t: Option<std::time::SystemTime>) -> Option<i64> {
 
 fn time(ms: Option<i64>) -> Option<std::time::SystemTime> {
     ms.map(|m| std::time::UNIX_EPOCH + std::time::Duration::from_millis(m.max(0) as u64))
+}
+
+/// A synthetic test's run.
+#[derive(Debug, Clone)]
+pub struct SyntheticResult {
+    pub result_id: String,
+    pub public_id: String,
+    /// Epoch milliseconds.
+    pub ts: i64,
+    pub passed: bool,
+    pub batch_id: Option<String>,
+    pub body: serde_json::Value,
 }
 
 /// A stored configuration document.
@@ -550,5 +582,146 @@ impl Pg {
             )
             .await?;
         Ok(n > 0)
+    }
+
+    // --- synthetic results ---------------------------------------------------------
+
+    /// A run's result, and its screenshots by step.
+    pub async fn put_synthetic_result(
+        &self,
+        r: &SyntheticResult,
+        screenshots: &[(i32, Vec<u8>)],
+    ) -> Result<()> {
+        let mut c = self.pool.get().await?;
+        let tx = c.transaction().await?;
+        tx.execute(
+            "INSERT INTO synthetics_results (result_id, public_id, ts, passed, batch_id, body)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (result_id) DO UPDATE SET ts = $3, passed = $4, body = $6",
+            &[
+                &r.result_id,
+                &r.public_id,
+                &r.ts,
+                &r.passed,
+                &r.batch_id,
+                &r.body,
+            ],
+        )
+        .await?;
+        for (step, image) in screenshots {
+            tx.execute(
+                "INSERT INTO synthetics_screenshots (result_id, step, image) VALUES ($1, $2, $3)
+                 ON CONFLICT (result_id, step) DO UPDATE SET image = $3",
+                &[&r.result_id, step, image],
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    fn synthetic_row(r: &tokio_postgres::Row) -> SyntheticResult {
+        SyntheticResult {
+            result_id: r.get(0),
+            public_id: r.get(1),
+            ts: r.get(2),
+            passed: r.get(3),
+            batch_id: r.get(4),
+            body: r.get(5),
+        }
+    }
+
+    /// A test's results between two times, latest first.
+    pub async fn synthetic_results(
+        &self,
+        public_id: &str,
+        from_ms: i64,
+        to_ms: i64,
+        limit: i64,
+    ) -> Result<Vec<SyntheticResult>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT result_id, public_id, ts, passed, batch_id, body FROM synthetics_results
+                 WHERE public_id = $1 AND ts >= $2 AND ts <= $3 ORDER BY ts DESC LIMIT $4",
+                &[&public_id, &from_ms, &to_ms, &limit],
+            )
+            .await?;
+        Ok(rows.iter().map(Self::synthetic_row).collect())
+    }
+
+    pub async fn synthetic_results_by_id(&self, ids: &[String]) -> Result<Vec<SyntheticResult>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT result_id, public_id, ts, passed, batch_id, body FROM synthetics_results
+                 WHERE result_id = ANY($1)",
+                &[&ids],
+            )
+            .await?;
+        Ok(rows.iter().map(Self::synthetic_row).collect())
+    }
+
+    /// Each test's latest result.
+    pub async fn latest_synthetic_results(&self) -> Result<Vec<SyntheticResult>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT DISTINCT ON (public_id) result_id, public_id, ts, passed, batch_id, body
+                 FROM synthetics_results WHERE batch_id IS NULL ORDER BY public_id, ts DESC",
+                &[],
+            )
+            .await?;
+        Ok(rows.iter().map(Self::synthetic_row).collect())
+    }
+
+    pub async fn synthetic_screenshot(
+        &self,
+        result_id: &str,
+        step: i32,
+    ) -> Result<Option<Vec<u8>>> {
+        let c = self.pool.get().await?;
+        Ok(c.query_opt(
+            "SELECT image FROM synthetics_screenshots WHERE result_id = $1 AND step = $2",
+            &[&result_id, &step],
+        )
+        .await?
+        .map(|r| r.get(0)))
+    }
+
+    pub async fn delete_synthetic_results(&self, public_id: &str) -> Result<()> {
+        let c = self.pool.get().await?;
+        c.execute(
+            "DELETE FROM synthetics_results WHERE public_id = $1",
+            &[&public_id],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Drops the results older than `before_ms`, and the screenshots of all
+    /// but each test's latest `keep_screenshots` runs.
+    pub async fn purge_synthetic_results(
+        &self,
+        before_ms: i64,
+        keep_screenshots: i64,
+    ) -> Result<u64> {
+        let c = self.pool.get().await?;
+        let n = c
+            .execute(
+                "DELETE FROM synthetics_results WHERE ts < $1",
+                &[&before_ms],
+            )
+            .await?;
+        c.execute(
+            "DELETE FROM synthetics_screenshots WHERE result_id IN (
+                SELECT result_id FROM (
+                    SELECT result_id, row_number() OVER (PARTITION BY public_id ORDER BY ts DESC) AS n
+                    FROM synthetics_results) ranked
+                WHERE n > $1)",
+            &[&keep_screenshots],
+        )
+        .await?;
+        Ok(n)
     }
 }
