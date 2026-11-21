@@ -923,6 +923,32 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type LiveProcess = {
+  host: string;
+  pid: number;
+  ppid: number;
+  user: string;
+  command: string;
+  name: string;
+  cpu_pct: number;
+  rss: number;
+  vms: number;
+  threads: number;
+  fds: number;
+  started: number;
+  container_id: string;
+};
+export type DbQuery = {
+  signature: string;
+  query: string;
+  dbms: string;
+  db: string | null;
+  calls: number;
+  total_time_ms: number;
+  avg_ms: number;
+  rows: number;
+  hosts: number;
+};
 export type CaseItem = {
   id: string;
   attributes: {
@@ -2073,6 +2099,57 @@ export const api = {
       : post<unknown>(`/on-call/${what}`, body),
   onCallDelete: (what: "schedules" | "escalation-policies", id: string) =>
     del<unknown>(`/on-call/${what}/${id}`),
+  processes: (host?: string, query?: string) =>
+    call<{
+      hosts: { host: string; updated: number }[];
+      total: number;
+      processes: LiveProcess[];
+    }>(`/processes?${profileQs({ host, query })}`),
+  dataStreams: (from: number, to: number) =>
+    call<{
+      edges: {
+        service: string;
+        direction: string | null;
+        topic: string | null;
+        type: string | null;
+        group: string | null;
+        throughput: number;
+        edge_p50: number | null;
+        edge_p99: number | null;
+        pathway_p50: number | null;
+        pathway_p99: number | null;
+      }[];
+      lag: { consumer_group: string; topic: string; lag: number }[];
+    }>(`/data-streams?from=${from}&to=${to}`),
+  databases: (from: number, to: number, host?: string) =>
+    call<{
+      queries: DbQuery[];
+      hosts: {
+        host: string;
+        dbms: string;
+        calls: number;
+        total_time_ms: number;
+      }[];
+      activity: Record<string, unknown>[];
+    }>(`/databases?${profileQs({ from, to, host })}`),
+  databaseQuery: (sig: string, from: number, to: number) =>
+    call<{
+      interval_ms: number;
+      series: {
+        t: number;
+        calls: number;
+        total_time_ms: number;
+        rows: number;
+      }[];
+      samples: {
+        ts: number;
+        host: string;
+        db: string | null;
+        statement: string | null;
+        duration_ns: number | null;
+        plan: unknown;
+      }[];
+    }>(`/databases/queries/${encodeURIComponent(sig)}?from=${from}&to=${to}`),
   llmTraces: (f: LlmFilter) =>
     call<LlmTraceRow[]>(`/llm-obs/traces?${profileQs(f)}`),
   llmTrace: (id: string) =>

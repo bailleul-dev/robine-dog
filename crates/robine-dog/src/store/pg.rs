@@ -274,6 +274,57 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX audit_events_by_time ON audit_events (ts);
     "#,
+    // Data Streams Monitoring and Database Monitoring.
+    r#"
+    CREATE TABLE dsm_points (
+        ts BIGINT NOT NULL,
+        env TEXT,
+        service TEXT NOT NULL,
+        edge_tags TEXT[] NOT NULL,
+        hash TEXT NOT NULL,
+        parent_hash TEXT NOT NULL,
+        count DOUBLE PRECISION NOT NULL,
+        pathway_p50 DOUBLE PRECISION,
+        pathway_p99 DOUBLE PRECISION,
+        edge_p50 DOUBLE PRECISION,
+        edge_p99 DOUBLE PRECISION
+    );
+    CREATE INDEX dsm_points_by_time ON dsm_points (ts);
+    CREATE TABLE dsm_backlogs (
+        ts BIGINT NOT NULL,
+        service TEXT NOT NULL,
+        tags TEXT[] NOT NULL,
+        value BIGINT NOT NULL
+    );
+    CREATE INDEX dsm_backlogs_by_time ON dsm_backlogs (ts);
+    CREATE TABLE dbm_query_metrics (
+        ts BIGINT NOT NULL,
+        host TEXT NOT NULL,
+        dbms TEXT NOT NULL,
+        db TEXT,
+        db_user TEXT,
+        query_signature TEXT NOT NULL,
+        query TEXT NOT NULL,
+        calls DOUBLE PRECISION NOT NULL,
+        total_time_ms DOUBLE PRECISION NOT NULL,
+        rows DOUBLE PRECISION NOT NULL
+    );
+    CREATE INDEX dbm_query_metrics_by_time ON dbm_query_metrics (ts);
+    CREATE INDEX dbm_query_metrics_by_query ON dbm_query_metrics (query_signature, ts);
+    CREATE TABLE dbm_samples (
+        ts BIGINT NOT NULL,
+        host TEXT NOT NULL,
+        dbms TEXT NOT NULL,
+        db TEXT,
+        query_signature TEXT,
+        statement TEXT,
+        duration_ns BIGINT,
+        plan JSONB,
+        body JSONB NOT NULL
+    );
+    CREATE INDEX dbm_samples_by_query ON dbm_samples (query_signature, ts);
+    CREATE INDEX dbm_samples_by_time ON dbm_samples (ts);
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.

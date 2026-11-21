@@ -142,12 +142,12 @@ const SECTIONS: Item[][] = [
       label: "Infrastructure",
       icon: <InfraIcon />,
       to: "/infrastructure",
-      match: ["/infrastructure", "/containers", "/orchestration"],
+      match: ["/infrastructure", "/containers", "/orchestration", "/processes"],
       links: [
         { label: "Hosts", to: "/infrastructure", hint: "Every host an Agent reports from" },
         { label: "Containers", to: "/containers", hint: "CPU, memory and restarts per container" },
         { label: "Kubernetes", to: "/orchestration/overview/pod", hint: "Pods, deployments, nodes, namespaces" },
-        { label: "Processes" },
+        { label: "Processes", to: "/processes", hint: "Live processes of every host" },
         { label: "Serverless" },
         { label: "Cloud Network" },
         { label: "Network Devices" },
@@ -169,7 +169,7 @@ const SECTIONS: Item[][] = [
       label: "APM",
       icon: <ApmIcon />,
       to: "/apm/services",
-      match: ["/apm", "/teams", "/profiling"],
+      match: ["/apm", "/teams", "/profiling", "/databases", "/data-streams"],
       links: [
         {
           label: "Software Catalog",
@@ -198,8 +198,8 @@ const SECTIONS: Item[][] = [
           hint: "Errors grouped into issues",
         },
         { label: "Profiles", to: "/profiling", hint: "Continuous Profiler: where code spends CPU, time and memory" },
-        { label: "Database Monitoring" },
-        { label: "Data Streams Monitoring" },
+        { label: "Database Monitoring", to: "/databases", hint: "Top queries, plans, active sessions" },
+        { label: "Data Streams Monitoring", to: "/data-streams", hint: "Queues: throughput, latency, consumer lag" },
         { label: "Data Jobs Monitoring" },
       ],
       groups: [

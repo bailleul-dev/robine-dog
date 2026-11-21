@@ -28,6 +28,7 @@ import { CiPipelinesPage, CiTestsPage } from "./pages/CiVisibility";
 import { LlmOverview, LlmTraces } from "./pages/LlmObs";
 import { AuditTrail, DetectionRules, SecuritySignals } from "./pages/Security";
 import { Cases, OnCall } from "./pages/CasesOnCall";
+import { DataStreams, Databases, Processes } from "./pages/InfraAdvanced";
 import { Profiler } from "./pages/Profiler";
 import {
   IngestionControl,
@@ -146,6 +147,9 @@ function App() {
         <Route path="/audit" element={<AuditTrail />} />
         <Route path="/cases" element={<Cases />} />
         <Route path="/on-call" element={<OnCall />} />
+        <Route path="/processes" element={<Processes />} />
+        <Route path="/data-streams" element={<DataStreams />} />
+        <Route path="/databases" element={<Databases />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />

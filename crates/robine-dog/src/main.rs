@@ -15,6 +15,8 @@ mod catalog;
 mod checks;
 mod civis;
 mod config;
+mod dbm;
+mod dsm;
 mod events;
 mod hosts;
 mod intake;
@@ -25,6 +27,7 @@ mod metrics;
 mod monitors;
 mod oncall;
 mod pipelines;
+mod processes;
 mod profiling;
 mod query;
 mod rum;
@@ -464,6 +467,10 @@ pub(crate) fn ui_routes() -> Router<AppState> {
     let r = r
         .route("/apm/ingestion", get(catalog::retention::ingestion))
         .route("/ci/tests", get(civis::tests))
+        .route("/processes", get(processes::list))
+        .route("/data-streams", get(dsm::overview))
+        .route("/databases", get(dbm::overview))
+        .route("/databases/queries/{signature}", get(dbm::query))
         .route(
             "/security/rules",
             get(security::list_rules).post(security::create_rule),
@@ -847,24 +854,6 @@ fn app(st: AppState) -> Router {
             post(rum::proxy).options(intake::sentry::preflight),
         )
         .route("/api/v1/check_run", post(checks::intake))
-        .route("/api/v2/profile", post(profiling::intake))
-        .route("/api/v2/llmobs", post(llmobs::spans_intake))
-        .route("/api/v2/citestcycle", post(civis::citestcycle))
-        .route("/api/v2/cireport", post(civis::junit))
-        .route("/api/v2/ci/pipeline", post(civis::pipeline_api))
-        .route("/api/v2/webhook", post(civis::webhook))
-        .route(
-            "/api/intake/llm-obs/v1/trace/spans",
-            post(llmobs::spans_intake),
-        )
-        .route(
-            "/api/intake/llm-obs/v1/eval-metric",
-            post(llmobs::evals_intake),
-        )
-        .route(
-            "/api/intake/llm-obs/v2/eval-metric",
-            post(llmobs::evals_intake),
-        )
         .route("/profiling/v1/input", post(profiling::intake))
         .route("/api/v1/series", post(intake::series::v1))
         .route("/api/v2/series", post(intake::series::v2))
@@ -887,8 +876,39 @@ fn app(st: AppState) -> Router {
         .route("/intake/", post(intake::agent::metadata))
         .route("/api/{*rest}", any(intake::agent::acknowledge))
         .layer(DefaultBodyLimit::max(64 * 1024 * 1024));
+    // Intakes added for Datadog parity: a valid API key (header, or
+    // `?dd-api-key=` for webhooks), like the Agent's.
+    let keyed = Router::new()
+        .route("/api/v2/profile", post(profiling::intake))
+        .route("/api/v2/llmobs", post(llmobs::spans_intake))
+        .route("/api/v2/citestcycle", post(civis::citestcycle))
+        .route("/api/v2/cireport", post(civis::junit))
+        .route("/api/v2/ci/pipeline", post(civis::pipeline_api))
+        .route("/api/v2/webhook", post(civis::webhook))
+        .route(
+            "/api/intake/llm-obs/v1/trace/spans",
+            post(llmobs::spans_intake),
+        )
+        .route(
+            "/api/intake/llm-obs/v1/eval-metric",
+            post(llmobs::evals_intake),
+        )
+        .route(
+            "/api/intake/llm-obs/v2/eval-metric",
+            post(llmobs::evals_intake),
+        )
+        .route("/api/v1/collector", post(processes::intake))
+        .route("/api/v0.1/pipeline_stats", post(dsm::intake))
+        .route("/api/v2/databasequery", post(dbm::samples_intake))
+        .route("/api/v2/dbmmetrics", post(dbm::metrics_intake))
+        .layer(axum::middleware::from_fn_with_state(
+            st.clone(),
+            intake::logs::require_api_key,
+        ))
+        .layer(DefaultBodyLimit::max(64 * 1024 * 1024));
     Router::new()
         .merge(public_api(st.clone()))
+        .merge(keyed)
         .merge(intake)
         .nest("/api/ui", ui_api(st.clone()))
         .route("/auth/login", get(auth::login))

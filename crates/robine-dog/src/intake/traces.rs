@@ -44,6 +44,10 @@ pub fn router() -> Router<AppState> {
             "/profiling/v1/input",
             axum::routing::post(crate::profiling::intake),
         )
+        .route(
+            "/v0.1/pipeline_stats",
+            axum::routing::post(crate::dsm::intake),
+        )
         .route("/telemetry/proxy/{*rest}", any(discard))
         .route("/debugger/{*rest}", any(discard))
         .route("/evp_proxy/{*rest}", any(crate::llmobs::evp_proxy))
@@ -55,7 +59,7 @@ async fn info() -> Json<Value> {
         "version": "7.60.0",
         "git_commit": "robine-dog",
         "endpoints": ["/v0.3/traces", "/v0.4/traces", "/v0.5/traces", "/telemetry/proxy/", "/info",
-            "/profiling/v1/input", "/evp_proxy/v2/", "/evp_proxy/v4/"],
+            "/profiling/v1/input", "/evp_proxy/v2/", "/evp_proxy/v4/", "/v0.1/pipeline_stats"],
         "client_drop_p0s": false,
         "span_meta_structs": false,
         "long_running_spans": false,
