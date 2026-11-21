@@ -196,6 +196,51 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX llm_evals_by_span ON llm_evals (span_id);
     CREATE INDEX llm_evals_by_time ON llm_evals (ts);
     "#,
+    // CI Visibility: test events (session, module, suite, test) and
+    // pipeline executions (pipeline, stage, job).
+    r#"
+    CREATE TABLE ci_tests (
+        id BIGSERIAL PRIMARY KEY,
+        level TEXT NOT NULL,
+        session_id TEXT,
+        service TEXT NOT NULL,
+        env TEXT,
+        name TEXT NOT NULL,
+        suite TEXT,
+        module TEXT,
+        status TEXT NOT NULL,
+        framework TEXT,
+        start_ns BIGINT NOT NULL,
+        duration BIGINT NOT NULL,
+        error_message TEXT,
+        branch TEXT,
+        commit_sha TEXT,
+        repository TEXT,
+        meta JSONB NOT NULL
+    );
+    CREATE INDEX ci_tests_by_time ON ci_tests (start_ns);
+    CREATE INDEX ci_tests_by_test ON ci_tests (service, suite, name);
+    CREATE TABLE ci_pipelines (
+        id BIGSERIAL PRIMARY KEY,
+        provider TEXT NOT NULL,
+        level TEXT NOT NULL,
+        unique_id TEXT NOT NULL,
+        pipeline_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        pipeline_name TEXT NOT NULL,
+        stage TEXT,
+        status TEXT NOT NULL,
+        start_ms BIGINT NOT NULL,
+        end_ms BIGINT NOT NULL,
+        branch TEXT,
+        commit_sha TEXT,
+        repository TEXT,
+        url TEXT,
+        UNIQUE (provider, level, unique_id)
+    );
+    CREATE INDEX ci_pipelines_by_time ON ci_pipelines (end_ms);
+    CREATE INDEX ci_pipelines_by_pipeline ON ci_pipelines (provider, pipeline_id);
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.

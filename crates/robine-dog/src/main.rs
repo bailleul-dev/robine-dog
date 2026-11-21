@@ -11,6 +11,7 @@ mod api;
 mod auth;
 mod catalog;
 mod checks;
+mod civis;
 mod config;
 mod events;
 mod hosts;
@@ -456,6 +457,9 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         );
     let r = r
         .route("/apm/ingestion", get(catalog::retention::ingestion))
+        .route("/ci/tests", get(civis::tests))
+        .route("/ci/pipelines", get(civis::pipelines))
+        .route("/ci/pipelines/{provider}/{id}/jobs", get(civis::jobs))
         .route("/llm-obs/traces", get(llmobs::traces))
         .route("/llm-obs/traces/{id}", get(llmobs::trace))
         .route("/llm-obs/overview", get(llmobs::overview))
@@ -764,6 +768,10 @@ fn app(st: AppState) -> Router {
         .route("/api/v1/check_run", post(checks::intake))
         .route("/api/v2/profile", post(profiling::intake))
         .route("/api/v2/llmobs", post(llmobs::spans_intake))
+        .route("/api/v2/citestcycle", post(civis::citestcycle))
+        .route("/api/v2/cireport", post(civis::junit))
+        .route("/api/v2/ci/pipeline", post(civis::pipeline_api))
+        .route("/api/v2/webhook", post(civis::webhook))
         .route(
             "/api/intake/llm-obs/v1/trace/spans",
             post(llmobs::spans_intake),
@@ -910,6 +918,7 @@ async fn main() -> anyhow::Result<()> {
     rum::replay::spawn_purge(st.clone());
     profiling::spawn_purge(st.clone());
     llmobs::spawn_purge(st.clone());
+    civis::spawn_purge(st.clone());
     {
         // RUM-based metrics counted at a session's or view's end.
         let st = st.clone();

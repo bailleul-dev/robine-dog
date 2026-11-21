@@ -24,6 +24,7 @@ import { DashboardList, DashboardPage } from "./pages/Dashboards";
 import { ErrorTracking, IssuePage } from "./pages/ErrorTracking";
 import { ManageMonitors, MonitorEditor, MonitorPage, TriggeredMonitors, Webhooks } from "./pages/Monitors";
 import { GenerateMetrics } from "./pages/GenerateMetrics";
+import { CiPipelinesPage, CiTestsPage } from "./pages/CiVisibility";
 import { LlmOverview, LlmTraces } from "./pages/LlmObs";
 import { Profiler } from "./pages/Profiler";
 import {
@@ -136,6 +137,8 @@ function App() {
         <Route path="/profiling" element={<Profiler />} />
         <Route path="/llm/overview" element={<LlmOverview />} />
         <Route path="/llm/traces" element={<LlmTraces />} />
+        <Route path="/ci/pipelines" element={<CiPipelinesPage />} />
+        <Route path="/ci/tests" element={<CiTestsPage />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />

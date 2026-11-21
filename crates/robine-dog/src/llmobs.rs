@@ -521,6 +521,8 @@ pub async fn evp_proxy(
         reply(take_spans(&st, &headers, &body).await)
     } else if path.contains("eval-metric") {
         reply(take_evals(&st, &headers, &body).await)
+    } else if path.ends_with("api/v2/citestcycle") {
+        reply(crate::civis::take_citestcycle(&st, &headers, &body).await)
     } else {
         StatusCode::ACCEPTED.into_response()
     }

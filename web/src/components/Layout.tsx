@@ -233,10 +233,10 @@ const SECTIONS: Item[][] = [
       id: "software-delivery",
       label: "Software Delivery",
       icon: <DeliveryIcon />,
-      match: [],
+      match: ["/ci"],
       links: [
-        { label: "CI Visibility", hint: "Pipelines and their failures" },
-        { label: "Test Optimization" },
+        { label: "CI Visibility", to: "/ci/pipelines", hint: "Pipelines and their failures" },
+        { label: "Test Optimization", to: "/ci/tests", hint: "Test runs, flaky and slow tests" },
         { label: "Continuous Testing" },
         { label: "CD Visibility" },
         { label: "DORA Metrics" },

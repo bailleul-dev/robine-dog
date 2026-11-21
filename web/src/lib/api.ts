@@ -923,6 +923,78 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type CiFilter = {
+  from: number;
+  to: number;
+  service?: string;
+  status?: string;
+  branch?: string;
+  query?: string;
+};
+export type CiTests = {
+  runs: {
+    id: number;
+    service: string;
+    name: string;
+    suite: string | null;
+    status: string;
+    duration: number;
+    start: number;
+    error: string | null;
+    branch: string | null;
+    commit: string | null;
+    framework: string | null;
+  }[];
+  services: {
+    service: string;
+    tests: number;
+    failed: number;
+    skipped: number;
+    sessions: number;
+    avg: number;
+  }[];
+  flaky: {
+    service: string;
+    suite: string | null;
+    name: string;
+    commits: number;
+    last: number;
+    error: string | null;
+  }[];
+  slowest: {
+    service: string;
+    suite: string | null;
+    name: string;
+    runs: number;
+    avg: number;
+    max: number;
+  }[];
+};
+export type CiPipelines = {
+  executions: {
+    id: number;
+    provider: string;
+    pipeline_id: string;
+    name: string;
+    status: string;
+    start: number;
+    end: number;
+    branch: string | null;
+    commit: string | null;
+    repository: string | null;
+    url: string | null;
+  }[];
+  pipelines: {
+    name: string;
+    provider: string;
+    executions: number;
+    successes: number;
+    p50: number;
+    p95: number;
+    last_status: string;
+    repository: string | null;
+  }[];
+};
 export type LlmSpan = {
   trace_id: string;
   span_id: string;
@@ -1827,6 +1899,23 @@ export const api = {
     put<unknown>("/apm/config/retention-filters-execution-order", {
       data: ids.map((id) => ({ id, type: "apm_retention_filter" })),
     }),
+  ciTests: (f: CiFilter) => call<CiTests>(`/ci/tests?${profileQs(f)}`),
+  ciPipelines: (f: CiFilter) =>
+    call<CiPipelines>(`/ci/pipelines?${profileQs(f)}`),
+  ciJobs: (provider: string, id: string) =>
+    call<
+      {
+        level: string;
+        name: string;
+        stage: string | null;
+        status: string;
+        start: number;
+        end: number;
+        url: string | null;
+      }[]
+    >(
+      `/ci/pipelines/${encodeURIComponent(provider)}/${encodeURIComponent(id)}/jobs`,
+    ),
   llmTraces: (f: LlmFilter) =>
     call<LlmTraceRow[]>(`/llm-obs/traces?${profileQs(f)}`),
   llmTrace: (id: string) =>

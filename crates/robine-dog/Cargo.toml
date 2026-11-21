@@ -23,6 +23,7 @@ rand = "0.9"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
 rmpv = "1"
+roxmltree = "0.20"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 serde = { version = "1", features = ["derive"] }
 serde_urlencoded = "0.7"
