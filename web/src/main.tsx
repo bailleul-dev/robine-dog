@@ -27,6 +27,7 @@ import { GenerateMetrics } from "./pages/GenerateMetrics";
 import { CiPipelinesPage, CiTestsPage } from "./pages/CiVisibility";
 import { LlmOverview, LlmTraces } from "./pages/LlmObs";
 import { AuditTrail, DetectionRules, SecuritySignals } from "./pages/Security";
+import { Cases, OnCall } from "./pages/CasesOnCall";
 import { Profiler } from "./pages/Profiler";
 import {
   IngestionControl,
@@ -143,6 +144,8 @@ function App() {
         <Route path="/security/signals" element={<SecuritySignals />} />
         <Route path="/security/rules" element={<DetectionRules />} />
         <Route path="/audit" element={<AuditTrail />} />
+        <Route path="/cases" element={<Cases />} />
+        <Route path="/on-call" element={<OnCall />} />
         <Route path="/apm/traces" element={<TraceExplorer />} />
         <Route path="/apm/map" element={<ServiceMap />} />
         <Route path="/synthetics/tests" element={<Synthetics />} />

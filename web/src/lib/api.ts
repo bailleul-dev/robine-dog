@@ -923,6 +923,50 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type CaseItem = {
+  id: string;
+  attributes: {
+    key: string;
+    title: string;
+    description: string;
+    status: string;
+    priority: string;
+    project: string;
+    assignee: string | null;
+    origin: { type?: string; id?: string; url?: string } | null;
+    created_at: number;
+    created_by: string;
+    modified_at: number;
+    timeline: { ts: number; author: string; type: string; text: string }[];
+  };
+};
+export type OnCallPage = {
+  id: string;
+  team: string;
+  title: string;
+  message: string;
+  source: string;
+  status: string;
+  step: number;
+  created_at: number;
+  acked_by?: string;
+  timeline: { ts: number; text: string }[];
+};
+export type OnCallSchedule = {
+  id: string;
+  name: string;
+  members: string[];
+  length_hours: number;
+  start: number;
+  on_call: string | null;
+};
+export type EscalationPolicy = {
+  id: string;
+  name: string;
+  team: string;
+  repeat?: number;
+  steps: { targets: string[]; delay_minutes: number }[];
+};
 export type SecuritySignal = {
   id: string;
   attributes: {
@@ -2001,6 +2045,34 @@ export const api = {
     call<{ data: AuditEvent[] }>(`/audit/events?${profileQs(f)}`).then(
       (r) => r.data,
     ),
+  cases: (status?: string, query?: string) =>
+    call<{ data: CaseItem[] }>(`/cases?${profileQs({ status, query })}`).then(
+      (r) => r.data,
+    ),
+  createCase: (attributes: Record<string, unknown>) =>
+    post<{ data: CaseItem }>("/cases", {
+      data: { type: "case", attributes },
+    }).then((r) => r.data),
+  caseAction: (id: string, what: string, attributes: Record<string, unknown>) =>
+    post<{ data: CaseItem }>(`/cases/${id}/${what}`, { data: { attributes } }),
+  onCallPages: () =>
+    call<{ data: OnCallPage[] }>("/on-call/pages").then((r) => r.data),
+  pageTeam: (team: string, title: string, message: string) =>
+    post<unknown>("/on-call/pages", { team, title, message }),
+  pageAction: (id: string, action: "acknowledge" | "resolve") =>
+    post<unknown>(`/on-call/pages/${id}/${action}`, {}),
+  onCallList: <T>(what: "schedules" | "escalation-policies") =>
+    call<{ data: T[] }>(`/on-call/${what}`).then((r) => r.data),
+  onCallSave: (
+    what: "schedules" | "escalation-policies",
+    id: string | null,
+    body: unknown,
+  ) =>
+    id
+      ? put<unknown>(`/on-call/${what}/${id}`, body)
+      : post<unknown>(`/on-call/${what}`, body),
+  onCallDelete: (what: "schedules" | "escalation-policies", id: string) =>
+    del<unknown>(`/on-call/${what}/${id}`),
   llmTraces: (f: LlmFilter) =>
     call<LlmTraceRow[]>(`/llm-obs/traces?${profileQs(f)}`),
   llmTrace: (id: string) =>

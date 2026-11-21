@@ -10,6 +10,7 @@
 mod api;
 mod audit;
 mod auth;
+mod cases;
 mod catalog;
 mod checks;
 mod civis;
@@ -22,6 +23,7 @@ mod logconfig;
 mod mcp;
 mod metrics;
 mod monitors;
+mod oncall;
 mod pipelines;
 mod profiling;
 mod query;
@@ -478,6 +480,20 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             axum::routing::patch(security::triage),
         )
         .route("/audit/events", get(audit::events))
+        .route("/cases", get(cases::list).post(cases::create))
+        .route("/cases/{id}", get(cases::get))
+        .route("/cases/{id}/{what}", post(cases::action))
+        .route(
+            "/on-call/pages",
+            get(oncall::pages).post(oncall::create_page),
+        )
+        .route("/on-call/pages/{id}/{action}", post(oncall::page_action))
+        .route("/on-call/teams/{team}/on-call", get(oncall::team_on_call))
+        .route("/on-call/{what}", get(oncall::list).post(oncall::create))
+        .route(
+            "/on-call/{what}/{id}",
+            axum::routing::put(oncall::update).delete(oncall::delete),
+        )
         .route("/ci/pipelines", get(civis::pipelines))
         .route("/ci/pipelines/{provider}/{id}/jobs", get(civis::jobs))
         .route("/llm-obs/traces", get(llmobs::traces))
@@ -772,6 +788,29 @@ fn public_api(st: AppState) -> Router<AppState> {
             axum::routing::patch(security::triage),
         )
         .route("/api/v2/audit/events", get(audit::events))
+        .route("/api/v2/cases", get(cases::list).post(cases::create))
+        .route("/api/v2/cases/{id}", get(cases::get))
+        .route("/api/v2/cases/{id}/{what}", post(cases::action))
+        .route(
+            "/api/v2/on-call/pages",
+            get(oncall::pages).post(oncall::create_page),
+        )
+        .route(
+            "/api/v2/on-call/pages/{id}/{action}",
+            post(oncall::page_action),
+        )
+        .route(
+            "/api/v2/on-call/teams/{team}/on-call",
+            get(oncall::team_on_call),
+        )
+        .route(
+            "/api/v2/on-call/{what}",
+            get(oncall::list).post(oncall::create),
+        )
+        .route(
+            "/api/v2/on-call/{what}/{id}",
+            axum::routing::put(oncall::update).delete(oncall::delete),
+        )
         .route(
             "/api/v1/logs/config/pipeline-order",
             get(api::pipelines::order).put(api::pipelines::set_order),
@@ -963,6 +1002,7 @@ async fn main() -> anyhow::Result<()> {
     civis::spawn_purge(st.clone());
     audit::spawn_purge(st.clone());
     security::spawn(st.clone());
+    oncall::spawn(st.clone());
     {
         // RUM-based metrics counted at a session's or view's end.
         let st = st.clone();

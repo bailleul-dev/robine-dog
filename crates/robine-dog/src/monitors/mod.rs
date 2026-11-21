@@ -1455,6 +1455,16 @@ pub async fn run_monitor(st: &AppState, def: &MonitorDef, now: i64) -> anyhow::R
             } else {
                 let mut sent = webhooks::notify(st, &ctx, &title, &message).await;
                 sent.extend(email::notify(st, &title, &message).await);
+                sent.extend(
+                    crate::oncall::notify(
+                        st,
+                        &format!("monitor:{id}/{}", s.group),
+                        &title,
+                        &message,
+                        status == OK,
+                    )
+                    .await,
+                );
                 sent
             };
             if !notified.is_empty() || status != OK {

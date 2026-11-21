@@ -124,6 +124,28 @@ function SignalPanel({
           >
             Reopen
           </button>
+          <button
+            className="btn"
+            onClick={async () => {
+              const c = await api.createCase({
+                title: `${a.title}: ${a.group}`,
+                description: a.message,
+                priority:
+                  a.severity === "critical" || a.severity === "high"
+                    ? "P2"
+                    : "P3",
+                project: "SEC",
+                origin: {
+                  type: "security_signal",
+                  id: s.id,
+                  url: `/security/signals?signal=${s.id}`,
+                },
+              });
+              window.location.href = `/cases?case=${c.id}`;
+            }}
+          >
+            Create case
+          </button>
           <Link
             className="btn"
             to={`/logs?${new URLSearchParams({ query: logQuery, from_ts: String(a.first_seen - 600_000), to_ts: String(a.timestamp + 60_000) })}`}

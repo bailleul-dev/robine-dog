@@ -47,6 +47,12 @@ fn transport(st: &AppState) -> Option<&'static AsyncSmtpTransport<Tokio1Executor
 /// Sends `message` to each address it names; the handles notified.
 pub async fn notify(st: &AppState, title: &str, message: &str) -> Vec<String> {
     let to = addresses(message);
+    let body = format!("{message}\n\n--\n{}/monitors", st.cfg.base_url);
+    send(st, &to, title, &body).await
+}
+
+/// Sends a plain-text e-mail to each address; the handles reached.
+pub async fn send(st: &AppState, to: &[String], title: &str, body: &str) -> Vec<String> {
     if to.is_empty() {
         return Vec::new();
     }
@@ -64,9 +70,8 @@ pub async fn notify(st: &AppState, title: &str, message: &str) -> Vec<String> {
             return Vec::new();
         }
     };
-    let body = format!("{message}\n\n--\n{}/monitors", st.cfg.base_url);
     let mut sent = Vec::new();
-    for addr in to {
+    for addr in to.iter() {
         let Ok(rcpt) = addr.parse::<Mailbox>() else {
             continue;
         };
@@ -75,7 +80,7 @@ pub async fn notify(st: &AppState, title: &str, message: &str) -> Vec<String> {
             .to(rcpt)
             .subject(title)
             .header(ContentType::TEXT_PLAIN)
-            .body(body.clone());
+            .body(body.to_string());
         let result = match email {
             Ok(m) => smtp.send(m).await.map(|_| ()).map_err(|e| e.to_string()),
             Err(e) => Err(e.to_string()),
