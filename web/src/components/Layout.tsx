@@ -55,7 +55,11 @@ const SECTIONS: Item[][] = [
       to: "/watchdog",
       match: ["/watchdog"],
       links: [
-        { label: "Alerts", to: "/watchdog", hint: "Anomalies detected automatically" },
+        {
+          label: "Alerts",
+          to: "/watchdog",
+          hint: "Anomalies detected automatically",
+        },
         { label: "Insights" },
         { label: "Root Cause Analysis" },
         { label: "Impact Analysis" },
@@ -68,18 +72,45 @@ const SECTIONS: Item[][] = [
       to: "/slo/manage",
       match: ["/slo", "/event", "/cases", "/on-call"],
       links: [
-        { label: "SLOs", to: "/slo/manage", hint: "Service level objectives and error budgets" },
-        { label: "Incidents", to: "/incidents", hint: "Declare and manage incidents" },
-        { label: "On-Call", to: "/on-call", hint: "Schedules, escalation policies and pages" },
-        { label: "Case Management", to: "/cases", hint: "Cases opened from monitors, signals and issues" },
-        { label: "Event Management", to: "/event/explorer", hint: "Monitor alerts, Agent and API events" },
+        {
+          label: "SLOs",
+          to: "/slo/manage",
+          hint: "Service level objectives and error budgets",
+        },
+        {
+          label: "Incidents",
+          to: "/incidents",
+          hint: "Declare and manage incidents",
+        },
+        {
+          label: "On-Call",
+          to: "/on-call",
+          hint: "Schedules, escalation policies and pages",
+        },
+        {
+          label: "Case Management",
+          to: "/cases",
+          hint: "Cases opened from monitors, signals and issues",
+        },
+        {
+          label: "Event Management",
+          to: "/event/explorer",
+          hint: "Monitor alerts, Agent and API events",
+        },
         { label: "Workflow Automation" },
         { label: "App Builder" },
       ],
       groups: [
         {
           title: "Settings",
-          links: [{ label: "Incident Settings" }, { label: "Status Pages", to: "/status-pages", hint: "A public page of components and incidents" }],
+          links: [
+            { label: "Incident Settings" },
+            {
+              label: "Status Pages",
+              to: "/status-pages",
+              hint: "A public page of components and incidents",
+            },
+          ],
         },
       ],
     },
@@ -95,7 +126,11 @@ const SECTIONS: Item[][] = [
           to: "/dashboard/lists",
           hint: "Browse, create and import dashboards",
         },
-        { label: "Notebooks", to: "/notebook/list", hint: "Text and graphs, for investigations" },
+        {
+          label: "Notebooks",
+          to: "/notebook/list",
+          hint: "Text and graphs, for investigations",
+        },
         { label: "Reports" },
         { label: "Sheets" },
       ],
@@ -124,7 +159,11 @@ const SECTIONS: Item[][] = [
           hint: "What is alerting now",
         },
         { label: "New Monitor", to: "/monitors/create" },
-        { label: "Downtimes", to: "/monitors/downtimes", hint: "Scheduled silences" },
+        {
+          label: "Downtimes",
+          to: "/monitors/downtimes",
+          hint: "Scheduled silences",
+        },
         { label: "Monitor Quality" },
         { label: "Templates" },
       ],
@@ -144,10 +183,26 @@ const SECTIONS: Item[][] = [
       to: "/infrastructure",
       match: ["/infrastructure", "/containers", "/orchestration", "/processes"],
       links: [
-        { label: "Hosts", to: "/infrastructure", hint: "Every host an Agent reports from" },
-        { label: "Containers", to: "/containers", hint: "CPU, memory and restarts per container" },
-        { label: "Kubernetes", to: "/orchestration/overview/pod", hint: "Pods, deployments, nodes, namespaces" },
-        { label: "Processes", to: "/processes", hint: "Live processes of every host" },
+        {
+          label: "Hosts",
+          to: "/infrastructure",
+          hint: "Every host an Agent reports from",
+        },
+        {
+          label: "Containers",
+          to: "/containers",
+          hint: "CPU, memory and restarts per container",
+        },
+        {
+          label: "Kubernetes",
+          to: "/orchestration/overview/pod",
+          hint: "Pods, deployments, nodes, namespaces",
+        },
+        {
+          label: "Processes",
+          to: "/processes",
+          hint: "Live processes of every host",
+        },
         { label: "Serverless" },
         { label: "Cloud Network" },
         { label: "Network Devices" },
@@ -197,9 +252,21 @@ const SECTIONS: Item[][] = [
           to: "/error-tracking",
           hint: "Errors grouped into issues",
         },
-        { label: "Profiles", to: "/profiling", hint: "Continuous Profiler: where code spends CPU, time and memory" },
-        { label: "Database Monitoring", to: "/databases", hint: "Top queries, plans, active sessions" },
-        { label: "Data Streams Monitoring", to: "/data-streams", hint: "Queues: throughput, latency, consumer lag" },
+        {
+          label: "Profiles",
+          to: "/profiling",
+          hint: "Continuous Profiler: where code spends CPU, time and memory",
+        },
+        {
+          label: "Database Monitoring",
+          to: "/databases",
+          hint: "Top queries, plans, active sessions",
+        },
+        {
+          label: "Data Streams Monitoring",
+          to: "/data-streams",
+          hint: "Queues: throughput, latency, consumer lag",
+        },
         { label: "Data Jobs Monitoring" },
       ],
       groups: [
@@ -207,8 +274,16 @@ const SECTIONS: Item[][] = [
           title: "Settings",
           links: [
             { label: "Generate Metrics", to: "/apm/generate-metrics" },
-            { label: "Ingestion Control", to: "/apm/ingestion-control", hint: "Spans received per service, and sampling" },
-            { label: "Retention Filters", to: "/apm/retention-filters", hint: "Which traces are stored" },
+            {
+              label: "Ingestion Control",
+              to: "/apm/ingestion-control",
+              hint: "Spans received per service, and sampling",
+            },
+            {
+              label: "Retention Filters",
+              to: "/apm/retention-filters",
+              hint: "Which traces are stored",
+            },
             { label: "Dynamic Instrumentation" },
           ],
         },
@@ -221,23 +296,56 @@ const SECTIONS: Item[][] = [
       to: "/synthetics/tests",
       match: ["/synthetics", "/rum"],
       links: [
-        { label: "Synthetic Monitoring", to: "/synthetics/tests", hint: "API, multistep and browser tests, from CI too" },
-        { label: "Real User Monitoring", to: "/rum/performance-monitoring", hint: "Page performance, sessions and browser errors" },
-        { label: "Session Replay", to: "/rum/sessions", hint: "Replay recorded browser sessions" },
-        { label: "Product Analytics", to: "/rum/funnels", hint: "Funnels and retention" },
+        {
+          label: "Synthetic Monitoring",
+          to: "/synthetics/tests",
+          hint: "API, multistep and browser tests, from CI too",
+        },
+        {
+          label: "Real User Monitoring",
+          to: "/rum/performance-monitoring",
+          hint: "Page performance, sessions and browser errors",
+        },
+        {
+          label: "Session Replay",
+          to: "/rum/sessions",
+          hint: "Replay recorded browser sessions",
+        },
+        {
+          label: "Product Analytics",
+          to: "/rum/funnels",
+          hint: "Funnels and retention",
+        },
         { label: "Mobile App Testing" },
-        { label: "Error Tracking", to: "/error-tracking", hint: "Errors grouped into issues" },
+        {
+          label: "Error Tracking",
+          to: "/error-tracking",
+          hint: "Errors grouped into issues",
+        },
       ],
     },
     {
       id: "software-delivery",
       label: "Software Delivery",
       icon: <DeliveryIcon />,
+      to: "/ci/pipelines",
       match: ["/ci"],
       links: [
-        { label: "CI Visibility", to: "/ci/pipelines", hint: "Pipelines and their failures" },
-        { label: "Test Optimization", to: "/ci/tests", hint: "Test runs, flaky and slow tests" },
-        { label: "Continuous Testing", to: "/synthetics/ci", hint: "Synthetic tests run from CI (datadog-ci)" },
+        {
+          label: "CI Visibility",
+          to: "/ci/pipelines",
+          hint: "Pipelines and their failures",
+        },
+        {
+          label: "Test Optimization",
+          to: "/ci/tests",
+          hint: "Test runs, flaky and slow tests",
+        },
+        {
+          label: "Continuous Testing",
+          to: "/synthetics/ci",
+          hint: "Synthetic tests run from CI (datadog-ci)",
+        },
         { label: "CD Visibility" },
         { label: "DORA Metrics" },
         { label: "Code Coverage" },
@@ -247,11 +355,24 @@ const SECTIONS: Item[][] = [
       id: "security",
       label: "Security",
       icon: <SecurityIcon />,
+      to: "/security/signals",
       match: ["/security", "/audit"],
       links: [
-        { label: "Signals", to: "/security/signals", hint: "Cloud SIEM: threats detected in logs" },
-        { label: "Detection Rules", to: "/security/rules", hint: "Thresholds and new values on logs" },
-        { label: "Audit Trail", to: "/audit", hint: "Who changed what, through the UI or the API" },
+        {
+          label: "Signals",
+          to: "/security/signals",
+          hint: "Cloud SIEM: threats detected in logs",
+        },
+        {
+          label: "Detection Rules",
+          to: "/security/rules",
+          hint: "Thresholds and new values on logs",
+        },
+        {
+          label: "Audit Trail",
+          to: "/audit",
+          hint: "Who changed what, through the UI or the API",
+        },
         { label: "Code Security" },
         { label: "Cloud Security" },
         { label: "App & API Protection" },
@@ -263,10 +384,19 @@ const SECTIONS: Item[][] = [
       id: "llm",
       label: "LLM Observability",
       icon: <AiIcon />,
+      to: "/llm/overview",
       match: ["/llm"],
       links: [
-        { label: "Overview", to: "/llm/overview", hint: "Calls, tokens, cost, models, evaluations" },
-        { label: "Traces", to: "/llm/traces", hint: "Prompts, completions and tool calls" },
+        {
+          label: "Overview",
+          to: "/llm/overview",
+          hint: "Calls, tokens, cost, models, evaluations",
+        },
+        {
+          label: "Traces",
+          to: "/llm/traces",
+          hint: "Prompts, completions and tool calls",
+        },
         { label: "Experiments" },
         { label: "Agent Observability" },
       ],
@@ -285,7 +415,11 @@ const SECTIONS: Item[][] = [
           to: "/error-tracking",
           hint: "Errors grouped into issues",
         },
-        { label: "Explorer", to: "/error-tracking", hint: "Issues across logs, traces and RUM" },
+        {
+          label: "Explorer",
+          to: "/error-tracking",
+          hint: "Issues across logs, traces and RUM",
+        },
         { label: "Exception Replay" },
       ],
       groups: [
@@ -316,14 +450,22 @@ const SECTIONS: Item[][] = [
           to: "/metrics/summary",
           hint: "Every metric, its type, tags and hosts",
         },
-        { label: "Volume", to: "/metrics/volume", hint: "Points and series stored per metric" },
+        {
+          label: "Volume",
+          to: "/metrics/volume",
+          hint: "Points and series stored per metric",
+        },
       ],
       groups: [
         {
           title: "Settings",
           links: [
             { label: "Metrics without Limits" },
-            { label: "Reference Tables", to: "/logs/reference-tables", hint: "CSV tables for lookup processors" },
+            {
+              label: "Reference Tables",
+              to: "/logs/reference-tables",
+              hint: "CSV tables for lookup processors",
+            },
           ],
         },
       ],
@@ -357,11 +499,27 @@ const SECTIONS: Item[][] = [
           links: [
             { label: "Pipelines", to: "/logs/pipelines" },
             { label: "Generate Metrics", to: "/logs/generate-metrics" },
-            { label: "Indexes", to: "/logs/indexes", hint: "Exclusion filters, sampling, daily quotas" },
-            { label: "Archives", to: "/logs/archives", hint: "Hourly gzip archives to S3 or disk" },
-            { label: "Rehydrate from Archives", to: "/logs/archives", hint: "Reload archived logs into a temporary index" },
+            {
+              label: "Indexes",
+              to: "/logs/indexes",
+              hint: "Exclusion filters, sampling, daily quotas",
+            },
+            {
+              label: "Archives",
+              to: "/logs/archives",
+              hint: "Hourly gzip archives to S3 or disk",
+            },
+            {
+              label: "Rehydrate from Archives",
+              to: "/logs/archives",
+              hint: "Reload archived logs into a temporary index",
+            },
             { label: "Log Forwarding" },
-            { label: "Sensitive Data Scanner", to: "/logs/sensitive-data-scanner", hint: "Redact card numbers, e-mails, tokens at intake" },
+            {
+              label: "Sensitive Data Scanner",
+              to: "/logs/sensitive-data-scanner",
+              hint: "Redact card numbers, e-mails, tokens at intake",
+            },
           ],
         },
       ],
@@ -375,7 +533,11 @@ const SECTIONS: Item[][] = [
       to: "/integrations",
       match: ["/integrations", "/monitors/webhooks"],
       links: [
-        { label: "Integrations", to: "/integrations", hint: "What sends logs and metrics here" },
+        {
+          label: "Integrations",
+          to: "/integrations",
+          hint: "What sends logs and metrics here",
+        },
         {
           label: "Webhooks",
           to: "/monitors/webhooks",
