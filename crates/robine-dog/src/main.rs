@@ -20,6 +20,7 @@ mod dbm;
 mod delivery;
 mod dsm;
 mod events;
+mod experiments;
 mod hosts;
 mod infra;
 mod insights;
@@ -558,6 +559,9 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/llm-obs/traces", get(llmobs::traces))
         .route("/llm-obs/traces/{id}", get(llmobs::trace))
         .route("/llm-obs/overview", get(llmobs::overview))
+        .route("/llm-obs/experiments", get(experiments::list))
+        .route("/llm-obs/experiments/{id}", get(experiments::get))
+        .route("/llm-obs/agents", get(experiments::agents))
         .route("/profiling/profiles", get(profiling::list))
         .route("/profiling/services", get(profiling::services))
         .route("/profiling/flamegraph", post(profiling::flamegraph))
@@ -990,6 +994,8 @@ fn app(st: AppState) -> Router {
             post(llmobs::evals_intake),
         )
         .route("/api/v1/collector", post(processes::intake))
+        .route("/api/unstable/llm-obs/v1/{*rest}", any(experiments::api))
+        .route("/api/v2/llm-obs/v1/{*rest}", any(experiments::api))
         .route("/api/v1/connections", post(infra::connections))
         .route("/api/v2/ndm", post(infra::ndm))
         .route("/api/v1/metadata", post(infra::inventory))

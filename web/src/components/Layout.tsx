@@ -497,8 +497,16 @@ const SECTIONS: Item[][] = [
           to: "/llm/traces",
           hint: "Prompts, completions and tool calls",
         },
-        { label: "Experiments" },
-        { label: "Agent Observability" },
+        {
+          label: "Experiments",
+          to: "/llm/experiments",
+          hint: "Datasets and experiment runs compared",
+        },
+        {
+          label: "Agent Observability",
+          to: "/llm/agents",
+          hint: "Agents, their tools and each run's steps",
+        },
       ],
     },
   ],

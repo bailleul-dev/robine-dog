@@ -96,6 +96,7 @@ import {
   NetworkDevices,
   ResourceCatalog,
 } from "./pages/InfraMore";
+import { LlmAgents, LlmExperiments } from "./pages/LlmMore";
 
 const client = new QueryClient({
   defaultOptions: {
@@ -220,6 +221,8 @@ function App() {
         <Route path="/profiling" element={<Profiler />} />
         <Route path="/llm/overview" element={<LlmOverview />} />
         <Route path="/llm/traces" element={<LlmTraces />} />
+        <Route path="/llm/experiments" element={<LlmExperiments />} />
+        <Route path="/llm/agents" element={<LlmAgents />} />
         <Route path="/ci/pipelines" element={<CiPipelinesPage />} />
         <Route path="/ci/deployments" element={<Deployments />} />
         <Route path="/ci/dora" element={<Dora />} />

@@ -9,9 +9,11 @@ import { api, type LlmEval, type LlmSpan } from "../lib/api";
 import { ago, compact, duration, percent } from "../lib/format";
 import { useTimeRange } from "../lib/time";
 
-const LLM_TABS = [
+export const LLM_TABS = [
   { to: "/llm/overview", label: "Overview" },
   { to: "/llm/traces", label: "Traces" },
+  { to: "/llm/experiments", label: "Experiments" },
+  { to: "/llm/agents", label: "Agents" },
 ];
 
 const usd = (v: number) =>
@@ -27,7 +29,7 @@ const KIND_COLORS: Record<string, string> = {
   task: "#7a8699",
 };
 
-function KindBadge({ kind }: { kind: string }) {
+export function KindBadge({ kind }: { kind: string }) {
   return (
     <span
       className="llm-kind"

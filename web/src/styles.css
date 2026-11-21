@@ -4662,3 +4662,7 @@ table.list td.infra-bad {
 .insights-item { border: 1px solid var(--border); background: var(--bg, transparent); color: inherit; border-radius: 12px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
 .insights-item:hover { border-color: var(--purple, #8b6fd0); }
 .watchdog-analysis { margin-top: 8px; padding: 8px 10px; border-left: 3px solid var(--border); font-size: 13px; }
+.agent-node { margin: 4px 0; }
+.agent-step { display: inline-block; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.agent-step.error { border-color: #e74c50; }
+.agent-children { margin-left: 18px; padding-left: 12px; border-left: 2px solid var(--border); }

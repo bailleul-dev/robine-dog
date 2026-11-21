@@ -513,10 +513,24 @@ pub async fn evals_intake(State(st): State<AppState>, headers: HeaderMap, body: 
 pub async fn evp_proxy(
     State(st): State<AppState>,
     Path(rest): Path<String>,
+    method: axum::http::Method,
+    axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
     let path = rest.split_once('/').map(|(_, p)| p).unwrap_or(&rest);
+    if (path.contains("/llm-obs/v1/") || path.starts_with("llm-obs/v1/"))
+        && !path.contains("trace/spans")
+        && !path.contains("eval-metric")
+    {
+        let sub = path.split_once("llm-obs/v1/").map(|(_, r)| r).unwrap_or("");
+        return match crate::experiments::handle(&st, &method, sub, uri.query().unwrap_or(""), &body)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        };
+    }
     if path.ends_with("api/v2/llmobs") || path.contains("llm-obs/v1/trace/spans") {
         reply(take_spans(&st, &headers, &body).await)
     } else if path.contains("eval-metric") {

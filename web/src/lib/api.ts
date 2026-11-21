@@ -2448,6 +2448,68 @@ export const api = {
     }>(`/databases/queries/${encodeURIComponent(sig)}?from=${from}&to=${to}`),
   llmTraces: (f: LlmFilter) =>
     call<LlmTraceRow[]>(`/llm-obs/traces?${profileQs(f)}`),
+  llmExperiments: () =>
+    call<{
+      experiments: {
+        id: string;
+        name: string;
+        status: string | null;
+        project: string | null;
+        dataset_id: string;
+        dataset: string | null;
+        config: unknown;
+        created_at: number | null;
+        spans: number;
+        errors: number;
+        summary: Record<string, unknown>;
+      }[];
+      datasets: {
+        id: string;
+        name: string;
+        version: number;
+        records: number;
+      }[];
+    }>("/llm-obs/experiments"),
+  llmExperiment: (id: string) =>
+    call<{
+      rows: {
+        span_id: string;
+        input: unknown;
+        output: unknown;
+        expected_output: unknown;
+        error: unknown;
+        evals: Record<string, unknown>;
+      }[];
+    }>(`/llm-obs/experiments/${id}`),
+  llmAgents: (from: number, to: number) =>
+    call<{
+      agents: {
+        ml_app: string;
+        name: string;
+        runs: number;
+        avg_ns: number;
+        errors: number;
+        tools: number;
+        llms: number;
+        tokens: number;
+        sample_trace: string;
+      }[];
+      tools: {
+        ml_app: string;
+        name: string;
+        calls: number;
+        errors: number;
+        avg_ns: number;
+      }[];
+      runs: {
+        trace_id: string;
+        ml_app: string;
+        name: string;
+        start_ns: number;
+        duration: number;
+        error: boolean;
+      }[];
+    }>(`/llm-obs/agents?from=${from}&to=${to}`),
   llmTrace: (id: string) =>
     call<{ spans: LlmSpan[]; evals: (LlmEval & { ts: number })[] }>(
       `/llm-obs/traces/${id}`,
