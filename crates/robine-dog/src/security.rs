@@ -266,6 +266,14 @@ async fn open_signal(
         )
         .await?;
         tracing::info!(rule = rule_id, group = %key, severity = sev, "security signal");
+        crate::workflows::on_signal(
+            st,
+            rule_id,
+            rule["message"].as_str().unwrap_or(""),
+            json!({"rule_id": rule_id, "rule_name": rule["name"], "severity": sev, "group": key,
+                "tags": tags, "value": value, "detected_at": now}),
+        )
+        .await;
         let mut t = vec![format!("rule_id:{rule_id}"), format!("severity:{sev}")];
         t.extend(
             tags.iter()

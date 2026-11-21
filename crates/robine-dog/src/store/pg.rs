@@ -325,6 +325,23 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX dbm_samples_by_query ON dbm_samples (query_signature, ts);
     CREATE INDEX dbm_samples_by_time ON dbm_samples (ts);
     "#,
+    // Workflow Automation.
+    r#"
+    CREATE TABLE workflow_runs (
+        id BIGSERIAL PRIMARY KEY,
+        workflow_id TEXT NOT NULL,
+        workflow_name TEXT NOT NULL,
+        trigger_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        context JSONB NOT NULL,
+        steps JSONB NOT NULL,
+        next_step INT NOT NULL,
+        started_at BIGINT NOT NULL,
+        finished_at BIGINT,
+        error TEXT
+    );
+    CREATE INDEX workflow_runs_by_workflow ON workflow_runs (workflow_id, id);
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.

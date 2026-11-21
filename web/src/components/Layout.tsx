@@ -70,7 +70,7 @@ const SECTIONS: Item[][] = [
       label: "Service Mgmt",
       icon: <ServiceMgmtIcon />,
       to: "/slo/manage",
-      match: ["/slo", "/event", "/cases", "/on-call"],
+      match: ["/slo", "/event", "/cases", "/on-call", "/workflows", "/apps"],
       links: [
         {
           label: "SLOs",
@@ -97,8 +97,16 @@ const SECTIONS: Item[][] = [
           to: "/event/explorer",
           hint: "Monitor alerts, Agent and API events",
         },
-        { label: "Workflow Automation" },
-        { label: "App Builder" },
+        {
+          label: "Workflow Automation",
+          to: "/workflows",
+          hint: "HTTP, Kubernetes and robine-dog actions on triggers",
+        },
+        {
+          label: "App Builder",
+          to: "/apps",
+          hint: "Forms whose buttons run workflows",
+        },
       ],
       groups: [
         {

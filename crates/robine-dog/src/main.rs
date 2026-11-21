@@ -36,10 +36,11 @@ mod slo;
 mod store;
 mod synthetics;
 mod watchdog;
+mod workflows;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{any, delete, get, post, put};
+use axum::routing::{any, delete, get, patch, post, put};
 use std::sync::Arc;
 use tower_http::compression::CompressionLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -487,6 +488,23 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             axum::routing::patch(security::triage),
         )
         .route("/audit/events", get(audit::events))
+        .route("/workflows", get(workflows::list).post(workflows::create))
+        .route("/workflows/runs", get(workflows::runs))
+        .route("/workflows/runs/{id}/{what}", post(workflows::decide))
+        .route(
+            "/workflows/{id}",
+            get(workflows::get)
+                .put(workflows::update)
+                .delete(workflows::delete),
+        )
+        .route("/workflows/{id}/instances", post(workflows::run))
+        .route("/apps", get(workflows::apps).post(workflows::create_app))
+        .route(
+            "/apps/{id}",
+            put(workflows::update_app).delete(workflows::delete_app),
+        )
+        .route("/apps/{id}/run", post(workflows::run_app))
+        .route("/workflows/runs/{id}", get(workflows::run_one))
         .route("/cases", get(cases::list).post(cases::create))
         .route("/cases/{id}", get(cases::get))
         .route("/cases/{id}/{what}", post(cases::action))
@@ -795,6 +813,37 @@ fn public_api(st: AppState) -> Router<AppState> {
             axum::routing::patch(security::triage),
         )
         .route("/api/v2/audit/events", get(audit::events))
+        .route(
+            "/api/v2/workflows",
+            get(workflows::list).post(workflows::create),
+        )
+        .route(
+            "/api/v2/workflows/{id}",
+            get(workflows::get)
+                .patch(workflows::update)
+                .put(workflows::update)
+                .delete(workflows::delete),
+        )
+        .route(
+            "/api/v2/workflows/{id}/instances",
+            get(workflows::instances).post(workflows::run),
+        )
+        .route(
+            "/api/v2/workflows/{id}/instances/{instance}",
+            get(workflows::instance),
+        )
+        .route(
+            "/api/v2/app-builder/apps",
+            get(workflows::apps).post(workflows::create_app),
+        )
+        .route(
+            "/api/v2/app-builder/apps/{id}",
+            patch(workflows::update_app).delete(workflows::delete_app),
+        )
+        .route(
+            "/api/v2/app-builder/apps/{id}/run",
+            post(workflows::run_app),
+        )
         .route("/api/v2/cases", get(cases::list).post(cases::create))
         .route("/api/v2/cases/{id}", get(cases::get))
         .route("/api/v2/cases/{id}/{what}", post(cases::action))
@@ -1028,6 +1077,7 @@ async fn main() -> anyhow::Result<()> {
     audit::spawn_purge(st.clone());
     security::spawn(st.clone());
     oncall::spawn(st.clone());
+    workflows::spawn(st.clone());
     {
         // RUM-based metrics counted at a session's or view's end.
         let st = st.clone();

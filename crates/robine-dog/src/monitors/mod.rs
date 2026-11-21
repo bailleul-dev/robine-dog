@@ -1465,6 +1465,16 @@ pub async fn run_monitor(st: &AppState, def: &MonitorDef, now: i64) -> anyhow::R
                     )
                     .await,
                 );
+                sent.extend(
+                    crate::workflows::notify(
+                        st,
+                        &message,
+                        serde_json::json!({"monitor_id": id, "monitor_name": def.name, "title": title,
+                            "message": message, "status": status, "previous": prev_status,
+                            "group": s.group, "tags": s.tags, "value": s.value}),
+                    )
+                    .await,
+                );
                 sent
             };
             if !notified.is_empty() || status != OK {

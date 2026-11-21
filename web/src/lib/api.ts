@@ -923,6 +923,64 @@ const put = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => call<T>(path, { method: "DELETE" });
 
 export type Scope = { query: string; from: number; to: number };
+export type WorkflowStep = {
+  name: string;
+  action: string;
+  params: Record<string, unknown>;
+  if?: string;
+  continue_on_error?: boolean;
+};
+export type Workflow = {
+  id: string;
+  attributes: {
+    name: string;
+    description?: string;
+    enabled?: boolean;
+    triggers?: {
+      security_signal?: boolean;
+      security_rule?: string;
+      schedule?: string;
+    };
+    steps: WorkflowStep[];
+  };
+};
+export type WorkflowRun = {
+  id: string;
+  workflow_id: string;
+  workflow_name: string;
+  trigger_type: string;
+  status: string;
+  started_at: number;
+  finished_at: number | null;
+  error: string | null;
+  trigger: unknown;
+  steps: {
+    name: string;
+    action: string;
+    status: string;
+    started_at: number;
+    duration_ms?: number;
+    params?: unknown;
+    output?: unknown;
+    error?: string;
+    message?: string;
+    by?: string;
+  }[];
+};
+export type AppDef = {
+  id: string;
+  attributes: {
+    name: string;
+    description?: string;
+    fields: {
+      name: string;
+      label?: string;
+      type?: string;
+      options?: string[];
+    }[];
+    buttons: { label: string; workflow_id: string }[];
+  };
+};
 export type LiveProcess = {
   host: string;
   pid: number;
@@ -2099,6 +2157,30 @@ export const api = {
       : post<unknown>(`/on-call/${what}`, body),
   onCallDelete: (what: "schedules" | "escalation-policies", id: string) =>
     del<unknown>(`/on-call/${what}/${id}`),
+  workflows: () => call<{ data: Workflow[]; actions: string[] }>("/workflows"),
+  saveWorkflow: (id: string | null, body: Workflow["attributes"]) =>
+    id
+      ? put<{ data: Workflow }>(`/workflows/${id}`, body)
+      : post<{ data: Workflow }>("/workflows", body),
+  deleteWorkflow: (id: string) => del<unknown>(`/workflows/${id}`),
+  runWorkflow: (id: string, payload: unknown) =>
+    post<{ data: { id: string } }>(`/workflows/${id}/instances`, {
+      meta: { payload },
+    }),
+  workflowRuns: (workflowId?: string) =>
+    call<{ data: WorkflowRun[] }>(
+      `/workflows/runs${workflowId ? `?workflow_id=${workflowId}` : ""}`,
+    ),
+  workflowRun: (id: string) =>
+    call<{ data: WorkflowRun }>(`/workflows/runs/${id}`),
+  decideRun: (id: string, what: "approve" | "reject") =>
+    post<unknown>(`/workflows/runs/${id}/${what}`, {}),
+  apps: () => call<{ data: AppDef[] }>("/apps"),
+  saveApp: (id: string | null, body: AppDef["attributes"]) =>
+    id ? put<unknown>(`/apps/${id}`, body) : post<unknown>("/apps", body),
+  deleteApp: (id: string) => del<unknown>(`/apps/${id}`),
+  runApp: (id: string, button: number, values: Record<string, string>) =>
+    post<{ data: { id: string } }>(`/apps/${id}/run`, { button, values }),
   processes: (host?: string, query?: string) =>
     call<{
       hosts: { host: string; updated: number }[];
