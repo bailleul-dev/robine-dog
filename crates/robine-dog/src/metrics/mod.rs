@@ -241,7 +241,7 @@ impl Aggregator {
         if let Err(e) = store.pg.touch_metrics(&kinds).await {
             tracing::error!(error = %format!("{e:#}"), "recording metric metadata");
         }
-        if let Err(e) = store.points.send(points).await {
+        if let Err(e) = store.points.send(crate::mwl::apply(points)).await {
             tracing::error!(error = %e, "storing metric points");
         }
     }

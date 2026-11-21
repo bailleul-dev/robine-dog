@@ -153,7 +153,7 @@ pub async fn store(st: &AppState, series: Vec<Series>) -> anyhow::Result<usize> 
         .pg
         .touch_metrics(&kinds.into_iter().collect::<Vec<_>>())
         .await?;
-    st.store.points.send(points).await?;
+    st.store.points.send(crate::mwl::apply(points)).await?;
     Ok(n)
 }
 

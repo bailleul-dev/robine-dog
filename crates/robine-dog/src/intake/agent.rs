@@ -741,7 +741,7 @@ pub async fn sketches(
         .collect();
     let stored = async {
         st.store.pg.touch_metrics(&kinds).await?;
-        st.store.points.send(points).await
+        st.store.points.send(crate::mwl::apply(points)).await
     };
     match stored.await {
         Ok(()) => (StatusCode::ACCEPTED, Json(json!({"errors": []}))).into_response(),

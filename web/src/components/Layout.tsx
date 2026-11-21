@@ -580,7 +580,11 @@ const SECTIONS: Item[][] = [
         {
           title: "Settings",
           links: [
-            { label: "Metrics without Limits" },
+            {
+              label: "Metrics without Limits",
+              to: "/metrics/tags",
+              hint: "Tags kept per metric",
+            },
             {
               label: "Reference Tables",
               to: "/logs/reference-tables",
@@ -634,7 +638,11 @@ const SECTIONS: Item[][] = [
               to: "/logs/archives",
               hint: "Reload archived logs into a temporary index",
             },
-            { label: "Log Forwarding" },
+            {
+              label: "Log Forwarding",
+              to: "/logs/forwarding",
+              hint: "HTTP, Splunk HEC and Elasticsearch destinations",
+            },
             {
               label: "Sensitive Data Scanner",
               to: "/logs/sensitive-data-scanner",

@@ -97,6 +97,7 @@ import {
   ResourceCatalog,
 } from "./pages/InfraMore";
 import { LlmAgents, LlmExperiments } from "./pages/LlmMore";
+import { LogForwarding, MetricTags } from "./pages/Forwarding";
 
 const client = new QueryClient({
   defaultOptions: {
@@ -314,6 +315,8 @@ function App() {
         <Route path="/metrics/explorer" element={<MetricsExplorer />} />
         <Route path="/metrics/summary" element={<MetricsSummary />} />
         <Route path="/metrics/volume" element={<MetricsVolume />} />
+        <Route path="/metrics/tags" element={<MetricTags />} />
+        <Route path="/logs/forwarding" element={<LogForwarding />} />
         <Route path="*" element={<Navigate to="/logs" replace />} />
       </Route>
     </Routes>

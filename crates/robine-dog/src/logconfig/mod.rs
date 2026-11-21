@@ -4,6 +4,7 @@
 //! processor) and filter searches.
 
 pub mod archives;
+pub mod forwarding;
 pub mod indexes;
 pub mod reftables;
 pub mod sds;
@@ -17,6 +18,7 @@ pub struct LogConfig {
     pub indexes: indexes::Indexes,
     pub archives: archives::Archives,
     pub sds: sds::Scanner,
+    pub forwarding: forwarding::Forwarding,
 }
 
 pub fn iso(ms: i64) -> String {
@@ -34,6 +36,7 @@ pub async fn ingest(st: &AppState, rows: Vec<LogRow>) -> anyhow::Result<usize> {
     for mut row in rows {
         st.logconfig.sds.scan(&mut row);
         st.generated.on_log(&st.aggregator, &row);
+        st.logconfig.forwarding.add(&row);
         full |= st.logconfig.archives.add(&row);
         match st.logconfig.indexes.route(&row, now) {
             Route::Keep => kept.push(row),
@@ -61,5 +64,7 @@ pub async fn init(st: &AppState) -> anyhow::Result<()> {
     archives::reload(st).await?;
     archives::reload_views(st).await?;
     archives::spawn(st.clone());
+    forwarding::reload(st).await?;
+    forwarding::spawn(st.clone());
     Ok(())
 }

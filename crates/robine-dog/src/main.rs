@@ -30,6 +30,7 @@ mod logconfig;
 mod mcp;
 mod metrics;
 mod monitors;
+mod mwl;
 mod oncall;
 mod pipelines;
 mod processes;
@@ -162,6 +163,24 @@ fn logconfig_routes(r: Router<AppState>, v1: &str, v2: &str) -> Router<AppState>
         &format!("{v2}/logs/config/archive-order"),
         get(archives::get_order).put(archives::set_order),
     )
+    .route(
+        &format!("{v2}/logs/config/custom-destinations"),
+        get(logconfig::forwarding::list).post(logconfig::forwarding::create),
+    )
+    .route(
+        &format!("{v2}/logs/config/custom-destinations/{{id}}"),
+        get(logconfig::forwarding::get)
+            .patch(logconfig::forwarding::update)
+            .delete(logconfig::forwarding::delete),
+    )
+    .route(
+        &format!("{v2}/metrics/{{name}}/tags"),
+        get(mwl::get)
+            .post(mwl::put)
+            .patch(mwl::put)
+            .delete(mwl::delete),
+    )
+    .route(&format!("{v2}/metrics/{{name}}/volumes"), get(mwl::volumes))
     .route(
         &format!("{v2}/sensitive-data-scanner/config"),
         get(sds::config).patch(sds::reorder_groups),
@@ -549,6 +568,7 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/deployments", get(delivery::deployments))
         .route("/appsec/endpoints", get(appsec::endpoints))
         .route("/npm", get(infra::npm))
+        .route("/metrics/tag-configs", get(mwl::list))
         .route("/network-devices", get(infra::devices))
         .route("/fleet", get(infra::fleet))
         .route("/data-jobs", get(infra::data_jobs))
@@ -1104,6 +1124,9 @@ async fn main() -> anyhow::Result<()> {
     };
     if let Err(e) = catalog::init(&st).await {
         tracing::warn!(error = %e, "could not load the retention filters");
+    }
+    if let Err(e) = mwl::init(&st).await {
+        tracing::warn!(error = %format!("{e:#}"), "Metrics without Limits configuration");
     }
     if let Err(e) = logconfig::init(&st).await {
         tracing::warn!(error = %e, "could not load the log configuration");

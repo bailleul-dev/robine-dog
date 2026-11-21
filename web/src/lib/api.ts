@@ -2208,6 +2208,60 @@ export const api = {
         span_id: string;
       }[];
     }>(`/data-jobs?from=${from}&to=${to}`),
+  metricTagConfigs: () =>
+    call<{
+      data: {
+        metric: string;
+        tags: string[];
+        exclude_tags_mode: boolean | null;
+        metric_type: string | null;
+        ingested_series: number;
+        indexed_series: number;
+      }[];
+    }>("/metrics/tag-configs"),
+  putMetricTags: (metric: string, attributes: Record<string, unknown>) =>
+    post<unknown>(`/metrics/${encodeURIComponent(metric)}/tags`, {
+      data: { type: "manage_tags", id: metric, attributes },
+    }),
+  deleteMetricTags: (metric: string) =>
+    del<unknown>(`/metrics/${encodeURIComponent(metric)}/tags`),
+  customDestinations: () =>
+    call<{
+      data: {
+        id: string;
+        attributes: {
+          name: string;
+          query: string;
+          enabled: boolean;
+          forwarder_destination: {
+            type: string;
+            endpoint: string;
+            index_name?: string;
+            auth?: { type?: string; username?: string };
+          };
+          status: {
+            sent: number;
+            dropped: number;
+            last_error: string | null;
+            last_sent: number | null;
+          };
+        };
+      }[];
+    }>("/logs/config/custom-destinations"),
+  createCustomDestination: (attributes: Record<string, unknown>) =>
+    post<unknown>("/logs/config/custom-destinations", {
+      data: { type: "custom_destination", attributes },
+    }),
+  updateCustomDestination: (id: string, attributes: Record<string, unknown>) =>
+    call<unknown>(`/logs/config/custom-destinations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        data: { type: "custom_destination", id, attributes },
+      }),
+      headers: { "content-type": "application/json" },
+    }),
+  deleteCustomDestination: (id: string) =>
+    del<unknown>(`/logs/config/custom-destinations/${id}`),
   appsecEndpoints: (from: number, to: number) =>
     call<{
       data: {
