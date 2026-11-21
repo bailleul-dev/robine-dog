@@ -11,6 +11,7 @@ ENV ROBINE_DOG_VERSION=$VERSION
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY README.md ./
 RUN cargo build --release -p robine-dog
 
 FROM debian:trixie-slim

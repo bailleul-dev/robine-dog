@@ -378,7 +378,11 @@ pub fn api_key_ok(st: &AppState, headers: &HeaderMap, q: &HashMap<String, String
         .map(String::from)
         .or_else(|| q.get("dd-api-key").cloned())
         .or_else(|| q.get("api_key").cloned());
-    given.as_deref() == Some(expected.as_str())
+    match given.as_deref() {
+        Some(g) if g == expected.as_str() => true,
+        Some(g) => crate::keys::api_key_valid(g),
+        None => false,
+    }
 }
 
 /// For Datadog's public API routes: a valid `DD-API-KEY` (header or query).
@@ -389,6 +393,13 @@ pub async fn require_api_key(
     next: axum::middleware::Next,
 ) -> Response {
     if api_key_ok(&st, req.headers(), &q) {
+        if let Some(k) = req
+            .headers()
+            .get("dd-application-key")
+            .and_then(|v| v.to_str().ok())
+        {
+            crate::keys::touch_app_key(k);
+        }
         next.run(req).await
     } else {
         (

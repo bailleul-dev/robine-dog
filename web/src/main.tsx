@@ -98,6 +98,7 @@ import {
 } from "./pages/InfraMore";
 import { LlmAgents, LlmExperiments } from "./pages/LlmMore";
 import { LogForwarding, MetricTags } from "./pages/Forwarding";
+import { AgentSetup, ApiKeys, Help, OpenTelemetrySetup } from "./pages/Setup";
 
 const client = new QueryClient({
   defaultOptions: {
@@ -316,6 +317,13 @@ function App() {
         <Route path="/metrics/summary" element={<MetricsSummary />} />
         <Route path="/metrics/volume" element={<MetricsVolume />} />
         <Route path="/metrics/tags" element={<MetricTags />} />
+        <Route path="/organization-settings/api-keys" element={<ApiKeys />} />
+        <Route path="/organization-settings/agent" element={<AgentSetup />} />
+        <Route
+          path="/organization-settings/opentelemetry"
+          element={<OpenTelemetrySetup />}
+        />
+        <Route path="/help" element={<Help />} />
         <Route path="/logs/forwarding" element={<LogForwarding />} />
         <Route path="*" element={<Navigate to="/logs" replace />} />
       </Route>

@@ -659,7 +659,7 @@ const SECTIONS: Item[][] = [
       label: "Integrations",
       icon: <IntegrationsIcon />,
       to: "/integrations",
-      match: ["/integrations", "/monitors/webhooks"],
+      match: ["/integrations", "/monitors/webhooks", "/organization-settings"],
       links: [
         {
           label: "Integrations",
@@ -671,15 +671,27 @@ const SECTIONS: Item[][] = [
           to: "/monitors/webhooks",
           hint: "Where monitors send their notifications",
         },
-        { label: "APIs" },
+        {
+          label: "APIs",
+          to: "/organization-settings/api-keys",
+          hint: "API and application keys",
+        },
         { label: "Marketplace" },
       ],
       groups: [
         {
           title: "Install",
           links: [
-            { label: "Agent" },
-            { label: "OpenTelemetry" },
+            {
+              label: "Agent",
+              to: "/organization-settings/agent",
+              hint: "Install the Datadog Agent against robine-dog",
+            },
+            {
+              label: "OpenTelemetry",
+              to: "/organization-settings/opentelemetry",
+              hint: "SDK and Collector configuration",
+            },
             {
               label: "Fleet Automation",
               to: "/fleet",
@@ -871,15 +883,14 @@ export function Layout({ me }: { me: Identity }) {
               ))}
             </div>
             <div className="nav-bottom">
-              <span
-                className="nav-link disabled"
-                aria-disabled="true"
-                title={UNAVAILABLE}
+              <NavLink
+                to="/help"
+                className="nav-link"
                 onMouseEnter={() => later(null, 120)}
               >
                 <HelpIcon />
                 <span>Help</span>
-              </span>
+              </NavLink>
               <button
                 type="button"
                 className={`nav-link nav-user${open === "user" ? " open" : ""}`}
@@ -950,7 +961,13 @@ export function Layout({ me }: { me: Identity }) {
                   link={{ label: "Organization Settings" }}
                   onNavigate={close}
                 />
-                <Entry link={{ label: "API Keys" }} onNavigate={close} />
+                <Entry
+                  link={{
+                    label: "API Keys",
+                    to: "/organization-settings/api-keys",
+                  }}
+                  onNavigate={close}
+                />
                 <Entry link={{ label: "Plan & Usage" }} onNavigate={close} />
                 <a href="/auth/logout" className="nav-entry nav-signout">
                   <span className="nav-entry-label">

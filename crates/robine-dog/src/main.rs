@@ -25,6 +25,7 @@ mod hosts;
 mod infra;
 mod insights;
 mod intake;
+mod keys;
 mod llmobs;
 mod logconfig;
 mod mcp;
@@ -181,6 +182,30 @@ fn logconfig_routes(r: Router<AppState>, v1: &str, v2: &str) -> Router<AppState>
             .delete(mwl::delete),
     )
     .route(&format!("{v2}/metrics/{{name}}/volumes"), get(mwl::volumes))
+    .route(
+        &format!("{v2}/api_keys"),
+        get(keys::list_api).post(keys::create_api),
+    )
+    .route(
+        &format!("{v2}/api_keys/{{id}}"),
+        get(keys::get_api)
+            .patch(keys::update_api)
+            .delete(keys::delete_api),
+    )
+    .route(
+        &format!("{v2}/application_keys"),
+        get(keys::list_app).post(keys::create_app),
+    )
+    .route(
+        &format!("{v2}/current_user/application_keys"),
+        get(keys::list_app).post(keys::create_app),
+    )
+    .route(
+        &format!("{v2}/application_keys/{{id}}"),
+        get(keys::get_app)
+            .patch(keys::update_app)
+            .delete(keys::delete_app),
+    )
     .route(
         &format!("{v2}/sensitive-data-scanner/config"),
         get(sds::config).patch(sds::reorder_groups),
@@ -569,6 +594,7 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/appsec/endpoints", get(appsec::endpoints))
         .route("/npm", get(infra::npm))
         .route("/metrics/tag-configs", get(mwl::list))
+        .route("/help", get(keys::help))
         .route("/network-devices", get(infra::devices))
         .route("/fleet", get(infra::fleet))
         .route("/data-jobs", get(infra::data_jobs))
@@ -1124,6 +1150,9 @@ async fn main() -> anyhow::Result<()> {
     };
     if let Err(e) = catalog::init(&st).await {
         tracing::warn!(error = %e, "could not load the retention filters");
+    }
+    if let Err(e) = keys::init(&st).await {
+        tracing::warn!(error = %format!("{e:#}"), "API keys");
     }
     if let Err(e) = mwl::init(&st).await {
         tracing::warn!(error = %format!("{e:#}"), "Metrics without Limits configuration");

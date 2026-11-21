@@ -780,6 +780,17 @@ export type CoverageReport = {
   total: number;
   ts: number;
 };
+export type ApiKey = {
+  id: string;
+  type: string;
+  attributes: {
+    name: string;
+    last4: string;
+    created_at: string | null;
+    last_used_at: string | null;
+    key?: string;
+  };
+};
 export type ErrorOccurrence = {
   ts: number;
   id: string | null;
@@ -2208,6 +2219,23 @@ export const api = {
         span_id: string;
       }[];
     }>(`/data-jobs?from=${from}&to=${to}`),
+  keys: (kind: "api" | "app") =>
+    call<{ data: ApiKey[] }>(
+      kind === "api" ? "/api_keys" : "/application_keys",
+    ),
+  createKey: (kind: "api" | "app", name: string) =>
+    post<{ data: ApiKey }>(kind === "api" ? "/api_keys" : "/application_keys", {
+      data: {
+        type: kind === "api" ? "api_keys" : "application_keys",
+        attributes: { name },
+      },
+    }),
+  deleteKey: (kind: "api" | "app", id: string) =>
+    del<unknown>(`${kind === "api" ? "/api_keys" : "/application_keys"}/${id}`),
+  help: () =>
+    call<{ readme: string; version: string; api_key_configured: boolean }>(
+      "/help",
+    ),
   metricTagConfigs: () =>
     call<{
       data: {
