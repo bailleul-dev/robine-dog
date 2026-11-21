@@ -180,11 +180,12 @@ async fn run_query(
                 })
                 .collect())
         }
-        ds @ ("logs" | "spans") => {
-            let dataset = if ds == "logs" {
-                Dataset::Logs
-            } else {
-                Dataset::Spans
+        ds @ ("logs" | "spans" | "rum" | "events") => {
+            let (dataset, table) = match ds {
+                "spans" => (Dataset::Spans, "spans"),
+                "rum" => (Dataset::Logs, "rum_events"),
+                "events" => (Dataset::Logs, "events"),
+                _ => (Dataset::Logs, "logs"),
             };
             let compute = q.compute.clone().unwrap_or(EventCompute {
                 aggregation: "count".into(),
@@ -213,7 +214,7 @@ async fn run_query(
                     })
                     .collect(),
             };
-            let out = analytics::run(st, dataset, &req, to).await?;
+            let out = analytics::run_in(st, dataset, table, &req, to).await?;
             let zero = (compute.aggregation == "count").then_some(0.0);
             Ok(out
                 .buckets

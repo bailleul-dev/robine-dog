@@ -95,7 +95,11 @@ export type ServiceDetail = {
   resources: (Stats & { resource: string; operation: string })[];
   distribution: [number, number][];
   downstream: { service: string; calls: number; errors: number; avg: number }[];
-  deployments: (Stats & { version: string; first_seen: number; last_seen: number })[];
+  deployments: (Stats & {
+    version: string;
+    first_seen: number;
+    last_seen: number;
+  })[];
 };
 
 export type MetricMeta = {
@@ -110,22 +114,43 @@ export type MetricDetail = MetricMeta & {
   tags: Record<string, string[]>;
   series: number;
 };
-export type SyntheticAssertion = { type: string; operator: string; property?: string | null; target: string | number };
+export type SyntheticAssertion = {
+  type: string;
+  operator: string;
+  property?: string | null;
+  target: string | number;
+};
 export type SyntheticTest = {
   public_id?: string;
   name: string;
   status: string;
   config: {
-    request: { method: string; url: string; headers?: Record<string, string>; body?: string | null; timeout?: number | null };
+    request: {
+      method: string;
+      url: string;
+      headers?: Record<string, string>;
+      body?: string | null;
+      timeout?: number | null;
+    };
     assertions: SyntheticAssertion[];
   };
   options: { tick_every?: number | null; min_failure_duration?: number | null };
   monitor_status?: string;
   message: string;
   tags: string[];
-  last_result?: { ts: number; passed: boolean; status_code: number | null; duration_ms: number; failure: string | null };
+  last_result?: {
+    ts: number;
+    passed: boolean;
+    status_code: number | null;
+    duration_ms: number;
+    failure: string | null;
+  };
 };
-export type SloThreshold = { timeframe: string; target: number; warning?: number | null };
+export type SloThreshold = {
+  timeframe: string;
+  target: number;
+  warning?: number | null;
+};
 export type TimeSlice = {
   query: {
     formulas: { formula: string }[];
@@ -217,7 +242,13 @@ export type RumSession = {
   errors: number;
   first_view: string | null;
 };
-export type RumPerformance = { sessions: number; views: number; errors: number; actions: number; pages: RumPage[] };
+export type RumPerformance = {
+  sessions: number;
+  views: number;
+  errors: number;
+  actions: number;
+  pages: RumPage[];
+};
 export type Incident = {
   id: string;
   public_id: number;
@@ -231,10 +262,26 @@ export type Incident = {
   summary: string;
   services: string[];
   public: boolean;
-  timeline: { ts: number; kind: "declared" | "note" | "state" | "severity"; text: string; by: string | null }[];
+  timeline: {
+    ts: number;
+    kind: "declared" | "note" | "state" | "severity";
+    text: string;
+    by: string | null;
+  }[];
 };
-export type StatusComponent = { name: string; kind: "synthetic" | "monitor"; ref: string; status?: string; uptime?: number | null };
-export type StatusPage = { enabled: boolean; title: string; description: string; components: StatusComponent[] };
+export type StatusComponent = {
+  name: string;
+  kind: "synthetic" | "monitor";
+  ref: string;
+  status?: string;
+  uptime?: number | null;
+};
+export type StatusPage = {
+  enabled: boolean;
+  title: string;
+  description: string;
+  components: StatusComponent[];
+};
 export type WatchdogStory = {
   id: string;
   kind: "error_logs" | "apm_errors" | "apm_latency";
@@ -247,7 +294,11 @@ export type WatchdogStory = {
   baseline: number;
   unit: string;
 };
-export type NotebookCell = { id: string; type: "markdown" | "metric" | "logs"; text: string };
+export type NotebookCell = {
+  id: string;
+  type: "markdown" | "metric" | "logs";
+  text: string;
+};
 export type Notebook = { id?: string; name: string; cells: NotebookCell[] };
 export type Downtime = {
   id: string;
@@ -447,6 +498,39 @@ export type ScalarColumn =
     };
 export type ScalarResponse = {
   data: { attributes: { columns: ScalarColumn[] } };
+};
+export type Distribution = {
+  buckets: { lower: number; upper: number; count: number }[];
+  count: number;
+  min?: number;
+  max?: number;
+  avg?: number;
+  p50?: number;
+  p75?: number;
+  p90?: number;
+  p95?: number;
+  p99?: number;
+};
+export type Funnel = {
+  steps: {
+    label: string;
+    search: string;
+    sessions: number;
+    conversion: number;
+    dropoff: number;
+  }[];
+};
+export type MonitorSearch = {
+  monitors: {
+    id: number;
+    name: string;
+    status: string;
+    type: string;
+    tags: string[];
+    last_triggered_ts: number | null;
+  }[];
+  counts: Record<string, { name: string | boolean; count: number }[]>;
+  metadata: { total_count: number };
 };
 export type ErrorIssue = {
   id: string;
@@ -712,15 +796,25 @@ export const api = {
     to: number,
     signal?: AbortSignal,
     maxSeries?: number,
-  ) => post<MetricsResponse>("/metrics/query", { queries, from, to, max_series: maxSeries }, signal),
+  ) =>
+    post<MetricsResponse>(
+      "/metrics/query",
+      { queries, from, to, max_series: maxSeries },
+      signal,
+    ),
   hosts: () => call<HostInfo[]>("/hosts"),
   metricsVolume: (from: number, to: number) =>
-    call<{ metric: string; points: number; series: number }[]>(`/metrics-volume?from=${from}&to=${to}`),
+    call<{ metric: string; points: number; series: number }[]>(
+      `/metrics-volume?from=${from}&to=${to}`,
+    ),
   synthetics: () => call<{ tests: SyntheticTest[] }>("/synthetics/tests"),
-  createSynthetic: (t: SyntheticTest) => post<SyntheticTest>("/synthetics/tests", t),
-  updateSynthetic: (id: string, t: SyntheticTest) => put<SyntheticTest>(`/synthetics/tests/${id}`, t),
+  createSynthetic: (t: SyntheticTest) =>
+    post<SyntheticTest>("/synthetics/tests", t),
+  updateSynthetic: (id: string, t: SyntheticTest) =>
+    put<SyntheticTest>(`/synthetics/tests/${id}`, t),
   deleteSynthetic: (id: string) => del<unknown>(`/synthetics/tests/${id}`),
-  triggerSynthetic: (id: string) => post<unknown>(`/synthetics/tests/${id}/trigger`, {}),
+  triggerSynthetic: (id: string) =>
+    post<unknown>(`/synthetics/tests/${id}/trigger`, {}),
   slos: () => call<{ data: Slo[] }>("/slos"),
   createSlo: (s: Slo) => post<unknown>("/slos", s),
   updateSlo: (id: string, s: Slo) => put<unknown>(`/slos/${id}`, s),
@@ -740,29 +834,62 @@ export const api = {
       data: { type: "correction", attributes: a },
     }),
   deleteSloCorrection: (id: string) => del<unknown>(`/slo-corrections/${id}`),
-  searchEvents: (s: Scope & { limit?: number; cursor?: string }, signal?: AbortSignal) =>
-    post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/events/search", s, signal),
-  eventsHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/events/histogram", s, signal),
-  searchRum: (s: Scope & { limit?: number; cursor?: string }, signal?: AbortSignal) =>
-    post<{ logs: Log[]; next_cursor: string | null; total: number | null }>("/rum/search", s, signal),
-  rumHistogram: (s: Scope, signal?: AbortSignal) => post<Histogram>("/rum/histogram", s, signal),
-  rumSessions: (s: Scope, signal?: AbortSignal) => post<{ sessions: RumSession[] }>("/rum/sessions", s, signal),
-  rumPerformance: (s: Scope, signal?: AbortSignal) => post<RumPerformance>("/rum/performance", s, signal),
+  searchEvents: (
+    s: Scope & { limit?: number; cursor?: string },
+    signal?: AbortSignal,
+  ) =>
+    post<{ logs: Log[]; next_cursor: string | null; total: number | null }>(
+      "/events/search",
+      s,
+      signal,
+    ),
+  eventsHistogram: (s: Scope, signal?: AbortSignal) =>
+    post<Histogram>("/events/histogram", s, signal),
+  searchRum: (
+    s: Scope & { limit?: number; cursor?: string },
+    signal?: AbortSignal,
+  ) =>
+    post<{ logs: Log[]; next_cursor: string | null; total: number | null }>(
+      "/rum/search",
+      s,
+      signal,
+    ),
+  rumHistogram: (s: Scope, signal?: AbortSignal) =>
+    post<Histogram>("/rum/histogram", s, signal),
+  rumSessions: (s: Scope, signal?: AbortSignal) =>
+    post<{ sessions: RumSession[] }>("/rum/sessions", s, signal),
+  rumPerformance: (s: Scope, signal?: AbortSignal) =>
+    post<RumPerformance>("/rum/performance", s, signal),
   incidents: () => call<{ incidents: Incident[] }>("/incidents"),
   incident: (id: string) => call<Incident>(`/incidents/${id}`),
-  declareIncident: (i: { title: string; severity: string; summary: string; services: string[] }) => post<Incident>("/incidents", i),
-  updateIncident: (id: string, p: Partial<Incident>) => put<Incident>(`/incidents/${id}`, p),
-  noteIncident: (id: string, text: string) => post<Incident>(`/incidents/${id}/timeline`, { text }),
+  declareIncident: (i: {
+    title: string;
+    severity: string;
+    summary: string;
+    services: string[];
+  }) => post<Incident>("/incidents", i),
+  updateIncident: (id: string, p: Partial<Incident>) =>
+    put<Incident>(`/incidents/${id}`, p),
+  noteIncident: (id: string, text: string) =>
+    post<Incident>(`/incidents/${id}/timeline`, { text }),
   deleteIncident: (id: string) => del<unknown>(`/incidents/${id}`),
   statusPage: () => call<StatusPage>("/status-page"),
   saveStatusPage: (p: StatusPage) => put<StatusPage>("/status-page", p),
   watchdog: () => call<{ stories: WatchdogStory[] }>("/watchdog/stories"),
-  runWatchdog: () => post<{ stories: WatchdogStory[] }>("/watchdog/stories", {}),
-  rumConfig: () => call<{ client_token: string | null; version: string; env: string | null }>("/rum-config"),
-  notebooks: () => call<{ data: { id: string; name: string; cells: number; modified_at: number }[] }>("/notebooks"),
+  runWatchdog: () =>
+    post<{ stories: WatchdogStory[] }>("/watchdog/stories", {}),
+  rumConfig: () =>
+    call<{ client_token: string | null; version: string; env: string | null }>(
+      "/rum-config",
+    ),
+  notebooks: () =>
+    call<{
+      data: { id: string; name: string; cells: number; modified_at: number }[];
+    }>("/notebooks"),
   notebook: (id: string) => call<Notebook>(`/notebooks/${id}`),
   createNotebook: (n: Notebook) => post<Notebook>("/notebooks", n),
-  updateNotebook: (id: string, n: Notebook) => put<Notebook>(`/notebooks/${id}`, n),
+  updateNotebook: (id: string, n: Notebook) =>
+    put<Notebook>(`/notebooks/${id}`, n),
   deleteNotebook: (id: string) => del<unknown>(`/notebooks/${id}`),
   postEvent: (e: Record<string, unknown>) => post<unknown>("/events", e),
   downtimes: () => call<Downtime[]>("/downtimes"),
@@ -791,6 +918,31 @@ export const api = {
     post<TimeseriesResponse>("/query/timeseries", r, signal),
   queryScalar: (r: QueryRequest, signal?: AbortSignal) =>
     post<ScalarResponse>("/query/scalar", r, signal),
+  queryDistribution: (
+    r: {
+      from: number;
+      to: number;
+      data_source: string;
+      query?: string;
+      search?: string;
+      metric?: string;
+      buckets?: number;
+    },
+    signal?: AbortSignal,
+  ) => post<Distribution>("/query/distribution", r, signal),
+  rumFunnel: (
+    r: {
+      from: number;
+      to: number;
+      query?: string;
+      steps: { search: string; label?: string }[];
+    },
+    signal?: AbortSignal,
+  ) => post<Funnel>("/rum/funnel", r, signal),
+  monitorSearch: (query: string) =>
+    call<MonitorSearch>(
+      `/monitors/search?query=${encodeURIComponent(query)}&per_page=100`,
+    ),
   errorIssues: (
     r: { from: number; to: number; query: string },
     signal?: AbortSignal,

@@ -20,6 +20,7 @@ pub mod query;
 pub mod slos;
 pub mod spans;
 pub mod views;
+pub mod widgets;
 
 use crate::query::parser::{self, Expr};
 use crate::query::sql::{self, Dataset};

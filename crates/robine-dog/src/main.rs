@@ -202,6 +202,9 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             get(api::errors::issue).put(api::errors::set_status),
         )
         .route("/query/timeseries", post(api::query::timeseries))
+        .route("/query/distribution", post(api::widgets::distribution))
+        .route("/rum/funnel", post(api::widgets::funnel))
+        .route("/monitors/search", get(api::datadog::monitor_search))
         .route("/query/scalar", post(api::query::scalar))
         .route(
             "/dashboards",

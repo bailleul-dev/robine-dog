@@ -16,140 +16,45 @@ import { PlusIcon, TrashIcon } from "../components/Icons";
 import { PageHeader } from "../components/Layout";
 import { TimePicker } from "../components/TimePicker";
 import {
+  BARE_TYPES,
+  EXTRA_TYPES,
+  ExtraFields,
+  ExtraWidget,
+  extraBlank,
+  isExtra,
+  QUERY_TYPES,
+  registerBaseRenderer,
+} from "../components/Widgets";
+import {
   api,
-  ApiError,
   type ConditionalFormat,
   type Dashboard,
-  type DashFormula,
   type DashQuery,
-  type QueryRequest,
   type ScalarColumn,
   type TemplateVar,
   type Widget,
   type WidgetDef,
   type WidgetRequest,
 } from "../lib/api";
-import { ago, compact, statusColor } from "../lib/format";
+import {
+  buildRequest,
+  errorText,
+  fmt,
+  normalizeRequest,
+  PALETTE,
+  type Ctx,
+  type Vars,
+} from "../lib/dash";
+import { ago, statusColor } from "../lib/format";
 import { useTimeRange, type TimeRange } from "../lib/time";
 
 const ROW = 92;
 const GAP = 12;
-const PALETTE = [
-  "#8b6fd0",
-  "#3d9be9",
-  "#2ab673",
-  "#f5a524",
-  "#e74c50",
-  "#17b8be",
-  "#c95cc4",
-  "#7f8c9d",
-  "#a3c93a",
-  "#ef7d3c",
-];
-const errorText = (e: unknown) =>
-  e instanceof ApiError ? e.message : e ? String(e) : null;
 const slug = (t: string) =>
   t
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-
-function fmt(v: number | null | undefined, precision?: number): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return "—";
-  if (precision !== undefined)
-    return v.toLocaleString("en-US", {
-      minimumFractionDigits: precision,
-      maximumFractionDigits: precision,
-    });
-  if (Math.abs(v) >= 10000) return compact(v);
-  return Number.isInteger(v)
-    ? String(v)
-    : v
-        .toFixed(Math.abs(v) < 1 ? 3 : 2)
-        .replace(/0+$/, "")
-        .replace(/\.$/, "");
-}
-
-// --- template variables ------------------------------------------------------------
-
-type Vars = Record<string, string>;
-
-/** `$service` → `service:web` (or nothing for `*`), `$service.value` → `web`. */
-function substitute(
-  text: string,
-  defs: TemplateVar[],
-  vars: Vars,
-  metric: boolean,
-): string {
-  let out = text;
-  for (const d of [...defs].sort((a, b) => b.name.length - a.name.length)) {
-    const value = vars[d.name] ?? d.default ?? "*";
-    out = out.split(`$${d.name}.value`).join(value);
-    const tag =
-      value === "*"
-        ? metric
-          ? "*"
-          : ""
-        : d.prefix
-          ? `${d.prefix}:${value}`
-          : value;
-    out = out.split(`$${d.name}`).join(tag);
-  }
-  if (metric)
-    out = out
-      .replace(/\{\s*\*\s*,\s*/g, "{")
-      .replace(/,\s*\*\s*\}/g, "}")
-      .replace(/,\s*\*\s*,/g, ",");
-  return out.replace(/\s+/g, " ").trim();
-}
-
-/** The request's queries, with legacy `q` requests turned into formula queries. */
-function normalizeRequest(r: WidgetRequest): {
-  queries: DashQuery[];
-  formulas: DashFormula[];
-} {
-  if (r.queries?.length)
-    return { queries: r.queries, formulas: r.formulas ?? [] };
-  if (r.q) {
-    const parts = r.q.split(/,(?![^{]*\})/).map((s) => s.trim());
-    return {
-      queries: parts.map((q, i) => ({
-        data_source: "metrics",
-        name: `query${i + 1}`,
-        query: q,
-      })),
-      formulas: [],
-    };
-  }
-  return { queries: [], formulas: [] };
-}
-
-function buildRequest(
-  r: WidgetRequest,
-  defs: TemplateVar[],
-  vars: Vars,
-  from: number,
-  to: number,
-): QueryRequest {
-  const { queries, formulas } = normalizeRequest(r);
-  return {
-    from,
-    to,
-    queries: queries.map((q) =>
-      q.data_source === "metrics"
-        ? { ...q, query: substitute(q.query ?? "", defs, vars, true) }
-        : {
-            ...q,
-            search: {
-              query: substitute(q.search?.query ?? "", defs, vars, false),
-            },
-          },
-    ),
-    formulas,
-  };
-}
-
-type Ctx = { time: TimeRange; defs: TemplateVar[]; vars: Vars };
 
 // --- widgets ---------------------------------------------------------------------
 
@@ -213,13 +118,17 @@ function TimeseriesWidget({
         const color = status
           ? statusColor(status)
           : PALETTE[out.length % PALETTE.length];
-        const nan = (vs: (number | null)[]) => vs.map((v) => (v === null ? NaN : v));
+        const nan = (vs: (number | null)[]) =>
+          vs.map((v) => (v === null ? NaN : v));
         out.push({
           key: `${ri}-${i}`,
           label,
           color,
           values: nan(a.values[i]),
-          band: s.bounds && { lower: nan(s.bounds.lower), upper: nan(s.bounds.upper) },
+          band: s.bounds && {
+            lower: nan(s.bounds.lower),
+            upper: nan(s.bounds.upper),
+          },
           dim: s.outlier === false,
         });
       });
@@ -238,7 +147,10 @@ function TimeseriesWidget({
         times={chart.times}
         interval={chart.interval}
         from={time.from}
-        to={Math.max(time.to, (chart.times[chart.times.length - 1] ?? 0) + chart.interval)}
+        to={Math.max(
+          time.to,
+          (chart.times[chart.times.length - 1] ?? 0) + chart.interval,
+        )}
         series={chart.series.slice(0, 50)}
         kind={kind}
         height={Math.max(60, height - (legend ? 26 : 0))}
@@ -503,7 +415,13 @@ const TYPE_NAMES: Record<string, string> = {
   query_table: "Table",
   note: "Note",
   group: "Group",
+  ...EXTRA_TYPES,
 };
+
+/** Widgets made of query rows in the editor. */
+const hasQueries = (type: string) =>
+  ["timeseries", "query_value", "toplist", "query_table"].includes(type) ||
+  type in QUERY_TYPES;
 
 function WidgetBody({
   def,
@@ -524,13 +442,11 @@ function WidgetBody({
     case "query_table":
       return <TableWidget def={def} ctx={ctx} />;
     default:
-      return (
-        <div className="widget-empty">
-          The {def.type} widget is not supported yet.
-        </div>
-      );
+      return <ExtraWidget def={def} ctx={ctx} height={height} />;
   }
 }
+
+registerBaseRenderer((p) => <WidgetBody {...p} />);
 
 type Actions = {
   edit: (w: Widget) => void;
@@ -607,6 +523,16 @@ function WidgetCard({
         </div>
       </div>
     );
+  if (BARE_TYPES.includes(def.type))
+    return (
+      <div
+        className={`widget widget-bare${def.has_border === false ? " borderless" : ""}`}
+        style={place(w.layout)}
+      >
+        {menu}
+        <ExtraWidget def={def} ctx={ctx} height={bodyHeight + 44} />
+      </div>
+    );
   return (
     <div className="widget" style={place(w.layout)}>
       <div className="widget-title">
@@ -655,6 +581,7 @@ function blankWidget(type: string, y: number): Widget {
       },
       layout,
     };
+  if (isExtra(type)) return { definition: extraBlank(type), layout };
   const scalar = type !== "timeseries";
   return {
     definition: {
@@ -848,9 +775,14 @@ function WidgetEditor({
         },
       ],
     });
-  const scalar = def.type !== "timeseries";
+  const scalar = def.type !== "timeseries" && def.type !== "heatmap";
   const changeType = (type: string) => {
-    if (type === "note" || def.type === "note")
+    if (
+      type === "note" ||
+      def.type === "note" ||
+      !hasQueries(type) ||
+      !hasQueries(def.type)
+    )
       return setW({ ...blankWidget(type, layout.y), layout, id: w.id });
     setDef({
       type,
@@ -861,7 +793,10 @@ function WidgetEditor({
               queries: norm.queries,
               formulas: norm.formulas,
               q: undefined,
-              response_format: type === "timeseries" ? "timeseries" : "scalar",
+              response_format:
+                type === "timeseries" || type === "heatmap"
+                  ? "timeseries"
+                  : "scalar",
             },
           ]
         : [],
@@ -937,7 +872,7 @@ function WidgetEditor({
                     ))}
                 </select>
               </label>
-              {def.type !== "note" && (
+              {def.type !== "note" && !BARE_TYPES.includes(def.type) && (
                 <label className="form-field">
                   <span className="form-label">Title</span>
                   <input
@@ -974,8 +909,11 @@ function WidgetEditor({
                   </select>
                 </label>
               </>
+            ) : !hasQueries(def.type) ? (
+              <ExtraFields def={def} setDef={setDef} />
             ) : (
               <>
+                {isExtra(def.type) && <ExtraFields def={def} setDef={setDef} />}
                 <div className="form-label">Queries</div>
                 {norm.queries.map((q, i) => (
                   <QueryRow

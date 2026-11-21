@@ -193,6 +193,63 @@ fn aggregate_sql(aggregation: &str, metric: Option<&str>, ds: Dataset) -> Result
     })
 }
 
+/// The values of a measure over the matching events, at most `limit`.
+#[allow(clippy::too_many_arguments)]
+pub async fn values(
+    st: &AppState,
+    ds: Dataset,
+    table: &str,
+    query: &str,
+    metric: &str,
+    from: i64,
+    to: i64,
+    limit: usize,
+) -> Result<Vec<f64>, ApiError> {
+    let filter = sql::compile(&parse_query(query)?, ds);
+    let m = sql::number_expr(&sql::resolve(metric, ds));
+    let rows = st
+        .store
+        .gt
+        .query(&format!(
+            "SELECT CAST({m} AS DOUBLE) FROM {table} WHERE {} AND {filter} AND {m} IS NOT NULL LIMIT {limit}",
+            time_clause(ds, from, to)
+        ))
+        .await?;
+    Ok(rows.iter().filter_map(|r| f64_at(r, 0)).collect())
+}
+
+/// A facet's value and the time (epoch ms) of each matching event, oldest
+/// first, at most `limit`.
+#[allow(clippy::too_many_arguments)]
+pub async fn facet_times(
+    st: &AppState,
+    ds: Dataset,
+    table: &str,
+    query: &str,
+    facet: &str,
+    from: i64,
+    to: i64,
+    limit: usize,
+) -> Result<Vec<(String, i64)>, ApiError> {
+    let filter = sql::compile(&parse_query(query)?, ds);
+    let e = text_expr(facet, ds);
+    let rows = st
+        .store
+        .gt
+        .query(&format!(
+            "SELECT {e}, CAST(ts AS BIGINT) AS t FROM {table} WHERE {} AND {filter} AND {e} IS NOT NULL ORDER BY t LIMIT {limit}",
+            time_clause(ds, from, to)
+        ))
+        .await?;
+    Ok(rows
+        .iter()
+        .filter_map(|r| {
+            let t = f64_at(r, 1)? as i64;
+            Some((str_at(r, 0)?, bucket_ms(ds, t as f64)))
+        })
+        .collect())
+}
+
 fn missing_text(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
@@ -219,17 +276,8 @@ pub struct Outcome {
     pub interval_ms: Option<i64>,
 }
 
-pub async fn run(
-    st: &AppState,
-    ds: Dataset,
-    req: &AggregateReq,
-    now: i64,
-) -> Result<Outcome, ApiError> {
-    run_in(st, ds, table(ds), req, now).await
-}
-
-/// [`run`] over another table with the columns of `ds` (RUM events are
-/// stored like logs).
+/// An aggregation over `table`, whose columns are those of `ds` (RUM
+/// events and events are stored like logs).
 pub async fn run_in(
     st: &AppState,
     ds: Dataset,
