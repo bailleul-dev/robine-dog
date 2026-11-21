@@ -27,7 +27,7 @@ mod watchdog;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{any, delete, get, post};
+use axum::routing::{any, delete, get, post, put};
 use std::sync::Arc;
 use tower_http::compression::CompressionLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -218,6 +218,34 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         )
         .route("/dashboards/{id}/clone", post(api::dashboards::clone))
         .route(
+            "/dashboards/{id}/shares",
+            get(api::shared_dashboards::of_dashboard),
+        )
+        .route(
+            "/dashboards/{id}/favorite",
+            put(api::dashboard_lists::star).delete(api::dashboard_lists::unstar),
+        )
+        .route("/dashboard-favorites", get(api::dashboard_lists::favorites))
+        .route(
+            "/dashboard-lists",
+            get(api::dashboard_lists::ui_lists).post(api::dashboard_lists::create),
+        )
+        .route(
+            "/dashboard-lists/{id}",
+            put(api::dashboard_lists::update).delete(api::dashboard_lists::delete),
+        )
+        .route(
+            "/dashboard-lists/{id}/dashboards",
+            post(api::dashboard_lists::add)
+                .delete(api::dashboard_lists::remove)
+                .put(api::dashboard_lists::replace),
+        )
+        .route("/dashboard-shares", post(api::shared_dashboards::create))
+        .route(
+            "/dashboard-shares/{token}",
+            put(api::shared_dashboards::update).delete(api::shared_dashboards::delete),
+        )
+        .route(
             "/pipelines",
             get(api::pipelines::list).post(api::pipelines::create),
         )
@@ -353,6 +381,33 @@ fn public_api(st: AppState) -> Router<AppState> {
             get(api::dashboards::list).post(api::dashboards::create),
         )
         .route(
+            "/api/v1/dashboard/lists/manual",
+            get(api::dashboard_lists::list).post(api::dashboard_lists::create),
+        )
+        .route(
+            "/api/v1/dashboard/lists/manual/{id}",
+            get(api::dashboard_lists::get)
+                .put(api::dashboard_lists::update)
+                .delete(api::dashboard_lists::delete),
+        )
+        .route(
+            "/api/v2/dashboard/lists/manual/{id}/dashboards",
+            get(api::dashboard_lists::dashboards)
+                .post(api::dashboard_lists::add)
+                .delete(api::dashboard_lists::remove)
+                .put(api::dashboard_lists::replace),
+        )
+        .route(
+            "/api/v1/dashboard/public",
+            post(api::shared_dashboards::create),
+        )
+        .route(
+            "/api/v1/dashboard/public/{token}",
+            get(api::shared_dashboards::get)
+                .put(api::shared_dashboards::update)
+                .delete(api::shared_dashboards::delete),
+        )
+        .route(
             "/api/v1/dashboard/{id}",
             get(api::dashboards::get)
                 .put(api::dashboards::update)
@@ -472,6 +527,14 @@ fn app(st: AppState) -> Router {
         .route("/auth/logout", post(auth::logout).get(auth::logout))
         .route("/health", get(health))
         .route("/status", get(api::incidents::public_page))
+        .route(
+            "/api/public/dashboard/{token}",
+            get(api::shared_dashboards::public_dashboard),
+        )
+        .route(
+            "/api/public/dashboard/{token}/query",
+            post(api::shared_dashboards::public_query),
+        )
         .route("/v1/mcp", post(mcp::post).get(mcp::get))
         .fallback_service(spa)
         .layer(CompressionLayer::new())

@@ -3,7 +3,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   useNavigate,
@@ -12,7 +12,7 @@ import {
 } from "react-router-dom";
 import { TimeChart, type Series } from "../components/Charts";
 import { Modal } from "../components/Common";
-import { PlusIcon, TrashIcon } from "../components/Icons";
+import { PlusIcon, StarIcon, TrashIcon } from "../components/Icons";
 import { PageHeader } from "../components/Layout";
 import { TimePicker } from "../components/TimePicker";
 import {
@@ -31,17 +31,21 @@ import {
   type Dashboard,
   type DashQuery,
   type ScalarColumn,
+  type TemplatePreset,
   type TemplateVar,
   type Widget,
   type WidgetDef,
+  type WidgetLayout,
   type WidgetRequest,
 } from "../lib/api";
 import {
-  buildRequest,
   errorText,
   fmt,
   normalizeRequest,
+  NOT_PUBLIC,
   PALETTE,
+  runScalar,
+  runTimeseries,
   type Ctx,
   type Vars,
 } from "../lib/dash";
@@ -67,7 +71,7 @@ function TimeseriesWidget({
   ctx: Ctx;
   height: number;
 }) {
-  const { time, defs, vars } = ctx;
+  const { time, vars } = ctx;
   const requests = def.requests ?? [];
   const res = useQuery({
     queryKey: [
@@ -79,12 +83,7 @@ function TimeseriesWidget({
     ],
     queryFn: ({ signal }) =>
       Promise.all(
-        requests.map((r) =>
-          api.queryTimeseries(
-            buildRequest(r, defs, vars, time.from, time.to),
-            signal,
-          ),
-        ),
+        requests.map((r) => runTimeseries(r, ctx, time.from, time.to, signal)),
       ),
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,
@@ -172,7 +171,7 @@ function TimeseriesWidget({
 }
 
 function useScalar(def: WidgetDef, ctx: Ctx) {
-  const { time, defs, vars } = ctx;
+  const { time, vars } = ctx;
   const r = def.requests?.[0];
   return useQuery({
     queryKey: [
@@ -182,8 +181,7 @@ function useScalar(def: WidgetDef, ctx: Ctx) {
       time.from,
       time.to,
     ],
-    queryFn: ({ signal }) =>
-      api.queryScalar(buildRequest(r!, defs, vars, time.from, time.to), signal),
+    queryFn: ({ signal }) => runScalar(r!, ctx, time.from, time.to, signal),
     enabled: !!r,
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,
@@ -432,6 +430,12 @@ function WidgetBody({
   ctx: Ctx;
   height: number;
 }) {
+  if (ctx.remote && NOT_PUBLIC.includes(def.type))
+    return (
+      <div className="widget-empty">
+        This widget is not available on a public dashboard.
+      </div>
+    );
   switch (def.type) {
     case "timeseries":
       return <TimeseriesWidget def={def} ctx={ctx} height={height} />;
@@ -463,18 +467,101 @@ function place(l: Widget["layout"]) {
     : { gridColumn: "span 4", gridRow: "span 2" };
 }
 
-function WidgetCard({
+/** A free layout's grid: the size of a unit, and where moved or resized
+ * widgets go. */
+type Free = {
+  unit: number;
+  onLayout?: (w: Widget, l: WidgetLayout) => void;
+};
+
+/** Moving (from the title bar) and resizing (from the corner) a widget of a
+ * free layout, snapped to the grid's units. */
+function useFreeDrag(w: Widget, free?: Free) {
+  const [drag, setDrag] = useState<{
+    dx: number;
+    dy: number;
+    dw: number;
+    dh: number;
+  } | null>(null);
+  const start = (e: React.PointerEvent, mode: "move" | "resize") => {
+    if (!free?.onLayout || !w.layout || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button, input, select, a")) return;
+    e.preventDefault();
+    const [x0, y0] = [e.clientX, e.clientY];
+    const l = w.layout;
+    const u = free.unit;
+    let last = { dx: 0, dy: 0, dw: 0, dh: 0 };
+    const move = (ev: PointerEvent) => {
+      const dx = Math.round((ev.clientX - x0) / u);
+      const dy = Math.round((ev.clientY - y0) / u);
+      last =
+        mode === "move"
+          ? { dx: Math.max(-l.x, dx), dy: Math.max(-l.y, dy), dw: 0, dh: 0 }
+          : {
+              dx: 0,
+              dy: 0,
+              dw: Math.max(4 - l.width, dx),
+              dh: Math.max(4 - l.height, dy),
+            };
+      setDrag(last);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setDrag(null);
+      if (last.dx || last.dy || last.dw || last.dh)
+        free.onLayout?.(w, {
+          x: l.x + last.dx,
+          y: l.y + last.dy,
+          width: l.width + last.dw,
+          height: l.height + last.dh,
+        });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const l = w.layout ?? { x: 0, y: 0, width: 32, height: 16 };
+  const style = free
+    ? {
+        position: "absolute" as const,
+        left: (l.x + (drag?.dx ?? 0)) * free.unit,
+        top: (l.y + (drag?.dy ?? 0)) * free.unit,
+        width: (l.width + (drag?.dw ?? 0)) * free.unit - 8,
+        height: (l.height + (drag?.dh ?? 0)) * free.unit - 8,
+        zIndex: drag ? 5 : undefined,
+      }
+    : place(w.layout);
+  const bodyHeight = free
+    ? l.height * free.unit - 8 - 44
+    : (w.layout?.height ?? 2) * ROW + ((w.layout?.height ?? 2) - 1) * GAP - 44;
+  const editable = !!free?.onLayout;
+  return {
+    style,
+    bodyHeight,
+    onMove: editable ? (e: React.PointerEvent) => start(e, "move") : undefined,
+    handle: editable ? (
+      <div
+        className="widget-resize"
+        onPointerDown={(e) => start(e, "resize")}
+        title="Resize"
+      />
+    ) : null,
+  };
+}
+
+export function WidgetCard({
   w,
   ctx,
   actions,
+  free,
 }: {
   w: Widget;
   ctx: Ctx;
   actions?: Actions;
+  free?: Free;
 }) {
   const def = w.definition;
-  const h = w.layout?.height ?? 2;
-  const bodyHeight = h * ROW + (h - 1) * GAP - 44;
+  const { style, bodyHeight, onMove, handle } = useFreeDrag(w, free);
   const menu = actions && (
     <span className="widget-actions">
       <button className="btn ghost small" onClick={() => actions.edit(w)}>
@@ -495,9 +582,10 @@ function WidgetCard({
   if (def.type === "note")
     return (
       <div
-        className="widget widget-note"
+        className={`widget widget-note${onMove ? " movable" : ""}`}
+        onPointerDown={onMove}
         style={{
-          ...place(w.layout),
+          ...style,
           background:
             NOTE_COLORS[def.background_color ?? "white"] ??
             def.background_color,
@@ -507,12 +595,13 @@ function WidgetCard({
         <div className="widget-note-body">
           <Markdown text={def.content ?? ""} />
         </div>
+        {handle}
       </div>
     );
   if (def.type === "group")
     return (
-      <div className="widget widget-group" style={place(w.layout)}>
-        <div className="widget-title">
+      <div className="widget widget-group" style={style}>
+        <div className="widget-title" onPointerDown={onMove}>
           <span>{def.title}</span>
           {menu}
         </div>
@@ -521,21 +610,27 @@ function WidgetCard({
             <WidgetCard key={c.id ?? i} w={c} ctx={ctx} />
           ))}
         </div>
+        {handle}
       </div>
     );
   if (BARE_TYPES.includes(def.type))
     return (
       <div
-        className={`widget widget-bare${def.has_border === false ? " borderless" : ""}`}
-        style={place(w.layout)}
+        className={`widget widget-bare${def.has_border === false ? " borderless" : ""}${onMove ? " movable" : ""}`}
+        style={style}
+        onPointerDown={onMove}
       >
         {menu}
         <ExtraWidget def={def} ctx={ctx} height={bodyHeight + 44} />
+        {handle}
       </div>
     );
   return (
-    <div className="widget" style={place(w.layout)}>
-      <div className="widget-title">
+    <div className="widget" style={style}>
+      <div
+        className={`widget-title${onMove ? " movable" : ""}`}
+        onPointerDown={onMove}
+      >
         <span title={def.title}>
           {def.title || TYPE_NAMES[def.type] || def.type}
         </span>
@@ -544,6 +639,7 @@ function WidgetCard({
       <div className="widget-body">
         <WidgetBody def={def} ctx={ctx} height={bodyHeight} />
       </div>
+      {handle}
     </div>
   );
 }
@@ -1426,6 +1522,366 @@ function JsonModal({
   );
 }
 
+// --- free layout, sharing, saved views --------------------------------------------
+
+/** Free layouts are drawn on a grid of square units: as many columns as the
+ * widest widget reaches, at least 96 (12 columns of the ordered layout, 8
+ * units each). */
+export function FreeCanvas({
+  widgets,
+  ctx,
+  actions,
+  onLayout,
+}: {
+  widgets: Widget[];
+  ctx: Ctx;
+  actions?: Actions;
+  onLayout?: (w: Widget, l: WidgetLayout) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(1200);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  const cols = Math.max(
+    96,
+    ...widgets.map((w) => (w.layout ? w.layout.x + w.layout.width : 0)),
+  );
+  const unit = width / cols;
+  const rows = Math.max(
+    0,
+    ...widgets.map((w) => (w.layout ? w.layout.y + w.layout.height : 0)),
+  );
+  return (
+    <div ref={ref} className="dash-free" style={{ height: (rows + 4) * unit }}>
+      {widgets.map((w, i) => (
+        <WidgetCard
+          key={w.id ?? i}
+          w={w}
+          ctx={ctx}
+          actions={actions}
+          free={{ unit, onLayout }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Ordered layouts have 12 columns of 92 px rows; free ones square units of
+ * about 12 px. */
+const FREE_X = 8;
+const FREE_Y = 8;
+function toFree(widgets: Widget[]): Widget[] {
+  return widgets.map((w) => ({
+    ...w,
+    layout: w.layout && {
+      x: w.layout.x * FREE_X,
+      y: w.layout.y * FREE_Y,
+      width: w.layout.width * FREE_X,
+      height: w.layout.height * FREE_Y,
+    },
+  }));
+}
+function toOrdered(widgets: Widget[]): Widget[] {
+  return widgets.map((w) => {
+    if (!w.layout) return w;
+    const width = Math.min(
+      12,
+      Math.max(1, Math.round(w.layout.width / FREE_X)),
+    );
+    return {
+      ...w,
+      layout: {
+        x: Math.min(12 - width, Math.round(w.layout.x / FREE_X)),
+        y: Math.round(w.layout.y / FREE_Y),
+        width,
+        height: Math.max(1, Math.round(w.layout.height / FREE_Y)),
+      },
+    };
+  });
+}
+
+const SPANS: [string, string][] = [
+  ["15m", "Past 15 minutes"],
+  ["1h", "Past 1 hour"],
+  ["4h", "Past 4 hours"],
+  ["1d", "Past 1 day"],
+  ["2d", "Past 2 days"],
+  ["1w", "Past 1 week"],
+];
+
+function ShareModal({
+  dash,
+  onClose,
+}: {
+  dash: Dashboard;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const shares = useQuery({
+    queryKey: ["dashboard-shares", dash.id],
+    queryFn: () => api.dashboardShares(dash.id),
+  });
+  const [span, setSpan] = useState("1h");
+  const [timeSelectable, setTimeSelectable] = useState(true);
+  const [vars, setVars] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const refresh = () =>
+    qc.invalidateQueries({ queryKey: ["dashboard-shares", dash.id] });
+  const create = async () => {
+    setError(null);
+    try {
+      await api.shareDashboard({
+        dashboard_id: dash.id,
+        share_type: "open",
+        global_time: { live_span: span },
+        global_time_selectable_enabled: timeSelectable,
+        selectable_template_vars: (dash.template_variables ?? [])
+          .filter((v) => vars.includes(v.name))
+          .map((v) => ({
+            name: v.name,
+            prefix: v.prefix ?? null,
+            default_value: v.default ?? "*",
+            visible_tags: v.available_values ?? [],
+          })),
+      });
+      await refresh();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+  const hidden = dash.widgets.filter((w) =>
+    NOT_PUBLIC.includes(w.definition.type),
+  ).length;
+  return (
+    <Modal title="Share publicly" onClose={onClose} width={620}>
+      <div className="modal-body form">
+        <p className="muted" style={{ margin: 0 }}>
+          Anyone with the link sees this dashboard, read-only, without signing
+          in. Only the queries of its widgets run.
+          {hidden > 0 &&
+            ` ${hidden} widget${hidden > 1 ? "s" : ""} (lists, monitors, SLOs…) stay empty on the public page.`}
+        </p>
+        {(shares.data ?? []).map((s) => {
+          const url = s.public_url.startsWith("http")
+            ? s.public_url
+            : `${window.location.origin}${s.public_url}`;
+          return (
+            <div key={s.token} className="share-row">
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="mono ellipsis"
+              >
+                {url}
+              </a>
+              <span className="faint">
+                {s.global_time.live_span}
+                {s.global_time_selectable_enabled ? ", time selectable" : ""}
+                {s.selectable_template_vars.length
+                  ? `, ${s.selectable_template_vars.map((v) => `$${v.name}`).join(" ")}`
+                  : ""}
+              </span>
+              <button
+                className="btn small"
+                onClick={() => void navigator.clipboard?.writeText(url)}
+              >
+                Copy
+              </button>
+              <button
+                className="btn small"
+                onClick={async () => {
+                  await api.revokeDashboardShare(s.token);
+                  await refresh();
+                }}
+              >
+                Revoke
+              </button>
+            </div>
+          );
+        })}
+        <div className="form-row">
+          <label className="form-field" style={{ flex: "0 0 200px" }}>
+            <span className="form-label">Default time frame</span>
+            <select
+              className="input"
+              value={span}
+              onChange={(e) => setSpan(e.target.value)}
+            >
+              {SPANS.map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-check" style={{ alignSelf: "flex-end" }}>
+            <input
+              type="checkbox"
+              checked={timeSelectable}
+              onChange={(e) => setTimeSelectable(e.target.checked)}
+            />{" "}
+            Viewers can change the time frame
+          </label>
+        </div>
+        {(dash.template_variables ?? []).length > 0 && (
+          <div>
+            <div className="form-label">Variables viewers can change</div>
+            {dash.template_variables.map((v) => (
+              <label
+                key={v.name}
+                className="form-check"
+                style={{ marginRight: 12 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={vars.includes(v.name)}
+                  onChange={(e) =>
+                    setVars(
+                      e.target.checked
+                        ? [...vars, v.name]
+                        : vars.filter((x) => x !== v.name),
+                    )
+                  }
+                />{" "}
+                ${v.name}
+              </label>
+            ))}
+          </div>
+        )}
+        {error && <div className="error-text">{error}</div>}
+      </div>
+      <div className="modal-footer">
+        <button className="btn" onClick={onClose}>
+          Close
+        </button>
+        <button className="btn primary" onClick={create}>
+          Create a public link
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Saved views: named values of the template variables
+ * (`template_variable_presets`). */
+function SavedViews({
+  dash,
+  vars,
+  apply,
+  save,
+}: {
+  dash: Dashboard;
+  vars: Vars;
+  apply: (v: Vars) => void;
+  save: (presets: TemplatePreset[]) => Promise<void>;
+}) {
+  const presets = (dash.template_variable_presets ?? []) as TemplatePreset[];
+  const [naming, setNaming] = useState<string | null>(null);
+  const current = presets.find((p) =>
+    (dash.template_variables ?? []).every((d) => {
+      const pv = p.template_variables.find((t) => t.name === d.name);
+      const value = pv?.value ?? pv?.values?.[0] ?? d.default ?? "*";
+      return value === vars[d.name];
+    }),
+  );
+  if (!(dash.template_variables ?? []).length) return null;
+  if (naming !== null)
+    return (
+      <span className="saved-views">
+        <input
+          className="input small"
+          autoFocus
+          placeholder="View name"
+          value={naming}
+          onChange={(e) => setNaming(e.target.value)}
+          onKeyDown={async (e) => {
+            if (e.key === "Escape") setNaming(null);
+            if (e.key !== "Enter" || !naming.trim()) return;
+            const view: TemplatePreset = {
+              name: naming.trim(),
+              template_variables: Object.entries(vars).map(([name, value]) => ({
+                name,
+                value,
+              })),
+            };
+            await save([
+              ...presets.filter((p) => p.name !== view.name),
+              view,
+            ]).catch(() => {});
+            setNaming(null);
+          }}
+        />
+        <button className="btn ghost small" onClick={() => setNaming(null)}>
+          Cancel
+        </button>
+      </span>
+    );
+  return (
+    <span className="saved-views">
+      <select
+        className="input small"
+        value={current?.name ?? ""}
+        onChange={(e) => {
+          const p = presets.find((x) => x.name === e.target.value);
+          if (!p) {
+            apply(
+              Object.fromEntries(
+                (dash.template_variables ?? []).map((d) => [
+                  d.name,
+                  d.default ?? "*",
+                ]),
+              ),
+            );
+            return;
+          }
+          apply(
+            Object.fromEntries(
+              (dash.template_variables ?? []).map((d) => {
+                const pv = p.template_variables.find((t) => t.name === d.name);
+                return [
+                  d.name,
+                  pv?.value ?? pv?.values?.[0] ?? d.default ?? "*",
+                ];
+              }),
+            ),
+          );
+        }}
+      >
+        <option value="">Default view</option>
+        {presets.map((p) => (
+          <option key={p.name} value={p.name}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <button
+        className="btn ghost small"
+        onClick={() => setNaming(current?.name ?? "")}
+      >
+        Save view
+      </button>
+      {current && (
+        <button
+          className="btn ghost small"
+          title={`Delete the view ${current.name}`}
+          onClick={() =>
+            void save(presets.filter((p) => p !== current)).catch(() => {})
+          }
+        >
+          <TrashIcon />
+        </button>
+      )}
+    </span>
+  );
+}
+
 export function DashboardPage() {
   const { id } = useParams();
   const qc = useQueryClient();
@@ -1440,7 +1896,11 @@ export function DashboardPage() {
     widget: Widget;
     index: number | null;
   } | null>(null);
-  const [modal, setModal] = useState<"json" | "vars" | null>(null);
+  const [modal, setModal] = useState<"json" | "vars" | "share" | null>(null);
+  const favorites = useQuery({
+    queryKey: ["dashboard-favorites"],
+    queryFn: api.dashboardFavorites,
+  });
   const [title, setTitle] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const d = dash.data;
@@ -1474,6 +1934,20 @@ export function DashboardPage() {
     0,
     ...d.widgets.map((w) => (w.layout ? w.layout.y + w.layout.height : 0)),
   );
+  const free = d.layout_type === "free";
+  /** A new widget, sized for the layout. */
+  const fresh = (type: string) => {
+    if (!free) return blankWidget(type, nextRow);
+    const [b] = toFree([blankWidget(type, 0)]);
+    return { ...b, layout: b.layout && { ...b.layout, y: nextRow } };
+  };
+  const starred = favorites.data?.includes(d.id) ?? false;
+  const setVars = (v: Vars) =>
+    setParams((prev) => {
+      const p = new URLSearchParams(prev);
+      for (const [k, value] of Object.entries(v)) p.set(`tpl_var_${k}`, value);
+      return p;
+    });
   const actions: Actions = {
     edit: (w) => setEditing({ widget: w, index: d.widgets.indexOf(w) }),
     clone: (w) => {
@@ -1525,6 +1999,40 @@ export function DashboardPage() {
           )
         }
       >
+        <button
+          className={`btn ghost star${starred ? " on" : ""}`}
+          title={starred ? "Remove from favorites" : "Add to favorites"}
+          onClick={async () => {
+            await api.setDashboardFavorite(d.id, !starred);
+            await qc.invalidateQueries({ queryKey: ["dashboard-favorites"] });
+          }}
+        >
+          <StarIcon filled={starred} width={16} height={16} />
+        </button>
+        <select
+          className="input"
+          style={{ width: 130 }}
+          title="Layout"
+          value={d.layout_type}
+          onChange={(e) => {
+            const layout_type = e.target.value;
+            if (layout_type === d.layout_type) return;
+            save({
+              ...d,
+              layout_type,
+              widgets:
+                layout_type === "free"
+                  ? toFree(d.widgets)
+                  : toOrdered(d.widgets),
+            }).catch(() => {});
+          }}
+        >
+          <option value="ordered">Grid layout</option>
+          <option value="free">Free layout</option>
+        </select>
+        <button className="btn" onClick={() => setModal("share")}>
+          Share
+        </button>
         <button className="btn" onClick={() => setModal("json")}>
           JSON
         </button>
@@ -1571,6 +2079,14 @@ export function DashboardPage() {
         <button className="btn ghost small" onClick={() => setModal("vars")}>
           {defs.length ? "Edit variables" : "+ Add variables"}
         </button>
+        <SavedViews
+          dash={d}
+          vars={vars}
+          apply={setVars}
+          save={(template_variable_presets) =>
+            save({ ...d, template_variable_presets })
+          }
+        />
         <div className="spacer" />
         {error && <span className="error-text">{error}</span>}
         <span className="muted">{d.description}</span>
@@ -1578,7 +2094,7 @@ export function DashboardPage() {
           className="btn primary small"
           onClick={() =>
             setEditing({
-              widget: blankWidget("timeseries", nextRow),
+              widget: fresh("timeseries"),
               index: null,
             })
           }
@@ -1587,11 +2103,25 @@ export function DashboardPage() {
         </button>
       </div>
       <div className="page-scroll dash-scroll">
-        <div className="dash-grid">
-          {d.widgets.map((w, i) => (
-            <WidgetCard key={w.id ?? i} w={w} ctx={ctx} actions={actions} />
-          ))}
-        </div>
+        {free ? (
+          <FreeCanvas
+            widgets={d.widgets}
+            ctx={ctx}
+            actions={actions}
+            onLayout={(w, layout) =>
+              save({
+                ...d,
+                widgets: d.widgets.map((x) => (x === w ? { ...x, layout } : x)),
+              }).catch(() => {})
+            }
+          />
+        ) : (
+          <div className="dash-grid">
+            {d.widgets.map((w, i) => (
+              <WidgetCard key={w.id ?? i} w={w} ctx={ctx} actions={actions} />
+            ))}
+          </div>
+        )}
         {!d.widgets.length && (
           <div className="empty-state">
             <h3>This dashboard is empty</h3>
@@ -1599,7 +2129,7 @@ export function DashboardPage() {
               className="btn primary"
               onClick={() =>
                 setEditing({
-                  widget: blankWidget("timeseries", 0),
+                  widget: fresh("timeseries"),
                   index: null,
                 })
               }
@@ -1626,6 +2156,9 @@ export function DashboardPage() {
           }}
         />
       )}
+      {modal === "share" && (
+        <ShareModal dash={d} onClose={() => setModal(null)} />
+      )}
       {modal === "json" && (
         <JsonModal dash={d} onSave={save} onClose={() => setModal(null)} />
       )}
@@ -1649,12 +2182,48 @@ export function DashboardPage() {
 
 export function DashboardList() {
   const list = useQuery({ queryKey: ["dashboards"], queryFn: api.dashboards });
+  const lists = useQuery({
+    queryKey: ["dashboard-lists"],
+    queryFn: api.dashboardLists,
+  });
+  const favorites = useQuery({
+    queryKey: ["dashboard-favorites"],
+    queryFn: api.dashboardFavorites,
+  });
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [params, setParams] = useSearchParams();
   const [text, setText] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [naming, setNaming] = useState<string | null>(null);
+  const filter = params.get("list") ?? "all";
+  const favs = favorites.data ?? [];
+  const current = (lists.data ?? []).find((l) => String(l.id) === filter);
+  const inFilter = (id: string) =>
+    filter === "all"
+      ? true
+      : filter === "favorites"
+        ? favs.includes(id)
+        : (current?.dashboard_ids.includes(id) ?? false);
   const rows = (list.data?.dashboards ?? [])
+    .filter((d) => inFilter(d.id))
     .filter((d) => !text || d.title.toLowerCase().includes(text.toLowerCase()))
-    .sort((a, b) => b.modified_at.localeCompare(a.modified_at));
+    .sort(
+      (a, b) =>
+        Number(favs.includes(b.id)) - Number(favs.includes(a.id)) ||
+        b.modified_at.localeCompare(a.modified_at),
+    );
+  const refreshLists = () =>
+    qc.invalidateQueries({ queryKey: ["dashboard-lists"] });
+  const choose = (f: string) => {
+    setPicked([]);
+    setParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (f === "all") p.delete("list");
+      else p.set("list", f);
+      return p;
+    });
+  };
   return (
     <>
       <PageHeader
@@ -1677,57 +2246,220 @@ export function DashboardList() {
           <PlusIcon /> New Dashboard
         </button>
       </PageHeader>
-      <div className="page-scroll page-padding">
-        <input
-          className="input"
-          style={{ width: 320, marginBottom: 12 }}
-          placeholder="Search dashboards"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <div className="card" style={{ padding: 0 }}>
-          <table className="list">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th style={{ width: 110 }} className="num">
-                  Widgets
-                </th>
-                <th style={{ width: 160 }}>Modified</th>
-                <th style={{ width: 160 }}>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((d) => (
-                <tr
-                  key={d.id}
-                  style={{ cursor: "pointer" }}
-                  onClick={() =>
-                    navigate(`/dashboard/${d.id}/${slug(d.title)}`)
-                  }
-                >
-                  <td>
-                    <Link
-                      to={`/dashboard/${d.id}/${slug(d.title)}`}
-                      className="dash-link"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {d.title}
-                    </Link>
-                    {d.description && (
-                      <div className="muted ellipsis">{d.description}</div>
-                    )}
-                  </td>
-                  <td className="num">{d.widget_count}</td>
-                  <td className="muted">{ago(Date.parse(d.modified_at))}</td>
-                  <td className="muted">{ago(Date.parse(d.created_at))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {list.data && !rows.length && (
-            <div className="empty-state">No dashboard.</div>
+      <div className="page-scroll page-padding dash-list-page">
+        <aside className="dash-lists">
+          <button
+            className={`dash-list-item${filter === "all" ? " active" : ""}`}
+            onClick={() => choose("all")}
+          >
+            All dashboards
+            <span className="faint">{list.data?.dashboards.length ?? ""}</span>
+          </button>
+          <button
+            className={`dash-list-item${filter === "favorites" ? " active" : ""}`}
+            onClick={() => choose("favorites")}
+          >
+            <StarIcon width={13} height={13} /> Favorites
+            <span className="faint">{favs.length}</span>
+          </button>
+          <div className="dash-lists-title">Lists</div>
+          {(lists.data ?? []).map((l) => (
+            <button
+              key={l.id}
+              className={`dash-list-item${filter === String(l.id) ? " active" : ""}`}
+              onClick={() => choose(String(l.id))}
+            >
+              <span className="ellipsis">{l.name}</span>
+              <span className="faint">{l.dashboard_count}</span>
+            </button>
+          ))}
+          {naming !== null ? (
+            <input
+              className="input small"
+              autoFocus
+              placeholder="List name"
+              value={naming}
+              onChange={(e) => setNaming(e.target.value)}
+              onBlur={() => setNaming(null)}
+              onKeyDown={async (e) => {
+                if (e.key === "Escape") setNaming(null);
+                if (e.key !== "Enter" || !naming.trim()) return;
+                const l = await api.createDashboardList(naming.trim());
+                setNaming(null);
+                await refreshLists();
+                choose(String(l.id));
+              }}
+            />
+          ) : (
+            <button className="btn ghost small" onClick={() => setNaming("")}>
+              <PlusIcon /> New list
+            </button>
           )}
+        </aside>
+        <div className="dash-list-main">
+          <div className="dash-list-toolbar">
+            <input
+              className="input"
+              style={{ width: 320 }}
+              placeholder="Search dashboards"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+            {picked.length > 0 && (lists.data ?? []).length > 0 && (
+              <select
+                className="input"
+                style={{ width: 220 }}
+                value=""
+                onChange={async (e) => {
+                  await api.addToDashboardList(Number(e.target.value), picked);
+                  setPicked([]);
+                  await refreshLists();
+                }}
+              >
+                <option value="">Add {picked.length} to a list…</option>
+                {(lists.data ?? []).map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {picked.length > 0 && current && (
+              <button
+                className="btn"
+                onClick={async () => {
+                  await api.removeFromDashboardList(current.id, picked);
+                  setPicked([]);
+                  await refreshLists();
+                }}
+              >
+                Remove {picked.length} from {current.name}
+              </button>
+            )}
+            <div className="spacer" />
+            {current && (
+              <>
+                <button
+                  className="btn small"
+                  onClick={async () => {
+                    const name = window.prompt("Rename the list", current.name);
+                    if (!name?.trim()) return;
+                    await api.renameDashboardList(current.id, name.trim());
+                    await refreshLists();
+                  }}
+                >
+                  Rename list
+                </button>
+                <button
+                  className="btn small"
+                  title="Delete the list (not its dashboards)"
+                  onClick={async () => {
+                    if (!window.confirm(`Delete the list "${current.name}"?`))
+                      return;
+                    await api.deleteDashboardList(current.id);
+                    choose("all");
+                    await refreshLists();
+                  }}
+                >
+                  <TrashIcon />
+                </button>
+              </>
+            )}
+          </div>
+          <div className="card" style={{ padding: 0 }}>
+            <table className="list">
+              <thead>
+                <tr>
+                  <th style={{ width: 28 }}>
+                    <input
+                      type="checkbox"
+                      checked={rows.length > 0 && picked.length === rows.length}
+                      onChange={(e) =>
+                        setPicked(e.target.checked ? rows.map((r) => r.id) : [])
+                      }
+                    />
+                  </th>
+                  <th style={{ width: 28 }} />
+                  <th>Name</th>
+                  <th style={{ width: 110 }} className="num">
+                    Widgets
+                  </th>
+                  <th style={{ width: 160 }}>Modified</th>
+                  <th style={{ width: 160 }}>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((d) => {
+                  const starred = favs.includes(d.id);
+                  return (
+                    <tr
+                      key={d.id}
+                      style={{ cursor: "pointer" }}
+                      onClick={() =>
+                        navigate(`/dashboard/${d.id}/${slug(d.title)}`)
+                      }
+                    >
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={picked.includes(d.id)}
+                          onChange={(e) =>
+                            setPicked(
+                              e.target.checked
+                                ? [...picked, d.id]
+                                : picked.filter((x) => x !== d.id),
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        <button
+                          className={`btn ghost small star${starred ? " on" : ""}`}
+                          title={
+                            starred
+                              ? "Remove from favorites"
+                              : "Add to favorites"
+                          }
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await api.setDashboardFavorite(d.id, !starred);
+                            await qc.invalidateQueries({
+                              queryKey: ["dashboard-favorites"],
+                            });
+                          }}
+                        >
+                          <StarIcon filled={starred} width={14} height={14} />
+                        </button>
+                      </td>
+                      <td>
+                        <Link
+                          to={`/dashboard/${d.id}/${slug(d.title)}`}
+                          className="dash-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {d.title}
+                        </Link>
+                        {d.layout_type === "free" && (
+                          <span className="faint"> · free layout</span>
+                        )}
+                        {d.description && (
+                          <div className="muted ellipsis">{d.description}</div>
+                        )}
+                      </td>
+                      <td className="num">{d.widget_count}</td>
+                      <td className="muted">
+                        {ago(Date.parse(d.modified_at))}
+                      </td>
+                      <td className="muted">{ago(Date.parse(d.created_at))}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {list.data && !rows.length && (
+              <div className="empty-state">No dashboard.</div>
+            )}
+          </div>
         </div>
       </div>
     </>

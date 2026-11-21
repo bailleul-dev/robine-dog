@@ -59,7 +59,7 @@ fn present(d: &Doc) -> Value {
     body
 }
 
-fn summary(d: &Doc) -> Value {
+pub fn summary(d: &Doc) -> Value {
     let full = present(d);
     json!({
         "id": full["id"],
@@ -172,6 +172,26 @@ pub async fn update(
 pub async fn delete(State(st): State<AppState>, Path(id): Path<String>) -> ApiResult<Value> {
     if !st.store.pg.delete_doc(KIND, &id).await? {
         return Err(ApiError::NotFound);
+    }
+    // Its public links stop working, and it leaves the lists.
+    for share in st.store.pg.docs(super::shared_dashboards::KIND).await? {
+        if share.body["dashboard_id"] == id.as_str() {
+            st.store
+                .pg
+                .delete_doc(super::shared_dashboards::KIND, &share.id)
+                .await?;
+        }
+    }
+    for mut list in st.store.pg.docs(super::dashboard_lists::KIND).await? {
+        if let Some(ids) = list.body["dashboards"].as_array_mut()
+            && ids.iter().any(|i| i == id.as_str())
+        {
+            ids.retain(|i| i != id.as_str());
+            st.store
+                .pg
+                .put_doc(super::dashboard_lists::KIND, &list.id, &list.body)
+                .await?;
+        }
     }
     Ok(Json(json!({"deleted_dashboard_id": id})))
 }

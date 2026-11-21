@@ -455,6 +455,40 @@ export type Dashboard = {
   modified_at: string;
   [k: string]: unknown;
 };
+export type TemplatePreset = {
+  name: string;
+  template_variables: { name: string; value?: string; values?: string[] }[];
+};
+export type DashboardListInfo = {
+  id: number;
+  name: string;
+  dashboard_count: number;
+  dashboard_ids: string[];
+  modified: string;
+};
+export type DashboardShare = {
+  token: string;
+  dashboard_id: string;
+  public_url: string;
+  created: string;
+  share_type: string;
+  global_time: { live_span: string };
+  global_time_selectable_enabled: boolean;
+  selectable_template_vars: {
+    name: string;
+    prefix?: string | null;
+    default_value?: string;
+    visible_tags?: string[];
+  }[];
+};
+export type PublicDashboard = Pick<
+  Dashboard,
+  "title" | "description" | "layout_type" | "widgets" | "template_variables"
+> & {
+  global_time: { live_span: string };
+  global_time_selectable_enabled: boolean;
+  selectable_template_vars: DashboardShare["selectable_template_vars"];
+};
 export type DashboardSummary = Pick<
   Dashboard,
   | "id"
@@ -914,6 +948,34 @@ export const api = {
   deleteDashboard: (id: string) => del<unknown>(`/dashboards/${id}`),
   cloneDashboard: (id: string) =>
     post<Dashboard>(`/dashboards/${id}/clone`, {}),
+  dashboardLists: () => call<DashboardListInfo[]>("/dashboard-lists"),
+  createDashboardList: (name: string) =>
+    post<DashboardListInfo>("/dashboard-lists", { name }),
+  renameDashboardList: (id: number, name: string) =>
+    put<DashboardListInfo>(`/dashboard-lists/${id}`, { name }),
+  deleteDashboardList: (id: number) => del<unknown>(`/dashboard-lists/${id}`),
+  addToDashboardList: (id: number, dashboards: string[]) =>
+    post<unknown>(`/dashboard-lists/${id}/dashboards`, {
+      dashboards: dashboards.map((d) => ({ id: d })),
+    }),
+  removeFromDashboardList: (id: number, dashboards: string[]) =>
+    call<unknown>(`/dashboard-lists/${id}/dashboards`, {
+      method: "DELETE",
+      body: JSON.stringify({ dashboards: dashboards.map((d) => ({ id: d })) }),
+    }),
+  dashboardFavorites: () => call<string[]>("/dashboard-favorites"),
+  setDashboardFavorite: (id: string, on: boolean) =>
+    call<string[]>(`/dashboards/${id}/favorite`, {
+      method: on ? "PUT" : "DELETE",
+    }),
+  dashboardShares: (id: string) =>
+    call<DashboardShare[]>(`/dashboards/${id}/shares`),
+  shareDashboard: (body: Partial<DashboardShare>) =>
+    post<DashboardShare>("/dashboard-shares", body),
+  updateDashboardShare: (token: string, body: Partial<DashboardShare>) =>
+    put<DashboardShare>(`/dashboard-shares/${token}`, body),
+  revokeDashboardShare: (token: string) =>
+    del<unknown>(`/dashboard-shares/${token}`),
   queryTimeseries: (r: QueryRequest, signal?: AbortSignal) =>
     post<TimeseriesResponse>("/query/timeseries", r, signal),
   queryScalar: (r: QueryRequest, signal?: AbortSignal) =>
@@ -1047,4 +1109,45 @@ export const api = {
       { grok, samples },
       signal,
     ),
+};
+
+/** The read-only side of a public dashboard link, without a session. */
+async function publicCall<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`/api/public/dashboard/${path}`, {
+    ...init,
+    headers: { "content-type": "application/json" },
+    credentials: "omit",
+  });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try {
+      msg = (await res.json()).error ?? msg;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, msg);
+  }
+  return res.json();
+}
+
+export const publicApi = {
+  dashboard: (token: string) =>
+    publicCall<PublicDashboard>(encodeURIComponent(token)),
+  query: <T>(
+    token: string,
+    body: {
+      widget_id: number;
+      request: number;
+      from: number;
+      to: number;
+      scalar: boolean;
+      vars: Record<string, string>;
+    },
+    signal?: AbortSignal,
+  ) =>
+    publicCall<T>(`${encodeURIComponent(token)}/query`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal,
+    }),
 };

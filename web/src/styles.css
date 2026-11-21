@@ -4212,3 +4212,130 @@ table.list td.infra-bad {
   white-space: pre-wrap;
   overflow: hidden;
 }
+
+/* --- dashboard layouts, lists, sharing --- */
+.dash-free {
+  position: relative;
+}
+.movable {
+  cursor: grab;
+}
+.widget-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    var(--border-strong) 50%
+  );
+  z-index: 3;
+  opacity: 0;
+}
+.widget:hover > .widget-resize {
+  opacity: 1;
+}
+.star {
+  color: var(--text-faint);
+}
+.star.on {
+  color: var(--orange);
+}
+.saved-views {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.saved-views .input {
+  width: 160px;
+}
+.share-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.dash-list-page {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+.dash-lists {
+  flex: 0 0 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dash-lists-title {
+  margin: 12px 8px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.dash-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.dash-list-item:hover {
+  background: var(--bg-hover);
+}
+.dash-list-item.active {
+  background: var(--bg-selected);
+  font-weight: 600;
+}
+.dash-list-item .faint {
+  margin-left: auto;
+}
+.dash-list-main {
+  flex: 1;
+  min-width: 0;
+}
+.dash-list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.shared-dash {
+  min-height: 100vh;
+  background: var(--bg-subtle);
+}
+.shared-dash-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.shared-dash-header h1 {
+  font-size: 18px;
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .dash-list-page {
+    flex-direction: column;
+  }
+  .dash-lists {
+    flex: none;
+    width: 100%;
+  }
+  .shared-dash-header {
+    flex-wrap: wrap;
+  }
+}

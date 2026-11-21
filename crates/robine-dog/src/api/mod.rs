@@ -2,6 +2,7 @@
 
 pub mod analytics;
 pub mod apm;
+pub mod dashboard_lists;
 pub mod dashboards;
 pub mod datadog;
 pub mod downtimes;
@@ -17,6 +18,7 @@ pub mod notebooks;
 pub mod patterns;
 pub mod pipelines;
 pub mod query;
+pub mod shared_dashboards;
 pub mod slos;
 pub mod spans;
 pub mod views;

@@ -7,7 +7,7 @@ import { RumAnalytics, RumPerformancePage, RumSessions } from "./pages/Rum";
 import { SloPage, Slos } from "./pages/Slos";
 import { Synthetics } from "./pages/Synthetics";
 import { Downtimes } from "./pages/Downtimes";
-import { Containers, Hosts, Kubernetes } from "./pages/Infrastructure";
+import { Containers, HostMap, Hosts, Kubernetes } from "./pages/Infrastructure";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -26,6 +26,7 @@ import { GenerateMetrics } from "./pages/GenerateMetrics";
 import { Pipelines } from "./pages/Pipelines";
 import { ServiceMap } from "./pages/ServiceMap";
 import { TraceExplorer } from "./pages/TraceExplorer";
+import { SharedDashboard } from "./pages/SharedDashboard";
 import "./styles.css";
 
 const client = new QueryClient({
@@ -125,6 +126,7 @@ function App() {
         <Route path="/notebook/list" element={<NotebookList />} />
         <Route path="/notebook/:id" element={<NotebookPage />} />
         <Route path="/infrastructure" element={<Hosts />} />
+        <Route path="/infrastructure/map" element={<HostMap />} />
         <Route path="/containers" element={<Containers />} />
         <Route path="/orchestration" element={<Navigate to="/orchestration/overview/pod" replace />} />
         {["pod", "deployment", "statefulset", "daemonset", "node", "namespace"].map((k) => (
@@ -144,7 +146,11 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={client}>
       <BrowserRouter>
-        <App />
+        <Routes>
+          {/* Public dashboard links: no session. */}
+          <Route path="/p/:token" element={<SharedDashboard />} />
+          <Route path="*" element={<App />} />
+        </Routes>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

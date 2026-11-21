@@ -255,3 +255,9 @@ export const CollapseIcon = (p: P) => (
     <path d="m11 7-5 5 5 5M18 7l-5 5 5 5" />
   </svg>
 );
+
+export const StarIcon = ({ filled, ...p }: P & { filled?: boolean }) => (
+  <svg {...base} {...p} fill={filled ? "currentColor" : "none"}>
+    <path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
+  </svg>
+);

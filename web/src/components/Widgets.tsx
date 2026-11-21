@@ -21,6 +21,8 @@ import {
   fmt,
   normalizeRequest,
   PALETTE,
+  runScalar,
+  runTimeseries,
   type Ctx,
 } from "../lib/dash";
 import {
@@ -85,7 +87,7 @@ function table(res: ScalarResponse): Row[] {
 }
 
 function useScalar(r: WidgetRequest | undefined, ctx: Ctx, shiftMs = 0) {
-  const { time, defs, vars } = ctx;
+  const { time, vars } = ctx;
   return useQuery({
     queryKey: [
       "w-scalar",
@@ -96,10 +98,7 @@ function useScalar(r: WidgetRequest | undefined, ctx: Ctx, shiftMs = 0) {
       shiftMs,
     ],
     queryFn: ({ signal }) =>
-      api.queryScalar(
-        buildRequest(r!, defs, vars, time.from - shiftMs, time.to - shiftMs),
-        signal,
-      ),
+      runScalar(r!, ctx, time.from - shiftMs, time.to - shiftMs, signal),
     enabled: !!r,
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,
@@ -107,7 +106,7 @@ function useScalar(r: WidgetRequest | undefined, ctx: Ctx, shiftMs = 0) {
 }
 
 function useTimeseries(r: WidgetRequest | undefined, ctx: Ctx) {
-  const { time, defs, vars } = ctx;
+  const { time, vars } = ctx;
   return useQuery({
     queryKey: [
       "w-ts",
@@ -116,11 +115,7 @@ function useTimeseries(r: WidgetRequest | undefined, ctx: Ctx) {
       time.from,
       time.to,
     ],
-    queryFn: ({ signal }) =>
-      api.queryTimeseries(
-        buildRequest(r!, defs, vars, time.from, time.to),
-        signal,
-      ),
+    queryFn: ({ signal }) => runTimeseries(r!, ctx, time.from, time.to, signal),
     enabled: !!r,
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,

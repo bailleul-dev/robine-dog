@@ -1,9 +1,12 @@
 import {
+  api,
   ApiError,
   type DashFormula,
   type DashQuery,
   type QueryRequest,
+  type ScalarResponse,
   type TemplateVar,
+  type TimeseriesResponse,
   type WidgetRequest,
 } from "./api";
 import { compact } from "./format";
@@ -118,4 +121,64 @@ export function buildRequest(
   };
 }
 
-export type Ctx = { time: TimeRange; defs: TemplateVar[]; vars: Vars };
+/** Where a widget's queries run when not through the query API: the
+ * public dashboard links, which only run the requests stored in them. */
+export type Remote = {
+  run: <T>(
+    r: WidgetRequest,
+    from: number,
+    to: number,
+    scalar: boolean,
+    signal?: AbortSignal,
+  ) => Promise<T>;
+};
+
+export type Ctx = {
+  time: TimeRange;
+  defs: TemplateVar[];
+  vars: Vars;
+  remote?: Remote;
+};
+
+export const runTimeseries = (
+  r: WidgetRequest,
+  ctx: Ctx,
+  from: number,
+  to: number,
+  signal?: AbortSignal,
+) =>
+  ctx.remote
+    ? ctx.remote.run<TimeseriesResponse>(r, from, to, false, signal)
+    : api.queryTimeseries(
+        buildRequest(r, ctx.defs, ctx.vars, from, to),
+        signal,
+      );
+
+export const runScalar = (
+  r: WidgetRequest,
+  ctx: Ctx,
+  from: number,
+  to: number,
+  signal?: AbortSignal,
+) =>
+  ctx.remote
+    ? ctx.remote.run<ScalarResponse>(r, from, to, true, signal)
+    : api.queryScalar(buildRequest(r, ctx.defs, ctx.vars, from, to), signal);
+
+/** The widgets that read something else than the stored requests. */
+export const NOT_PUBLIC = [
+  "distribution",
+  "scatterplot",
+  "hostmap",
+  "list_stream",
+  "event_stream",
+  "event_timeline",
+  "slo",
+  "manage_status",
+  "alert_graph",
+  "alert_value",
+  "check_status",
+  "trace_service",
+  "funnel",
+  "split_graph",
+];

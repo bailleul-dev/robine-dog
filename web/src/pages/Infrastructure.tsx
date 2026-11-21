@@ -1,11 +1,14 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { TimeChart, type Series } from "../components/Charts";
 import { SidePanel } from "../components/Common";
 import { PageHeader } from "../components/Layout";
+import { TimePicker } from "../components/TimePicker";
+import { HostMapView } from "../components/Widgets";
 import { api, type HostInfo } from "../lib/api";
 import { formatValue } from "../lib/metrics";
+import { useTimeRange } from "../lib/time";
 import { lines } from "./Metrics";
 
 /**
@@ -358,7 +361,14 @@ function ResourceTable({ view, hosts }: { view: View; hosts?: HostInfo[] }) {
   const q = useRows(view);
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<{ col: number; desc: boolean }>({ col: -1, desc: false });
+  const [params] = useSearchParams();
+  // `?host=`: from the host map, that host's panel.
+  const wanted = params.get("host");
   const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => {
+    const row = wanted && q.data?.rows.find((r) => r.group.host === wanted);
+    if (row) setSelected(row.key);
+  }, [wanted, q.data]);
   const infoTags = view.info?.tags ?? [];
   const text = [...view.by].reverse();
 
@@ -465,6 +475,7 @@ function ResourceTable({ view, hosts }: { view: View; hosts?: HostInfo[] }) {
 
 const INFRA_TABS = [
   { to: "/infrastructure", label: "Hosts", end: true },
+  { to: "/infrastructure/map", label: "Host Map" },
   { to: "/containers", label: "Containers" },
   { to: "/orchestration/overview/pod", label: "Kubernetes" },
 ];
@@ -475,6 +486,96 @@ export function Hosts() {
     <>
       <PageHeader title="Infrastructure" tabs={INFRA_TABS} />
       <ResourceTable view={HOSTS} hosts={hosts.data} />
+    </>
+  );
+}
+
+const FILLS: [string, string][] = [
+  ["avg:system.cpu.user{*}", "CPU user %"],
+  ["avg:system.load.norm.1{*}", "Load (normalized)"],
+  ["avg:system.mem.pct_usable{*}", "Usable memory %"],
+  ["avg:system.disk.in_use{*}", "Disk in use"],
+  ["avg:system.net.bytes_rcvd{*}", "Network in"],
+];
+
+/** Hosts as tiles colored by a metric, grouped by tags, like Datadog's
+ * Host Map. */
+export function HostMap() {
+  const time = useTimeRange("15m", 60_000);
+  const hosts = useQuery({ queryKey: ["hosts"], queryFn: api.hosts });
+  const [params, setParams] = useSearchParams();
+  const fill = params.get("fill") ?? FILLS[0][0];
+  const group = (params.get("group") ?? "").split(",").filter(Boolean);
+  const filter = params.get("filter") ?? "";
+  const keys = useMemo(
+    () => [...new Set((hosts.data ?? []).flatMap((h) => h.tags.map((t) => t.split(":")[0])))].sort(),
+    [hosts.data],
+  );
+  const set = (k: string, v: string) =>
+    setParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (v) p.set(k, v);
+      else p.delete(k);
+      return p;
+    });
+  const scoped = filter.trim()
+    ? fill.replace(/\{\*\}/, `{${filter.split(/[\s,]+/).filter(Boolean).join(",")}}`)
+    : fill;
+  return (
+    <>
+      <PageHeader title="Infrastructure" tabs={INFRA_TABS}>
+        <TimePicker time={time} allowLive={false} />
+      </PageHeader>
+      <div className="filters-row">
+        <label className="tvar">
+          <span className="tvar-name">Fill by</span>
+          <select className="input small" value={fill} onChange={(e) => set("fill", e.target.value)}>
+            {FILLS.some(([q]) => q === fill) ? null : <option value={fill}>{fill}</option>}
+            {FILLS.map(([q, label]) => (
+              <option key={q} value={q}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="tvar">
+          <span className="tvar-name">Filter</span>
+          <input
+            className="input small"
+            defaultValue={filter}
+            placeholder="env:prod"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") set("filter", (e.target as HTMLInputElement).value.trim());
+            }}
+          />
+        </label>
+        <label className="tvar">
+          <span className="tvar-name">Group by</span>
+          <select
+            className="input small"
+            value=""
+            onChange={(e) => e.target.value && set("group", [...group, e.target.value].join(","))}
+          >
+            <option value="">{group.length ? "Add a tag" : "Nothing"}</option>
+            {keys
+              .filter((k) => !group.includes(k))
+              .map((k) => (
+                <option key={k}>{k}</option>
+              ))}
+          </select>
+        </label>
+        {group.map((g) => (
+          <span key={g} className="tag">
+            {g}{" "}
+            <button className="btn ghost small" onClick={() => set("group", group.filter((x) => x !== g).join(","))}>
+              ✕
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="page-scroll page-padding">
+        <HostMapView query={scoped} groupBy={group} ctx={{ time, defs: [], vars: {} }} />
+      </div>
     </>
   );
 }
