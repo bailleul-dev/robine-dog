@@ -182,7 +182,7 @@ async fn findings(st: &AppState, now: i64) -> anyhow::Result<Vec<Finding>> {
     Ok(out)
 }
 
-async fn stored(st: &AppState) -> anyhow::Result<Vec<Story>> {
+pub async fn stored(st: &AppState) -> anyhow::Result<Vec<Story>> {
     Ok(st
         .store
         .pg

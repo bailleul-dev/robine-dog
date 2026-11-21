@@ -60,9 +60,21 @@ const SECTIONS: Item[][] = [
           to: "/watchdog",
           hint: "Anomalies detected automatically",
         },
-        { label: "Insights" },
-        { label: "Root Cause Analysis" },
-        { label: "Impact Analysis" },
+        {
+          label: "Insights",
+          to: "/watchdog/insights",
+          hint: "What stands out in the errors",
+        },
+        {
+          label: "Root Cause Analysis",
+          to: "/watchdog",
+          hint: "A story's anomalous dependencies",
+        },
+        {
+          label: "Impact Analysis",
+          to: "/watchdog",
+          hint: "RUM sessions and users behind a story",
+        },
       ],
     },
     {

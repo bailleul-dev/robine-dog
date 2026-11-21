@@ -2191,6 +2191,41 @@ export const api = {
       : post<unknown>(`/on-call/${what}`, body),
   onCallDelete: (what: "schedules" | "escalation-policies", id: string) =>
     del<unknown>(`/on-call/${what}/${id}`),
+  insights: (
+    dataset: "logs" | "spans" | "rum",
+    query: string,
+    from: number,
+    to: number,
+  ) =>
+    post<{
+      insights: {
+        facet: string;
+        value: string;
+        count: number;
+        share: number;
+        baseline: number;
+        text: string;
+        query: string;
+      }[];
+    }>("/insights", { dataset, query, from, to }),
+  storyRca: (id: string) =>
+    call<{
+      dependencies: { service: string; depth: number }[];
+      anomalous_dependencies: {
+        service: string;
+        depth: number;
+        stories: WatchdogStory[];
+      }[];
+      root_cause: string | null;
+      impacted_upstream: { service: string; stories: WatchdogStory[] }[];
+    }>(`/watchdog/stories/${id}/rca`),
+  storyImpact: (id: string) =>
+    call<{
+      traces: number;
+      sessions: number;
+      users: number;
+      views: { view: string; requests: number; sessions: number }[];
+    }>(`/watchdog/stories/${id}/impact`),
   monitorTemplates: () => call<MonitorTemplate[]>("/monitors/templates"),
   monitorQuality: () =>
     call<{

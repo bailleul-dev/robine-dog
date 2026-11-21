@@ -9,6 +9,7 @@ import { TimePicker } from "../components/TimePicker";
 import { api, ApiError, type Log } from "../lib/api";
 import { fullDate, logDate, STATUS_ORDER, statusColor } from "../lib/format";
 import { useQueryParam, useTimeRange } from "../lib/time";
+import { InsightsBanner } from "../components/Insights";
 
 const title = (e: Log) => e.message.split("\n", 1)[0];
 const body = (e: Log) => e.message.slice(title(e).length + 1);
@@ -168,6 +169,11 @@ function Explorer({ mode }: { mode: "events" | "rum" }) {
               }))}
               onZoom={(a, b) => time.setAbsolute(Math.round(a), Math.round(b))}
             />
+          </div>
+        )}
+        {rum && (
+          <div style={{ padding: "0 16px" }}>
+            <InsightsBanner dataset="rum" query={query} from={time.from} to={time.to} onApply={(c) => setQuery(`${query} ${c}`.trim())} />
           </div>
         )}
         <div className="filters-row">

@@ -3,7 +3,7 @@ import {
   IncidentPage,
   StatusPageSettings,
 } from "./pages/Incidents";
-import { Watchdog } from "./pages/Watchdog";
+import { Watchdog, WatchdogInsights } from "./pages/Watchdog";
 import { NotebookList, NotebookPage } from "./pages/Notebooks";
 import { Integrations } from "./pages/Integrations";
 import { EventsExplorer, RumExplorer } from "./pages/Events";
@@ -214,6 +214,7 @@ function App() {
         <Route path="/cases" element={<Cases />} />
         <Route path="/on-call" element={<OnCall />} />
         <Route path="/workflows" element={<Workflows />} />
+        <Route path="/watchdog/insights" element={<WatchdogInsights />} />
         <Route path="/monitors/templates" element={<MonitorTemplates />} />
         <Route path="/monitors/quality" element={<MonitorQuality />} />
         <Route path="/dashboard/reports" element={<Reports />} />

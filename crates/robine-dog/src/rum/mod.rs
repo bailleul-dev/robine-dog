@@ -196,6 +196,8 @@ pub fn rows(mut e: Value, tags: &[String], now: i64) -> Option<(LogRow, Option<L
             span_id: None,
         }
     });
+    let trace_id = dd_id(e.pointer("/_dd/trace_id"));
+    let span_id = dd_id(e.pointer("/_dd/span_id"));
     let Value::Object(attributes) = e else {
         return None;
     };
@@ -209,8 +211,8 @@ pub fn rows(mut e: Value, tags: &[String], now: i64) -> Option<(LogRow, Option<L
             message,
             tags,
             attributes,
-            trace_id: None,
-            span_id: None,
+            trace_id,
+            span_id,
         },
         error_log,
     ))
@@ -516,9 +518,41 @@ pub async fn sessions(State(st): State<AppState>, Json(s): Json<Scope>) -> ApiRe
     Ok(Json(json!({"sessions": sessions})))
 }
 
+/// `_dd.trace_id` / `_dd.span_id` of a RUM resource, as spans store them:
+/// decimal, the low 64 bits of a 128-bit hexadecimal id.
+pub fn dd_id(v: Option<&Value>) -> Option<String> {
+    let s = match v? {
+        Value::String(s) => s.trim().to_string(),
+        Value::Number(n) => n.to_string(),
+        _ => return None,
+    };
+    if s.is_empty() || s == "0" {
+        return None;
+    }
+    if s.chars().all(|c| c.is_ascii_digit()) {
+        return Some(s);
+    }
+    let hex = &s[s.len().saturating_sub(16)..];
+    u64::from_str_radix(hex, 16).ok().map(|n| n.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trace_ids() {
+        assert_eq!(
+            dd_id(Some(&json!("9037460488842159644"))).as_deref(),
+            Some("9037460488842159644")
+        );
+        assert_eq!(
+            dd_id(Some(&json!("0000000000000000000000000000000a"))).as_deref(),
+            Some("10")
+        );
+        assert_eq!(dd_id(Some(&json!(""))), None);
+        assert_eq!(dd_id(None), None);
+    }
 
     #[test]
     fn reads_sdk_events() {

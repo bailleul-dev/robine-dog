@@ -37,6 +37,7 @@ import {
 } from "../lib/format";
 import { addClause } from "../lib/query";
 import { useQueryParam, useTimeRange } from "../lib/time";
+import { InsightsBanner } from "../components/Insights";
 
 export const LOG_CORE_FACETS: CoreFacet[] = [
   { path: "source", name: "Source", group: "Core" },
@@ -229,6 +230,15 @@ export function LogsExplorer() {
               )}
               {!histogram.data && <div style={{ height: 92 }} />}
             </div>
+          )}
+          {listing && (
+            <InsightsBanner
+              dataset="logs"
+              query={query}
+              from={time.from}
+              to={time.to}
+              onApply={(c) => setQuery(`${query} ${c}`.trim())}
+            />
           )}
           <div className="toolbar">
             <VizPicker

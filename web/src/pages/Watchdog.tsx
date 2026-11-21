@@ -30,7 +30,68 @@ function LogsChart({ s }: { s: WatchdogStory }) {
   );
 }
 
+function Analysis({ s, what }: { s: WatchdogStory; what: "rca" | "impact" }) {
+  const rca = useQuery({ queryKey: ["rca", s.id], queryFn: () => api.storyRca(s.id), enabled: what === "rca" });
+  const impact = useQuery({ queryKey: ["impact", s.id], queryFn: () => api.storyImpact(s.id), enabled: what === "impact" });
+  if (what === "rca") {
+    const d = rca.data;
+    if (!d) return <div className="muted">Looking at the dependencies…</div>;
+    return (
+      <div className="watchdog-analysis">
+        {d.root_cause ? (
+          <p>
+            Likely root cause: <b>{d.root_cause}</b>, a downstream dependency with its own anomaly at the same time.
+          </p>
+        ) : (
+          <p className="muted">
+            No anomalous dependency downstream of {s.service}
+            {d.dependencies.length ? ` (${d.dependencies.map((x) => x.service).join(", ")})` : " (it calls no other service)"}:
+            the cause is likely in {s.service} itself.
+          </p>
+        )}
+        {d.anomalous_dependencies.map((a) => (
+          <div key={a.service}>
+            {"→ ".repeat(a.depth)}
+            <Link to={`/apm/services/${encodeURIComponent(a.service)}`}>{a.service}</Link>:{" "}
+            {a.stories.map((x) => x.title).join("; ")}
+          </div>
+        ))}
+        {d.impacted_upstream.length > 0 && (
+          <p className="muted">
+            Called by: {d.impacted_upstream.map((u) => u.service + (u.stories.length ? " (anomalous)" : "")).join(", ")}
+          </p>
+        )}
+      </div>
+    );
+  }
+  const d = impact.data;
+  if (!d) return <div className="muted">Looking for RUM sessions…</div>;
+  return (
+    <div className="watchdog-analysis">
+      {d.sessions ? (
+        <>
+          <p>
+            <b>{d.sessions}</b> RUM sessions and <b>{d.users}</b> identified users made requests through {d.traces}{" "}
+            affected traces.
+          </p>
+          {d.views.map((v) => (
+            <div key={v.view}>
+              <span className="mono">{v.view}</span> · {v.sessions} sessions, {v.requests} requests
+            </div>
+          ))}
+        </>
+      ) : (
+        <p className="muted">
+          No RUM session linked to the {d.traces} affected traces (RUM links requests to traces with{" "}
+          <code>allowedTracingUrls</code>).
+        </p>
+      )}
+    </div>
+  );
+}
+
 function StoryCard({ s }: { s: WatchdogStory }) {
+  const [analysis, setAnalysis] = useState<"rca" | "impact" | null>(null);
   const range = `from_ts=${s.start - 3_600_000}&to_ts=${(s.end ?? s.last_seen) + 3_600_000}&live=false`;
   return (
     <div className="card watchdog-story">
@@ -47,7 +108,18 @@ function StoryCard({ s }: { s: WatchdogStory }) {
         , against {s.baseline.toFixed(1)} usually
       </div>
       {s.kind === "error_logs" && <LogsChart s={s} />}
+      {analysis && <Analysis s={s} what={analysis} />}
       <div className="toolbar" style={{ marginTop: 8 }}>
+        {s.kind !== "error_logs" && (
+          <>
+            <button className="btn small" onClick={() => setAnalysis(analysis === "rca" ? null : "rca")}>
+              Root cause
+            </button>
+            <button className="btn small" onClick={() => setAnalysis(analysis === "impact" ? null : "impact")}>
+              Impact
+            </button>
+          </>
+        )}
         {!s.end && (
           <Link className="btn small" to={`/incidents?declare=${encodeURIComponent(s.title)}`}>
             Declare Incident
@@ -119,6 +191,64 @@ export function Watchdog() {
             <StoryCard key={s.id} s={s} />
           ))}
         {q.data && stories.every((s) => !s.end) && <div className="card muted">No past story.</div>}
+      </div>
+    </>
+  );
+}
+
+/** What stands out in the errors of the last hour, in logs, traces and RUM. */
+export function WatchdogInsights() {
+  const [to] = useState(() => Date.now());
+  const from = to - 3_600_000;
+  const sets = [
+    { ds: "logs" as const, label: "Logs", link: "/logs" },
+    { ds: "spans" as const, label: "Traces", link: "/apm/traces" },
+    { ds: "rum" as const, label: "RUM", link: "/rum/explorer" },
+  ];
+  return (
+    <>
+      <PageHeader title="Watchdog Insights" />
+      <div className="page-scroll page-padding">
+        <p className="muted" style={{ marginTop: 0 }}>
+          Values over-represented in the errors of the last hour, against all events. The same insights show above the
+          explorers&apos; results for their search.
+        </p>
+        {sets.map((x) => (
+          <InsightList key={x.ds} {...x} from={from} to={to} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function InsightList({
+  ds,
+  label,
+  link,
+  from,
+  to,
+}: {
+  ds: "logs" | "spans" | "rum";
+  label: string;
+  link: string;
+  from: number;
+  to: number;
+}) {
+  const q = useQuery({ queryKey: ["insights-page", ds], queryFn: () => api.insights(ds, "", from, to) });
+  return (
+    <>
+      <div className="section-title">{label}</div>
+      <div className="card">
+        {!q.data && <span className="muted">Looking…</span>}
+        {q.data && !q.data.insights.length && <span className="muted">Nothing stands out.</span>}
+        {q.data?.insights.map((i) => (
+          <div key={i.facet + i.value}>
+            <Link to={`${link}?query=${encodeURIComponent(i.query)}&from_ts=${from}&to_ts=${to}&live=false`}>
+              {i.facet}:{i.value}
+            </Link>{" "}
+            — {i.text}
+          </div>
+        ))}
       </div>
     </>
   );

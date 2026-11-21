@@ -19,6 +19,7 @@ mod dbm;
 mod dsm;
 mod events;
 mod hosts;
+mod insights;
 mod intake;
 mod llmobs;
 mod logconfig;
@@ -489,6 +490,9 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             axum::routing::patch(security::triage),
         )
         .route("/audit/events", get(audit::events))
+        .route("/insights", post(insights::insights))
+        .route("/watchdog/stories/{id}/rca", get(insights::rca))
+        .route("/watchdog/stories/{id}/impact", get(insights::impact))
         .route("/monitors/templates", get(monitors::library::templates))
         .route("/monitors/quality", get(monitors::library::quality))
         .route(

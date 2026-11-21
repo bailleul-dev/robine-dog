@@ -18,6 +18,7 @@ import { duration, logDate, thousands } from "../lib/format";
 import { addClause } from "../lib/query";
 import { useQueryParam, useTimeRange } from "../lib/time";
 import { TracePanel } from "./TracePanel";
+import { InsightsBanner } from "../components/Insights";
 
 export const SPAN_CORE_FACETS: CoreFacet[] = [
   { path: "env", name: "Env", group: "Core" },
@@ -212,6 +213,15 @@ export function TraceExplorer() {
                 <div style={{ height: 92 }} />
               )}
             </div>
+          )}
+          {listing && (
+            <InsightsBanner
+              dataset="spans"
+              query={effective}
+              from={time.from}
+              to={time.to}
+              onApply={(c) => setQuery(`${query} ${c}`.trim())}
+            />
           )}
           <div className="toolbar">
             <VizPicker
