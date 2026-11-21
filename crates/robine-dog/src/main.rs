@@ -182,6 +182,9 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/rum/histogram", post(rum::histogram))
         .route("/rum/performance", post(rum::performance))
         .route("/rum/sessions", post(rum::sessions))
+        .route("/rum/replay/{session_id}", get(rum::replay::get))
+        .route("/rum/frustrations", post(rum::analytics::frustrations))
+        .route("/rum/retention", post(rum::analytics::retention))
         .route("/rum/aggregate", post(api::analytics::rum))
         .route("/events/search", post(api::events::search))
         .route("/events/histogram", post(api::events::histogram))
@@ -213,6 +216,16 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             get(api::generated_metrics::spans_get)
                 .patch(api::generated_metrics::spans_update)
                 .delete(api::generated_metrics::spans_delete),
+        )
+        .route(
+            "/rum/config/metrics",
+            get(api::generated_metrics::rum_list).post(api::generated_metrics::rum_create),
+        )
+        .route(
+            "/rum/config/metrics/{id}",
+            get(api::generated_metrics::rum_get)
+                .patch(api::generated_metrics::rum_update)
+                .delete(api::generated_metrics::rum_delete),
         )
         .route("/errors/issues", post(api::errors::issues))
         .route(
@@ -440,6 +453,16 @@ fn public_api(st: AppState) -> Router<AppState> {
                 .patch(api::generated_metrics::spans_update)
                 .delete(api::generated_metrics::spans_delete),
         )
+        .route(
+            "/api/v2/rum/config/metrics",
+            get(api::generated_metrics::rum_list).post(api::generated_metrics::rum_create),
+        )
+        .route(
+            "/api/v2/rum/config/metrics/{id}",
+            get(api::generated_metrics::rum_get)
+                .patch(api::generated_metrics::rum_update)
+                .delete(api::generated_metrics::rum_delete),
+        )
         .route("/api/v2/query/timeseries", post(api::query::timeseries))
         .route("/api/v2/query/scalar", post(api::query::scalar))
         .route(
@@ -557,6 +580,10 @@ fn app(st: AppState) -> Router {
         .route(
             "/api/v2/rum",
             post(rum::intake).options(intake::sentry::preflight),
+        )
+        .route(
+            "/api/v2/replay",
+            post(rum::replay_intake).options(intake::sentry::preflight),
         )
         .route(
             "/rum/proxy",
@@ -685,6 +712,19 @@ async fn main() -> anyhow::Result<()> {
     }
     monitors::spawn(st.clone());
     synthetics::spawn(st.clone());
+    rum::replay::spawn_purge(st.clone());
+    {
+        // RUM-based metrics counted at a session's or view's end.
+        let st = st.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
+            loop {
+                tick.tick().await;
+                st.generated
+                    .flush_rum(&st.aggregator, intake::logs::now_ms());
+            }
+        });
+    }
     watchdog::spawn(st.clone());
     if cfg.auth_disabled {
         tracing::warn!(

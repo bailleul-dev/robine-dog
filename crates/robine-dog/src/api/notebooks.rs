@@ -92,5 +92,11 @@ pub async fn rum_config(State(st): State<AppState>) -> ApiResult<Value> {
         "client_token": st.cfg.client_token,
         "version": env!("CARGO_PKG_VERSION"),
         "env": std::env::var("DD_ENV").ok(),
+        // Session Replay of robine-dog's own UI, 0 to 100 (percent of sessions).
+        "replay_sample_rate": std::env::var("ROBINE_DOG_REPLAY_SAMPLE_RATE")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0)
+            .clamp(0.0, 100.0),
     })))
 }

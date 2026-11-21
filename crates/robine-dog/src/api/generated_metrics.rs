@@ -1,10 +1,11 @@
-//! Log- and span-based metrics, with Datadog's JSON:API shapes:
-//! `/api/v2/logs/config/metrics` (`logs_metrics`) and
-//! `/api/v2/apm/config/metrics` (`spans_metrics`).
+//! Log-, span- and RUM-based metrics, with Datadog's JSON:API shapes:
+//! `/api/v2/logs/config/metrics` (`logs_metrics`),
+//! `/api/v2/apm/config/metrics` (`spans_metrics`) and
+//! `/api/v2/rum/config/metrics` (`rum_metrics`).
 
 use super::ApiError;
 use crate::AppState;
-use crate::metrics::generated::{self, LOGS_KIND, MetricDef, SPANS_KIND};
+use crate::metrics::generated::{self, LOGS_KIND, MetricDef, RUM_KIND, SPANS_KIND};
 use axum::Json;
 use axum::extract::{Path, State};
 use serde_json::{Value, json};
@@ -13,6 +14,7 @@ use serde_json::{Value, json};
 pub enum Source {
     Logs,
     Spans,
+    Rum,
 }
 
 impl Source {
@@ -20,6 +22,7 @@ impl Source {
         match self {
             Source::Logs => LOGS_KIND,
             Source::Spans => SPANS_KIND,
+            Source::Rum => RUM_KIND,
         }
     }
 
@@ -27,6 +30,7 @@ impl Source {
         match self {
             Source::Logs => "logs_metrics",
             Source::Spans => "spans_metrics",
+            Source::Rum => "rum_metrics",
         }
     }
 }
@@ -45,6 +49,7 @@ pub async fn stored(st: &AppState, src: Source) -> anyhow::Result<Vec<(String, M
 pub async fn reload(st: &AppState) -> anyhow::Result<()> {
     st.generated.load_logs(&stored(st, Source::Logs).await?);
     st.generated.load_spans(&stored(st, Source::Spans).await?);
+    st.generated.load_rum(&stored(st, Source::Rum).await?);
     Ok(())
 }
 
@@ -70,8 +75,12 @@ async fn get(st: AppState, src: Source, id: String) -> Result<Json<Value>, ApiEr
     Ok(Json(json!({"data": present(src, &id, &d)})))
 }
 
-async fn save(st: &AppState, src: Source, id: &str, d: &MetricDef) -> Result<(), ApiError> {
-    generated::validate(id, d).map_err(ApiError::BadQuery)?;
+async fn save(st: &AppState, src: Source, id: &str, d: &mut MetricDef) -> Result<(), ApiError> {
+    match src {
+        Source::Rum => generated::validate_rum(id, d),
+        _ => generated::validate(id, d),
+    }
+    .map_err(ApiError::BadQuery)?;
     st.store
         .pg
         .put_doc(
@@ -87,14 +96,14 @@ async fn save(st: &AppState, src: Source, id: &str, d: &MetricDef) -> Result<(),
 async fn create(st: AppState, src: Source, body: Value) -> Result<Json<Value>, ApiError> {
     let data = body.get("data").cloned().unwrap_or(body);
     let id = data["id"].as_str().unwrap_or("").trim().to_string();
-    let d: MetricDef = serde_json::from_value(data["attributes"].clone())
+    let mut d: MetricDef = serde_json::from_value(data["attributes"].clone())
         .map_err(|e| ApiError::BadQuery(format!("attributes: {e}")))?;
     if st.store.pg.doc(src.kind(), &id).await?.is_some() {
         return Err(ApiError::BadQuery(format!(
             "the metric {id} already exists"
         )));
     }
-    save(&st, src, &id, &d).await?;
+    save(&st, src, &id, &mut d).await?;
     Ok(Json(json!({"data": present(src, &id, &d)})))
 }
 
@@ -128,7 +137,7 @@ async fn update(
     {
         d.compute.include_percentiles = Some(p);
     }
-    save(&st, src, &id, &d).await?;
+    save(&st, src, &id, &mut d).await?;
     Ok(Json(json!({"data": present(src, &id, &d)})))
 }
 
@@ -195,4 +204,32 @@ pub async fn spans_delete(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     delete(st, Source::Spans, id).await
+}
+pub async fn rum_list(State(st): State<AppState>) -> Result<Json<Value>, ApiError> {
+    list(st, Source::Rum).await
+}
+pub async fn rum_get(
+    State(st): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    get(st, Source::Rum, id).await
+}
+pub async fn rum_create(
+    State(st): State<AppState>,
+    Json(b): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    create(st, Source::Rum, b).await
+}
+pub async fn rum_update(
+    State(st): State<AppState>,
+    Path(id): Path<String>,
+    Json(b): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    update(st, Source::Rum, id, b).await
+}
+pub async fn rum_delete(
+    State(st): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    delete(st, Source::Rum, id).await
 }

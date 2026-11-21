@@ -6,6 +6,8 @@
 //!
 //! Usage: robine-dog-demo [--backfill-minutes 60] [--rate 3] [--no-live]
 
+mod rum;
+
 use rand::Rng;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -881,6 +883,28 @@ struct Client {
 }
 
 impl Client {
+    /// RUM events, as the browser SDK posts them.
+    fn send_rum(&self, events: &[Value]) -> anyhow::Result<()> {
+        for chunk in events.chunks(400) {
+            let body: Vec<String> = chunk.iter().map(|e| e.to_string()).collect();
+            self.http
+                .post(format!(
+                    "{}/api/v2/rum?ddsource=browser&ddtags=env:prod",
+                    self.app_url
+                ))
+                .header("Content-Type", "text/plain")
+                .header("DD-API-KEY", &self.api_key)
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
+                )
+                .body(body.join("\n"))
+                .send()?
+                .error_for_status()?;
+        }
+        Ok(())
+    }
+
     fn send(&self, out: Out) -> anyhow::Result<()> {
         if !out.spans.is_empty() {
             let mut traces: HashMap<u64, Vec<Span>> = HashMap::new();
@@ -1025,6 +1049,8 @@ fn main() -> anyhow::Result<()> {
         .unwrap_or(60);
     let rate: f64 = arg("--rate").and_then(|v| v.parse().ok()).unwrap_or(3.0);
     let live = !args.iter().any(|a| a == "--no-live");
+    // Days of browser sessions to backfill (for retention).
+    let rum_days: i64 = arg("--rum-days").and_then(|v| v.parse().ok()).unwrap_or(14);
     let client = Client {
         http: reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(30))
@@ -1081,6 +1107,23 @@ fn main() -> anyhow::Result<()> {
             }
         }
         client.send(out)?;
+        let now_ms = end / 1_000_000;
+        let today = now_ms / 86_400_000;
+        let mut events = Vec::new();
+        for d in 0..rum_days {
+            let day = today - rum_days + 1 + d;
+            for u in rum::users_of_day(&mut rng, d) {
+                let start = day * 86_400_000 + rng.random_range(8 * 3_600_000..22 * 3_600_000);
+                if start < now_ms - 600_000 {
+                    events.extend(rum::session(&mut rng, start, u));
+                }
+            }
+        }
+        println!(
+            "backfilling {} RUM events over {rum_days} days…",
+            events.len()
+        );
+        client.send_rum(&events)?;
         println!("backfill done");
     }
     if live {
@@ -1108,6 +1151,19 @@ fn main() -> anyhow::Result<()> {
             }
             if let Err(e) = client.send(out) {
                 eprintln!("send failed: {e}");
+            }
+            // A browser session now and then, ending now.
+            if rng.random_bool(0.05) {
+                let u = rng.random_range(0..60);
+                let mut events = rum::session(&mut rng, 0, u);
+                let last = events.last().and_then(|e| e["date"].as_i64()).unwrap_or(0);
+                let shift = now_ns() / 1_000_000 - last;
+                for e in &mut events {
+                    e["date"] = serde_json::json!(e["date"].as_i64().unwrap_or(0) + shift);
+                }
+                if let Err(e) = client.send_rum(&events) {
+                    eprintln!("send failed: {e}");
+                }
             }
             std::thread::sleep(Duration::from_secs(1));
         }

@@ -345,6 +345,47 @@ export type RumSession = {
   actions: number;
   errors: number;
   first_view: string | null;
+  frustrations: number;
+  has_replay: boolean;
+};
+export type RumReplay = {
+  session_id: string;
+  views: { view_id: string; start: number; end: number; records: number; segments: number }[];
+  records: { type: number; timestamp: number; data?: unknown; format?: number }[];
+};
+export type RumFrustrationTally = {
+  count: number;
+  by_type: Record<string, number>;
+  sessions: number;
+  view?: string;
+  target?: string;
+};
+export type RumFrustrations = {
+  total: RumFrustrationTally;
+  sessions: number;
+  pages: RumFrustrationTally[];
+  targets: RumFrustrationTally[];
+  latest: {
+    ts: number;
+    types: string[];
+    target: string;
+    view: string;
+    session_id: string | null;
+    service: string | null;
+    user: string | null;
+  }[];
+};
+export type RumRetention = {
+  period: string;
+  cohorts: { start: number; users: number; returned: number[]; rates: number[] }[];
+};
+export type RumRetentionReq = {
+  start_query: string;
+  return_query?: string;
+  period: "day" | "week";
+  by?: string;
+  from: number;
+  to: number;
 };
 export type RumPerformance = {
   sessions: number;
@@ -718,7 +759,12 @@ export type GeneratedMetricAttributes = {
   };
   filter: { query: string };
   group_by: { path: string; tag_name?: string }[];
+  event_type?: string;
+  uniqueness?: { when: "match" | "end" };
 };
+export type GeneratedSource = "logs" | "spans" | "rum";
+const generatedPath = (s: GeneratedSource) =>
+  `/${s === "spans" ? "apm" : s}/config/metrics`;
 export type GeneratedMetric = {
   id: string;
   type: string;
@@ -1014,6 +1060,15 @@ export const api = {
     post<Histogram>("/rum/histogram", s, signal),
   rumSessions: (s: Scope, signal?: AbortSignal) =>
     post<{ sessions: RumSession[] }>("/rum/sessions", s, signal),
+  rumReplay: (sessionId: string, viewId?: string, signal?: AbortSignal) =>
+    call<RumReplay>(
+      `/rum/replay/${encodeURIComponent(sessionId)}${viewId ? `?view_id=${encodeURIComponent(viewId)}` : ""}`,
+      { signal },
+    ),
+  rumFrustrations: (s: Scope, signal?: AbortSignal) =>
+    post<RumFrustrations>("/rum/frustrations", s, signal),
+  rumRetention: (r: RumRetentionReq, signal?: AbortSignal) =>
+    post<RumRetention>("/rum/retention", r, signal),
   rumPerformance: (s: Scope, signal?: AbortSignal) =>
     post<RumPerformance>("/rum/performance", s, signal),
   incidents: () => call<{ incidents: Incident[] }>("/incidents"),
@@ -1035,9 +1090,12 @@ export const api = {
   runWatchdog: () =>
     post<{ stories: WatchdogStory[] }>("/watchdog/stories", {}),
   rumConfig: () =>
-    call<{ client_token: string | null; version: string; env: string | null }>(
-      "/rum-config",
-    ),
+    call<{
+      client_token: string | null;
+      version: string;
+      env: string | null;
+      replay_sample_rate?: number;
+    }>("/rum-config"),
   notebooks: () =>
     call<{
       data: { id: string; name: string; cells: number; modified_at: number }[];
@@ -1143,28 +1201,26 @@ export const api = {
   views: (page: string) => call<SavedView[]>(`/views?page=${page}`),
   createView: (v: Omit<SavedView, "id">) => post<SavedView>("/views", v),
   deleteView: (id: string) => del<unknown>(`/views/${id}`),
-  generatedMetrics: (source: "logs" | "spans") =>
-    call<{ data: GeneratedMetric[] }>(
-      `/${source === "logs" ? "logs" : "apm"}/config/metrics`,
-    ).then((r) => r.data),
+  generatedMetrics: (source: GeneratedSource) =>
+    call<{ data: GeneratedMetric[] }>(generatedPath(source)).then((r) => r.data),
   createGeneratedMetric: (
-    source: "logs" | "spans",
+    source: GeneratedSource,
     id: string,
     attributes: GeneratedMetricAttributes,
   ) =>
     post<{ data: GeneratedMetric }>(
-      `/${source === "logs" ? "logs" : "apm"}/config/metrics`,
+      generatedPath(source),
       {
         data: { id, type: `${source}_metrics`, attributes },
       },
     ),
   updateGeneratedMetric: (
-    source: "logs" | "spans",
+    source: GeneratedSource,
     id: string,
     attributes: GeneratedMetricAttributes,
   ) =>
     call<{ data: GeneratedMetric }>(
-      `/${source === "logs" ? "logs" : "apm"}/config/metrics/${encodeURIComponent(id)}`,
+      `${generatedPath(source)}/${encodeURIComponent(id)}`,
       {
         method: "PATCH",
         body: JSON.stringify({
@@ -1172,10 +1228,8 @@ export const api = {
         }),
       },
     ),
-  deleteGeneratedMetric: (source: "logs" | "spans", id: string) =>
-    del<unknown>(
-      `/${source === "logs" ? "logs" : "apm"}/config/metrics/${encodeURIComponent(id)}`,
-    ),
+  deleteGeneratedMetric: (source: GeneratedSource, id: string) =>
+    del<unknown>(`${generatedPath(source)}/${encodeURIComponent(id)}`),
   monitors: () => call<Monitor[]>("/monitors"),
   monitor: (id: number) => call<Monitor>(`/monitors/${id}`),
   createMonitor: (m: MonitorDraft) => post<Monitor>("/monitors", m),

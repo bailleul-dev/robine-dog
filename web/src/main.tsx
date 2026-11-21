@@ -4,6 +4,7 @@ import { NotebookList, NotebookPage } from "./pages/Notebooks";
 import { Integrations } from "./pages/Integrations";
 import { EventsExplorer, RumExplorer } from "./pages/Events";
 import { RumAnalytics, RumPerformancePage, RumSessions } from "./pages/Rum";
+import { RumFrustrations, RumFunnels, RumReplayPage, RumRetention } from "./pages/RumAnalysis";
 import { SloPage, Slos } from "./pages/Slos";
 import { SyntheticCi, Synthetics, SyntheticVariables } from "./pages/Synthetics";
 import { Downtimes } from "./pages/Downtimes";
@@ -67,7 +68,8 @@ function App() {
           env: c.env ?? undefined,
           version: c.version,
           sessionSampleRate: 100,
-          sessionReplaySampleRate: 0,
+          sessionReplaySampleRate: c.replay_sample_rate ?? 0,
+          defaultPrivacyLevel: "mask-user-input",
           trackUserInteractions: true,
           trackResources: true,
           trackLongTasks: true,
@@ -121,6 +123,11 @@ function App() {
         <Route path="/rum/explorer" element={<RumExplorer />} />
         <Route path="/rum/sessions" element={<RumSessions />} />
         <Route path="/rum/analytics" element={<RumAnalytics />} />
+        <Route path="/rum/replay/:id" element={<RumReplayPage />} />
+        <Route path="/rum/frustrations" element={<RumFrustrations />} />
+        <Route path="/rum/funnels" element={<RumFunnels />} />
+        <Route path="/rum/retention" element={<RumRetention />} />
+        <Route path="/rum/generate-metrics" element={<GenerateMetrics source="rum" key="rum" />} />
         <Route path="/watchdog" element={<Watchdog />} />
         <Route path="/incidents" element={<IncidentList />} />
         <Route path="/incidents/:id" element={<IncidentPage />} />

@@ -4507,3 +4507,22 @@ table.list td.infra-bad {
     flex-wrap: wrap;
   }
 }
+
+/* RUM: session replay, frustrations, retention */
+.rum-replay { display: grid; grid-template-columns: 280px 1fr; gap: 12px; align-items: start; }
+.rum-replay-views { display: flex; flex-direction: column; gap: 2px; }
+.rum-replay-view { text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; color: inherit; cursor: pointer; font: inherit; }
+.rum-replay-view:hover { background: var(--hover, rgba(127, 127, 127, 0.1)); }
+.rum-replay-view.active { background: var(--selected, rgba(124, 92, 255, 0.15)); }
+.rum-replay-player { min-height: 200px; }
+.rum-replay-player .rr-player { box-shadow: none; }
+.rum-replay-player .rr-controller .switch { white-space: nowrap; font-size: 12px; margin-left: 8px; }
+.rum-replay-player .rr-controller .switch label { margin-left: 4px; }
+.rum-replay-link { display: inline-flex; align-items: center; gap: 4px; }
+.rum-frustration { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 10px; font-size: 11px; white-space: nowrap; }
+.rum-frustration.rage_click { background: rgba(229, 72, 77, 0.16); color: #e5484d; }
+.rum-frustration.dead_click { background: rgba(127, 127, 127, 0.18); }
+.rum-frustration.error_click { background: rgba(245, 166, 35, 0.2); color: #c27c0e; }
+.rum-retention td.num, .rum-retention th.num { min-width: 56px; }
+.rum-retention-avg td { font-weight: 600; }
+@media (max-width: 900px) { .rum-replay { grid-template-columns: 1fr; } }

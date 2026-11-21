@@ -8,6 +8,7 @@ import { ago } from "../lib/format";
 import { thousands } from "../lib/format";
 import { useQueryParam, useTimeRange } from "../lib/time";
 import { RUM_TABS } from "./Events";
+import { PlayIcon } from "../components/Icons";
 
 /** Google's Core Web Vitals thresholds: good up to the first, poor past the second. */
 const VITALS: { key: keyof RumPage; label: string; limits: [number, number]; ns: boolean }[] = [
@@ -171,6 +172,10 @@ export function RumSessions() {
                 <th className="num" style={{ width: 70 }}>
                   Errors
                 </th>
+                <th className="num" style={{ width: 100 }} title="Rage, dead and error clicks">
+                  Frustrations
+                </th>
+                <th style={{ width: 80 }}>Replay</th>
               </tr>
             </thead>
             <tbody>
@@ -188,6 +193,14 @@ export function RumSessions() {
                   <td className="num">{s.views}</td>
                   <td className="num">{s.actions}</td>
                   <td className={`num${s.errors > 0 ? " infra-bad" : ""}`}>{s.errors}</td>
+                  <td className={`num${s.frustrations > 0 ? " infra-bad" : ""}`}>{s.frustrations}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    {s.has_replay && (
+                      <Link className="rum-replay-link" to={`/rum/replay/${s.id}`} title="Watch the replay">
+                        <PlayIcon /> Replay
+                      </Link>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

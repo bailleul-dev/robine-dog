@@ -4,11 +4,70 @@ import { Link } from "react-router-dom";
 import { Modal } from "../components/Common";
 import { PlusIcon, TrashIcon } from "../components/Icons";
 import { PageHeader } from "../components/Layout";
-import { api, ApiError, type GeneratedMetric } from "../lib/api";
+import {
+  api,
+  ApiError,
+  type GeneratedMetric,
+  type GeneratedSource,
+} from "../lib/api";
+import { RUM_TABS } from "./Events";
 import { LOG_TABS } from "./LogsExplorer";
 import { APM_TABS } from "./TraceExplorer";
 
-type Source = "logs" | "spans";
+type Source = GeneratedSource;
+const RUM_EVENT_TYPES = [
+  "session",
+  "view",
+  "action",
+  "error",
+  "resource",
+  "long_task",
+  "vital",
+];
+const SOURCES: Record<
+  Source,
+  {
+    title: string;
+    tabs: { to: string; label: string }[];
+    noun: string;
+    prefix: string;
+    query: string;
+    measure: string;
+    groupBy: string;
+    api: string;
+  }
+> = {
+  logs: {
+    title: "Logs",
+    tabs: LOG_TABS,
+    noun: "logs",
+    prefix: "logs.",
+    query: "status:error",
+    measure: "",
+    groupBy: "service, @http.status_code:status_code",
+    api: "/api/v2/logs/config/metrics",
+  },
+  spans: {
+    title: "APM",
+    tabs: APM_TABS,
+    noun: "spans",
+    prefix: "spans.",
+    query: "service:shop-api",
+    measure: "@duration",
+    groupBy: "service, env, resource_name",
+    api: "/api/v2/apm/config/metrics",
+  },
+  rum: {
+    title: "Real User Monitoring",
+    tabs: RUM_TABS,
+    noun: "RUM events",
+    prefix: "rum.",
+    query: "*",
+    measure: "@view.loading_time",
+    groupBy: "@view.url_path:page, @geo.country:country",
+    api: "/api/v2/rum/config/metrics",
+  },
+};
 const errorText = (e: unknown) =>
   e instanceof ApiError ? e.message : e ? String(e) : null;
 
@@ -23,17 +82,17 @@ function MetricModal({
 }) {
   const qc = useQueryClient();
   const a = initial?.attributes;
-  const [name, setName] = useState(
-    initial?.id ?? (source === "logs" ? "logs." : "spans."),
-  );
-  const [query, setQuery] = useState(
-    a?.filter.query ??
-      (source === "logs" ? "status:error" : "service:shop-api"),
-  );
+  const src = SOURCES[source];
+  const [name, setName] = useState(initial?.id ?? src.prefix);
+  const [query, setQuery] = useState(a?.filter.query ?? src.query);
   const [type, setType] = useState(a?.compute.aggregation_type ?? "count");
-  const [path, setPath] = useState(
-    a?.compute.path ?? (source === "spans" ? "@duration" : ""),
+  const [path, setPath] = useState(a?.compute.path ?? src.measure);
+  const [eventType, setEventType] = useState(a?.event_type ?? "view");
+  const [when, setWhen] = useState<"match" | "end">(
+    a?.uniqueness?.when ?? "match",
   );
+  const unique =
+    source === "rum" && (eventType === "session" || eventType === "view");
   const [percentiles, setPercentiles] = useState(
     a?.compute.include_percentiles ?? false,
   );
@@ -65,6 +124,12 @@ function MetricModal({
           ? { path: p, tag_name: tag }
           : { path: p, tag_name: p.replace(/^@/, "") };
       }),
+    ...(source === "rum"
+      ? {
+          event_type: eventType,
+          ...(unique ? { uniqueness: { when } } : {}),
+        }
+      : {}),
   };
   return (
     <Modal
@@ -82,9 +147,45 @@ function MetricModal({
             onChange={(e) => setName(e.target.value)}
           />
         </label>
+        {source === "rum" && (
+          <div className="form-row">
+            <label className="form-field" style={{ flex: "0 0 180px" }}>
+              <span className="form-label">Event type</span>
+              <select
+                className="input"
+                value={eventType}
+                disabled={!!initial}
+                onChange={(e) => setEventType(e.target.value)}
+              >
+                {RUM_EVENT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {unique && (
+              <label className="form-field">
+                <span className="form-label">Count each {eventType}</span>
+                <select
+                  className="input"
+                  value={when}
+                  onChange={(e) => setWhen(e.target.value as "match" | "end")}
+                >
+                  <option value="match">When it first matches</option>
+                  <option value="end">
+                    When it ends (with its final values)
+                  </option>
+                </select>
+              </label>
+            )}
+          </div>
+        )}
         <label className="form-field">
           <span className="form-label">
-            {source === "logs" ? "Logs matching" : "Spans matching"}
+            {source === "rum"
+              ? `${eventType === "session" ? "Sessions with events" : `${eventType[0].toUpperCase()}${eventType.slice(1).replace("_", " ")} events`} matching`
+              : `${src.noun[0].toUpperCase()}${src.noun.slice(1)} matching`}
           </span>
           <input
             className="input mono"
@@ -102,7 +203,9 @@ function MetricModal({
               disabled={!!initial}
               onChange={(e) => setType(e.target.value)}
             >
-              <option value="count">Count of {source}</option>
+              <option value="count">
+                Count of {source === "rum" ? `${eventType}s` : src.noun}
+              </option>
               <option value="distribution">Distribution of</option>
             </select>
           </label>
@@ -114,7 +217,7 @@ function MetricModal({
                 value={path}
                 disabled={!!initial}
                 onChange={(e) => setPath(e.target.value)}
-                placeholder="@duration"
+                placeholder={src.measure || "@duration"}
               />
             </label>
           )}
@@ -135,11 +238,7 @@ function MetricModal({
             className="input mono"
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value)}
-            placeholder={
-              source === "logs"
-                ? "service, @http.status_code:status_code"
-                : "service, env, resource_name"
-            }
+            placeholder={src.groupBy}
           />
           <span className="form-hint">
             Paths become tags; `path:tag_name` renames one. Missing values are
@@ -147,7 +246,7 @@ function MetricModal({
           </span>
         </label>
         <p className="muted" style={{ margin: 0 }}>
-          Like Datadog, the metric counts {source} ingested from now on. It is
+          Like Datadog, the metric counts {src.noun} ingested from now on. It is
           queried like any metric:{" "}
           <code>
             {type === "count" ? `sum:${name}{*}.as_count()` : `avg:${name}{*}`}
@@ -198,31 +297,26 @@ export function GenerateMetrics({ source }: { source: Source }) {
   );
   return (
     <>
-      <PageHeader
-        title={source === "logs" ? "Logs" : "APM"}
-        tabs={source === "logs" ? LOG_TABS : APM_TABS}
-      >
+      <PageHeader title={SOURCES[source].title} tabs={SOURCES[source].tabs}>
         <button className="btn primary" onClick={() => setEditing({ m: null })}>
           <PlusIcon /> New Metric
         </button>
       </PageHeader>
       <div className="page-scroll page-padding">
         <p className="muted" style={{ marginTop: 0, maxWidth: 900 }}>
-          Metrics generated from {source === "logs" ? "logs" : "spans"} as they
-          are ingested: counts or distributions, tagged by attributes, kept with
-          the other metrics. Same API as Datadog:{" "}
-          <code>
-            {source === "logs"
-              ? "/api/v2/logs/config/metrics"
-              : "/api/v2/apm/config/metrics"}
-          </code>
-          .
+          Metrics generated from {SOURCES[source].noun} as they are ingested:
+          counts or distributions, tagged by attributes, kept with the other
+          metrics
+          {source === "rum" &&
+            ", sessions and views counted once, when they match or at their end"}
+          . Same API as Datadog: <code>{SOURCES[source].api}</code>.
         </p>
         <div className="card" style={{ padding: 0 }}>
           <table className="list">
             <thead>
               <tr>
                 <th>Metric</th>
+                {source === "rum" && <th style={{ width: 120 }}>Event</th>}
                 <th>Filter</th>
                 <th style={{ width: 200 }}>Compute</th>
                 <th>Group by</th>
@@ -245,6 +339,14 @@ export function GenerateMetrics({ source }: { source: Source }) {
                         {m.id}
                       </Link>
                     </td>
+                    {source === "rum" && (
+                      <td>
+                        {a.event_type}
+                        {a.uniqueness?.when === "end" && (
+                          <span className="muted"> · at end</span>
+                        )}
+                      </td>
+                    )}
                     <td className="mono ellipsis">{a.filter.query}</td>
                     <td>
                       {a.compute.aggregation_type === "count"

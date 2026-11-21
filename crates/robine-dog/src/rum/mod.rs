@@ -15,7 +15,10 @@
 //!
 //! Errors are also stored as error logs (`source:browser`), so Error
 //! Tracking groups them. Browser logs (`@datadog/browser-logs`) come through
-//! the same proxy; session replays are dropped.
+//! the same proxy, and so do session replays (see `replay`).
+
+pub mod analytics;
+pub mod replay;
 
 use crate::AppState;
 use crate::api::logs::{HistogramReq, HistogramResp, SearchReq, SearchResp};
@@ -34,7 +37,7 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 
-const TABLE: &str = "rum_events";
+pub const TABLE: &str = "rum_events";
 
 /// A [`LogRow`] bound for the `rum_events` table.
 pub struct RumRow(pub LogRow);
@@ -229,6 +232,7 @@ async fn store_rum(st: &AppState, raw: &[u8], q: &HashMap<String, String>, agent
             enrich(&mut e, ua);
         }
         if let Some((row, error)) = rows(e, &tags, now) {
+            st.generated.on_rum(&st.aggregator, &row, now);
             events.push(RumRow(row));
             errors.extend(error);
         }
@@ -299,8 +303,13 @@ async fn ingest(
         store_rum(&st, &raw, &q, agent).await;
     } else if path.ends_with("/logs") {
         store_logs(&st, &raw, &q).await;
+    } else if path.ends_with("/replay")
+        && let Err(e) = replay::ingest(&st, &headers, Bytes::from(raw)).await
+    {
+        tracing::debug!(error = %e, "replay segment refused");
+        return cors((StatusCode::BAD_REQUEST, e).into_response());
     }
-    // Replays and anything else: accepted and dropped.
+    // Anything else: accepted and dropped.
     cors((StatusCode::ACCEPTED, Json(json!({}))).into_response())
 }
 
@@ -312,6 +321,16 @@ pub async fn intake(
     body: Bytes,
 ) -> Response {
     ingest(st, "/api/v2/rum", q, headers, body).await
+}
+
+/// `POST /api/v2/replay`: Session Replay segments.
+pub async fn replay_intake(
+    State(st): State<AppState>,
+    Query(q): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    ingest(st, "/api/v2/replay", q, headers, body).await
 }
 
 /// The SDK's `proxy` option: `?ddforward=<path and query, URL-encoded>`.
@@ -435,6 +454,9 @@ pub struct Session {
     errors: i64,
     /// The page it entered at.
     first_view: Option<String>,
+    /// Rage, dead and error clicks.
+    frustrations: i64,
+    has_replay: bool,
 }
 
 /// The sessions of the time range, latest first: the events sharing a
@@ -448,7 +470,7 @@ pub async fn sessions(State(st): State<AppState>, Json(s): Json<Scope>) -> ApiRe
     let sql = format!(
         r#"SELECT {sid} AS sid, CAST(min(ts) AS BIGINT) AS started, CAST(max(ts) AS BIGINT), max(service),
              max(coalesce({name}, {email}, {uid})), count(DISTINCT {vid}), {actions}, {errors},
-             first_value(CASE WHEN source = 'view' THEN message END ORDER BY ts)
+             first_value(CASE WHEN source = 'view' THEN message END ORDER BY ts), {frustrations}
            FROM {TABLE} WHERE {time} AND {filter} AND {sid} IS NOT NULL
            GROUP BY sid ORDER BY started DESC LIMIT 200"#,
         sid = at(r#"$["session"]["id"]"#),
@@ -458,6 +480,7 @@ pub async fn sessions(State(st): State<AppState>, Json(s): Json<Scope>) -> ApiRe
         vid = at(r#"$["view"]["id"]"#),
         actions = count("action"),
         errors = count("error"),
+        frustrations = r#"CAST(sum(CASE WHEN source = 'action' AND json_get(attributes, '$["action"]["frustration"]["type"]') LIKE '%_click%' THEN 1 ELSE 0 END) AS BIGINT)"#,
     );
     let rows = st.store.gt.query(&sql).await?;
     let sessions: Vec<Session> = rows
@@ -473,7 +496,23 @@ pub async fn sessions(State(st): State<AppState>, Json(s): Json<Scope>) -> ApiRe
                 actions: i64_at(r, 6),
                 errors: i64_at(r, 7),
                 first_view: str_at(r, 8),
+                frustrations: i64_at(r, 9),
+                has_replay: false,
             })
+        })
+        .collect();
+    let ids: Vec<String> = sessions.iter().map(|s| s.id.clone()).collect();
+    let replays = st
+        .store
+        .pg
+        .sessions_with_replay(&ids)
+        .await
+        .unwrap_or_default();
+    let sessions: Vec<Session> = sessions
+        .into_iter()
+        .map(|mut s| {
+            s.has_replay = replays.contains(&s.id);
+            s
         })
         .collect();
     Ok(Json(json!({"sessions": sessions})))

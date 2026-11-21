@@ -82,7 +82,11 @@ export const RUM_TABS = [
   { to: "/rum/performance-monitoring", label: "Performance" },
   { to: "/rum/sessions", label: "Sessions" },
   { to: "/rum/analytics", label: "Analytics" },
+  { to: "/rum/frustrations", label: "Frustrations" },
+  { to: "/rum/funnels", label: "Funnels" },
+  { to: "/rum/retention", label: "Retention" },
   { to: "/rum/explorer", label: "Events" },
+  { to: "/rum/generate-metrics", label: "Metrics" },
 ];
 const RUM_TYPES = ["view", "action", "error", "resource", "long_task"];
 

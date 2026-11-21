@@ -14,6 +14,8 @@ export default defineConfig({
       "/api": backend,
       "/auth": backend,
       "/health": backend,
+      // The browser SDK's intake (not the /rum/... pages).
+      "^/rum/proxy": backend,
     },
   },
 });

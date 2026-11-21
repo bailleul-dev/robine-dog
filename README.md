@@ -60,6 +60,10 @@ state (facets, metric metadata) is in PostgreSQL.
 | Synthetic tests alert by themselves: when one starts failing (at once, or after `min_failure_duration`) and when it recovers, an event is posted and its message is sent to the `@webhook-…` it names | — |
 | RUM sessions: what each visitor did (entry page, duration, views, actions, errors), opening on the session's events | — |
 | RUM analytics: sessions and page views over time, top pages, sites, browsers, operating systems, device types and referrers. The browser, system and device type are read from the `User-Agent` at intake, as Datadog does (`@browser.name`, `@os.name`, `@device.type`) | `/api/v2/rum/analytics/aggregate` |
+| Session Replay: the browser SDK's recordings (`sessionReplaySampleRate`) arrive through the same proxy (`/api/v2/replay`, multipart, compressed segments), are kept with the other data, and play in the session's page, view by view. Both of the SDK's formats play: rrweb's (SDK v5–v6) and the change records of v7, turned into rrweb's events in the browser | `/rum/replay/{session}` |
+| RUM frustration signals: rage, dead and error clicks (`@action.frustration.type`) by page and by element, with the share of frustrated sessions and the latest ones; each session's count in the sessions list | `/rum/frustrations` |
+| RUM funnels (views or `@facet:value` steps, by session, in order) and retention (users by day or week of first visit, and the share back each day or week after, by `@usr.id` or another attribute) | `/rum/funnels`, `/rum/retention` |
+| RUM-based metrics: counts and distributions of sessions, views, actions, errors, resources, long tasks or vitals, tagged by attributes; sessions and views counted once, when they first match or when they end, with their final values | `/api/v2/rum/config/metrics` |
 | Deployment tracking: on a service's page, each `version` that served requests with when it was first and last seen, its requests, error rate and latency; what got worse than the version before is in red | — |
 | Monitor search with Datadog's syntax (`status:alert type:log tag:"env:prod" muted:true`, words of the name) and its counts per status, type and tag | `/api/v1/monitor/search` |
 | Status page uptime: 30 days of daily bars and the uptime of each component backed by a synthetic test | — |
@@ -231,8 +235,10 @@ months) applied as table TTLs, `ROBINE_DOG_API_KEY`,
 `smtps://user:password@smtp.example.com` or `smtp://localhost:1025`) and
 `ROBINE_DOG_SMTP_FROM` (default `robine-dog <robine-dog@localhost>`),
 `ROBINE_DOG_CHROMIUM` (the browser of browser tests, found in the `PATH`
-otherwise; the image has one) and `ROBINE_DOG_CHROMIUM_ARGS` (extra flags,
-`--no-sandbox` in the image).
+otherwise; the image has one), `ROBINE_DOG_CHROMIUM_ARGS` (extra flags,
+`--no-sandbox` in the image) and `ROBINE_DOG_REPLAY_SAMPLE_RATE` (the share
+of robine-dog's own UI sessions recorded by Session Replay, 0 to 100, default
+0; with `ROBINE_DOG_CLIENT_TOKEN` set).
 
 Rows are written in batches (every 200 ms or 5,000 rows) and metric buckets
 every 10 seconds; on SIGTERM both are flushed before exiting.

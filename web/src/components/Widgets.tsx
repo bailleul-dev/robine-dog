@@ -1607,7 +1607,7 @@ function TraceService({
 // --- RUM funnel --------------------------------------------------------------------------
 
 function quoteValue(v: string) {
-  return /^[\w./:-]+$/.test(v) ? v : `"${v.replace(/"/g, '\\"')}"`;
+  return /^[\w./:*-]+$/.test(v) ? v : `"${v.replace(/"/g, '\\"')}"`;
 }
 
 export function funnelSteps(steps: { facet: string; value: string }[]) {

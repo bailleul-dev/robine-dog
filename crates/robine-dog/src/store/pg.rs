@@ -105,6 +105,25 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (result_id, step)
     );
     "#,
+    // Session Replay segments, zlib-compressed JSON as the browser SDK sends them.
+    r#"
+    CREATE TABLE replay_segments (
+        id BIGSERIAL PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        view_id TEXT NOT NULL,
+        application_id TEXT,
+        start_ms BIGINT NOT NULL,
+        end_ms BIGINT NOT NULL,
+        records INT NOT NULL,
+        full_snapshot BOOLEAN NOT NULL,
+        index_in_view INT,
+        creation_reason TEXT,
+        source TEXT,
+        data BYTEA NOT NULL
+    );
+    CREATE INDEX replay_segments_by_session ON replay_segments (session_id, start_ms);
+    CREATE INDEX replay_segments_by_time ON replay_segments (start_ms);
+    "#,
 ];
 
 /// A monitor group's state, as last evaluated.
@@ -143,6 +162,13 @@ fn ms(t: Option<std::time::SystemTime>) -> Option<i64> {
 
 fn time(ms: Option<i64>) -> Option<std::time::SystemTime> {
     ms.map(|m| std::time::UNIX_EPOCH + std::time::Duration::from_millis(m.max(0) as u64))
+}
+
+/// A stored Session Replay segment.
+pub struct ReplaySegment {
+    pub meta: crate::rum::replay::Meta,
+    /// zlib-compressed JSON.
+    pub data: Vec<u8>,
 }
 
 /// A synthetic test's run.
@@ -723,5 +749,92 @@ impl Pg {
         )
         .await?;
         Ok(n)
+    }
+
+    // --- session replay ----------------------------------------------------------
+
+    pub async fn put_replay_segment(
+        &self,
+        m: &crate::rum::replay::Meta,
+        data: &[u8],
+    ) -> Result<()> {
+        let c = self.pool.get().await?;
+        let records = m.records_count as i32;
+        let index = m.index_in_view.map(|i| i as i32);
+        c.execute(
+            "INSERT INTO replay_segments (session_id, view_id, application_id, start_ms, end_ms, records,
+                full_snapshot, index_in_view, creation_reason, source, data)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+            &[
+                &m.session_id,
+                &m.view_id,
+                &m.application_id,
+                &m.start,
+                &m.end,
+                &records,
+                &m.has_full_snapshot,
+                &index,
+                &m.creation_reason,
+                &m.source,
+                &data,
+            ],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// A session's segments, oldest first.
+    pub async fn replay_segments(&self, session_id: &str) -> Result<Vec<ReplaySegment>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT session_id, view_id, application_id, start_ms, end_ms, records, full_snapshot,
+                    index_in_view, creation_reason, source, data
+                 FROM replay_segments WHERE session_id = $1 ORDER BY start_ms",
+                &[&session_id],
+            )
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| ReplaySegment {
+                meta: crate::rum::replay::Meta {
+                    session_id: r.get(0),
+                    view_id: r.get(1),
+                    application_id: r.get(2),
+                    start: r.get(3),
+                    end: r.get(4),
+                    records_count: r.get::<_, i32>(5) as i64,
+                    has_full_snapshot: r.get(6),
+                    index_in_view: r.get::<_, Option<i32>>(7).map(i64::from),
+                    creation_reason: r.get(8),
+                    source: r.get(9),
+                },
+                data: r.get(10),
+            })
+            .collect())
+    }
+
+    /// Which of these sessions have a replay.
+    pub async fn sessions_with_replay(
+        &self,
+        ids: &[String],
+    ) -> Result<std::collections::HashSet<String>> {
+        let c = self.pool.get().await?;
+        let rows = c
+            .query(
+                "SELECT DISTINCT session_id FROM replay_segments WHERE session_id = ANY($1)",
+                &[&ids],
+            )
+            .await?;
+        Ok(rows.iter().map(|r| r.get(0)).collect())
+    }
+
+    pub async fn purge_replay_segments(&self, before_ms: i64) -> Result<u64> {
+        let c = self.pool.get().await?;
+        Ok(c.execute(
+            "DELETE FROM replay_segments WHERE end_ms < $1",
+            &[&before_ms],
+        )
+        .await?)
     }
 }
