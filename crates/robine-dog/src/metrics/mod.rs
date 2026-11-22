@@ -31,6 +31,15 @@ pub struct Point {
     pub weight: f64,
 }
 
+/// Where a metric's points are: Cloud Cost's own table for cost metrics.
+pub fn table_of(metric: &str) -> &'static str {
+    if metric == "all.cost" || metric.ends_with(".cost.amortized") {
+        "cost_points"
+    } else {
+        "metric_points"
+    }
+}
+
 impl Insertable for Point {
     const TABLE: &'static str = "metric_points";
     const COLUMNS: &'static str = r#"("ts", "metric", "host", "tags", "value", "weight")"#;

@@ -226,6 +226,7 @@ const SECTIONS: Item[][] = [
         "/network",
         "/devices",
         "/fleet",
+        "/cost",
       ],
       links: [
         {
@@ -264,7 +265,11 @@ const SECTIONS: Item[][] = [
           to: "/resources",
           hint: "Every host, container, pod and device",
         },
-        { label: "Cloud Cost" },
+        {
+          label: "Cloud Cost",
+          to: "/cost",
+          hint: "Cloud bills, Custom Costs and Kubernetes cost allocation",
+        },
       ],
       groups: [
         {

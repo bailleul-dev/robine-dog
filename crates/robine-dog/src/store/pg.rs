@@ -433,6 +433,23 @@ const MIGRATIONS: &[&str] = &[
         host TEXT NOT NULL,
         seen BIGINT NOT NULL
     );
+    "#, // Cloud Cost: daily costs per source (a file, an account's month, a
+    // cluster's day), replaced as a whole on re-import.
+    r#"
+    CREATE TABLE IF NOT EXISTS cost_items (
+        day BIGINT NOT NULL,
+        provider TEXT NOT NULL,
+        service TEXT NOT NULL,
+        account TEXT NOT NULL,
+        resource TEXT NOT NULL,
+        tags JSONB NOT NULL,
+        cost DOUBLE PRECISION NOT NULL,
+        currency TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        extra JSONB
+    );
+    CREATE INDEX IF NOT EXISTS cost_items_by_day ON cost_items (day);
+    CREATE INDEX IF NOT EXISTS cost_items_by_source ON cost_items (source_id);
     "#,
 ];
 

@@ -16,6 +16,7 @@ mod catalog;
 mod checks;
 mod civis;
 mod config;
+mod cost;
 mod dbm;
 mod delivery;
 mod dsm;
@@ -182,6 +183,14 @@ fn logconfig_routes(r: Router<AppState>, v1: &str, v2: &str) -> Router<AppState>
             .delete(mwl::delete),
     )
     .route(&format!("{v2}/metrics/{{name}}/volumes"), get(mwl::volumes))
+    .route(
+        &format!("{v2}/cost/custom_costs"),
+        get(cost::files).put(cost::upload),
+    )
+    .route(
+        &format!("{v2}/cost/custom_costs/{{id}}"),
+        get(cost::file).delete(cost::delete_file),
+    )
     .route(
         &format!("{v2}/api_keys"),
         get(keys::list_api).post(keys::create_api),
@@ -594,6 +603,17 @@ pub(crate) fn ui_routes() -> Router<AppState> {
         .route("/appsec/endpoints", get(appsec::endpoints))
         .route("/npm", get(infra::npm))
         .route("/metrics/tag-configs", get(mwl::list))
+        .route("/cost", get(cost::explore))
+        .route("/cost/kubernetes", get(cost::kubernetes))
+        .route(
+            "/cost/clusters",
+            get(cost::clusters).post(cost::create_cluster),
+        )
+        .route(
+            "/cost/clusters/{id}",
+            put(cost::update_cluster).delete(cost::delete_cluster),
+        )
+        .route("/cost/clusters/{id}/compute", post(cost::compute))
         .route("/help", get(keys::help))
         .route("/network-devices", get(infra::devices))
         .route("/fleet", get(infra::fleet))
@@ -1175,6 +1195,7 @@ async fn main() -> anyhow::Result<()> {
     civis::spawn_purge(st.clone());
     appsec::spawn(st.clone());
     infra::spawn_purge(st.clone());
+    cost::spawn(st.clone());
     audit::spawn_purge(st.clone());
     security::spawn(st.clone());
     oncall::spawn(st.clone());

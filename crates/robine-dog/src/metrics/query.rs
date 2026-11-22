@@ -320,11 +320,12 @@ pub fn build_sql(q: &MetricQuery, kind: Kind, from: i64, to: i64, interval: i64)
         .collect::<Vec<_>>()
         .join(", ");
     let secs = interval as f64 / 1000.0;
+    let table = super::table_of(&q.metric);
 
     if kind == Kind::Distribution {
         select.push(format!("{} AS v", q.space.weighted_sql()));
         return format!(
-            "SELECT {} FROM metric_points WHERE {where_} GROUP BY {group_by} ORDER BY b",
+            "SELECT {} FROM {table} WHERE {where_} GROUP BY {group_by} ORDER BY b",
             select.join(", ")
         );
     }
@@ -349,7 +350,7 @@ pub fn build_sql(q: &MetricQuery, kind: Kind, from: i64, to: i64, interval: i64)
         .chain(std::iter::once(format!("{} AS v", space.sql("v"))))
         .collect();
     format!(
-        "SELECT {} FROM (SELECT {}, host AS series_host, tags AS series_tags FROM metric_points WHERE {where_} \
+        "SELECT {} FROM (SELECT {}, host AS series_host, tags AS series_tags FROM {table} WHERE {where_} \
          GROUP BY {group_by}, series_host, series_tags) GROUP BY {group_by} ORDER BY b",
         outer.join(", "),
         select.join(", ")

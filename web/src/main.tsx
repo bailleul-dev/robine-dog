@@ -99,6 +99,7 @@ import {
 import { LlmAgents, LlmExperiments } from "./pages/LlmMore";
 import { LogForwarding, MetricTags } from "./pages/Forwarding";
 import { AgentSetup, ApiKeys, Help, OpenTelemetrySetup } from "./pages/Setup";
+import { CostExplorer, CostKubernetes, CostSettings } from "./pages/CloudCost";
 
 const client = new QueryClient({
   defaultOptions: {
@@ -324,6 +325,9 @@ function App() {
           element={<OpenTelemetrySetup />}
         />
         <Route path="/help" element={<Help />} />
+        <Route path="/cost" element={<CostExplorer />} />
+        <Route path="/cost/kubernetes" element={<CostKubernetes />} />
+        <Route path="/cost/settings" element={<CostSettings />} />
         <Route path="/logs/forwarding" element={<LogForwarding />} />
         <Route path="*" element={<Navigate to="/logs" replace />} />
       </Route>

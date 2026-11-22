@@ -85,6 +85,7 @@ impl Greptime {
             ("rum_events", logs_ttl_days),
             ("spans", logs_ttl_days),
             ("metric_points", metrics_ttl_days),
+            ("cost_points", metrics_ttl_days),
             ("monitor_values", metrics_ttl_days),
             ("check_runs", logs_ttl_days),
         ] {
@@ -165,6 +166,17 @@ const SCHEMA: &[&str] = &[
         "weight" DOUBLE DEFAULT 1,
         PRIMARY KEY ("metric", "host", "tags")
     ) WITH ('append_mode' = 'true')"#,
+    // Cloud Cost's metrics (`all.cost`, `<provider>.cost.amortized`): a
+    // re-imported bill replaces its points, so not append-only.
+    r#"CREATE TABLE IF NOT EXISTS "cost_points" (
+        "ts" TIMESTAMP(3) TIME INDEX,
+        "metric" STRING,
+        "host" STRING,
+        "tags" STRING,
+        "value" DOUBLE,
+        "weight" DOUBLE DEFAULT 1,
+        PRIMARY KEY ("metric", "host", "tags")
+    )"#,
     // Service checks: the Agent's check runs and DogStatsD's `_sc`.
     r#"CREATE TABLE IF NOT EXISTS "check_runs" (
         "ts" TIMESTAMP(3) TIME INDEX,

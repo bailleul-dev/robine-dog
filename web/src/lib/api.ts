@@ -780,6 +780,26 @@ export type CoverageReport = {
   total: number;
   ts: number;
 };
+export type CostCluster = {
+  id?: string;
+  name: string;
+  filter: string;
+  monthly_cost: number;
+  currency: string;
+  cpu_share: number;
+};
+export type CustomCostFile = {
+  id: string;
+  attributes: {
+    name: string;
+    rows: number;
+    billed_cost: number;
+    currency: string;
+    providers: string[];
+    uploaded_at: string | null;
+    charge_period: { start: string | null; end: string | null };
+  };
+};
 export type ApiKey = {
   id: string;
   type: string;
@@ -2219,6 +2239,45 @@ export const api = {
         span_id: string;
       }[];
     }>(`/data-jobs?from=${from}&to=${to}`),
+  cost: (p: { from: number; to: number; group: string; provider: string }) =>
+    call<{
+      days: number[];
+      groups: { key: string; total: number; values: number[] }[];
+      total: number;
+      previous_total: number;
+      currencies: string[];
+    }>(
+      `/cost?${new URLSearchParams({ from: String(p.from), to: String(p.to), group: p.group, provider: p.provider })}`,
+    ),
+  costKubernetes: (p: { from: number; to: number }) =>
+    call<{
+      data: {
+        cluster: string;
+        namespace: string;
+        workload: string | null;
+        cost: number;
+        currency: string | null;
+        cpu_cores: number | null;
+        memory_bytes: number | null;
+        pods: number;
+      }[];
+    }>(`/cost/kubernetes?from=${p.from}&to=${p.to}`),
+  costClusters: () => call<{ data: CostCluster[] }>("/cost/clusters"),
+  saveCostCluster: (c: CostCluster) =>
+    c.id
+      ? put<CostCluster>(`/cost/clusters/${c.id}`, c)
+      : post<CostCluster>("/cost/clusters", c),
+  deleteCostCluster: (id: string) => del<unknown>(`/cost/clusters/${id}`),
+  computeCostCluster: (id: string, days: number) =>
+    post<{ rows: number }>(`/cost/clusters/${id}/compute?days=${days}`, {}),
+  customCosts: () => call<{ data: CustomCostFile[] }>("/cost/custom_costs"),
+  uploadCustomCosts: (f: File) =>
+    call<{ data: CustomCostFile }>("/cost/custom_costs", {
+      method: "PUT",
+      body: f,
+      headers: { "content-type": f.type || "text/csv", "x-file-name": f.name },
+    }),
+  deleteCustomCosts: (id: string) => del<unknown>(`/cost/custom_costs/${id}`),
   keys: (kind: "api" | "app") =>
     call<{ data: ApiKey[] }>(
       kind === "api" ? "/api_keys" : "/application_keys",
