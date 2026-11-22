@@ -886,7 +886,7 @@ pub async fn explore(State(st): State<AppState>, Query(q): Query<ExploreReq>) ->
             v[i] += c;
         }
     }
-    let total: f64 = keys.iter().map(|k| k.1).sum();
+    let total: f64 = keys.iter().map(|k| k.1).sum::<f64>() + 0.0;
     let prev: f64 = db
         .query_one(
             "SELECT COALESCE(SUM(cost), 0) FROM cost_items WHERE day >= $1 AND day < $2 AND ($3 = '' OR provider = $3)",

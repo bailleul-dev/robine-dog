@@ -788,6 +788,25 @@ export type CostCluster = {
   currency: string;
   cpu_share: number;
 };
+export type CostAccount = {
+  id?: string;
+  name: string;
+  type: "s3" | "azure" | "http";
+  provider?: string;
+  bucket?: string;
+  prefix?: string;
+  region?: string;
+  endpoint?: string;
+  access_key_id?: string;
+  secret_access_key?: string;
+  sas_url?: string;
+  url?: string;
+  header_name?: string;
+  header_value?: string;
+  files?: number;
+  last_import?: number;
+  last_error?: string | null;
+};
 export type CustomCostFile = {
   id: string;
   attributes: {
@@ -2270,6 +2289,14 @@ export const api = {
   deleteCostCluster: (id: string) => del<unknown>(`/cost/clusters/${id}`),
   computeCostCluster: (id: string, days: number) =>
     post<{ rows: number }>(`/cost/clusters/${id}/compute?days=${days}`, {}),
+  costAccounts: () => call<{ data: CostAccount[] }>("/cost/accounts"),
+  saveCostAccount: (a: CostAccount) =>
+    a.id
+      ? put<CostAccount>(`/cost/accounts/${a.id}`, a)
+      : post<CostAccount>("/cost/accounts", a),
+  deleteCostAccount: (id: string) => del<unknown>(`/cost/accounts/${id}`),
+  importCostAccount: (id: string) =>
+    post<{ files: number; rows: number }>(`/cost/accounts/${id}/import`, {}),
   customCosts: () => call<{ data: CustomCostFile[] }>("/cost/custom_costs"),
   uploadCustomCosts: (f: File) =>
     call<{ data: CustomCostFile }>("/cost/custom_costs", {

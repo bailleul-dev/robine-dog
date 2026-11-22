@@ -17,6 +17,7 @@ mod checks;
 mod civis;
 mod config;
 mod cost;
+mod cost_accounts;
 mod dbm;
 mod delivery;
 mod dsm;
@@ -614,6 +615,18 @@ pub(crate) fn ui_routes() -> Router<AppState> {
             put(cost::update_cluster).delete(cost::delete_cluster),
         )
         .route("/cost/clusters/{id}/compute", post(cost::compute))
+        .route(
+            "/cost/accounts",
+            get(cost_accounts::accounts).post(cost_accounts::create),
+        )
+        .route(
+            "/cost/accounts/{id}",
+            put(cost_accounts::update).delete(cost_accounts::delete),
+        )
+        .route(
+            "/cost/accounts/{id}/import",
+            post(cost_accounts::import_now),
+        )
         .route("/help", get(keys::help))
         .route("/network-devices", get(infra::devices))
         .route("/fleet", get(infra::fleet))
@@ -1196,6 +1209,7 @@ async fn main() -> anyhow::Result<()> {
     appsec::spawn(st.clone());
     infra::spawn_purge(st.clone());
     cost::spawn(st.clone());
+    cost_accounts::spawn(st.clone());
     audit::spawn_purge(st.clone());
     security::spawn(st.clone());
     oncall::spawn(st.clone());

@@ -10,7 +10,7 @@ import { Modal } from "../components/Common";
 import { PlusIcon, TrashIcon } from "../components/Icons";
 import { PageHeader } from "../components/Layout";
 import { TimePicker } from "../components/TimePicker";
-import { api, CostCluster } from "../lib/api";
+import { api, CostAccount, CostCluster } from "../lib/api";
 import { ago, serviceColor } from "../lib/format";
 import { useTimeRange } from "../lib/time";
 
@@ -605,12 +605,245 @@ function CustomCosts() {
   );
 }
 
+const ACCOUNT_HELP: Record<string, string> = {
+  s3: "AWS Data Exports (FOCUS 1.0, CSV) or the CUR in S3; GCS with HMAC keys (endpoint https://storage.googleapis.com); OVH, MinIO, any S3 API.",
+  azure:
+    "A Cost Management export (FOCUS, CSV) to a Storage container: its SAS URL, with read and list rights.",
+  http: "One FOCUS file at a URL, read again when its ETag changes (or daily).",
+};
+
+function CloudAccounts() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["cost-accounts"],
+    queryFn: api.costAccounts,
+  });
+  const [edit, setEdit] = useState<Partial<CostAccount> | null>(null);
+  const [error, setError] = useState("");
+  const save = useMutation({
+    mutationFn: () => api.saveCostAccount(edit as CostAccount),
+    onSuccess: () => {
+      setEdit(null);
+      qc.invalidateQueries({ queryKey: ["cost-accounts"] });
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+  const del = useMutation({
+    mutationFn: (id: string) => api.deleteCostAccount(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cost-accounts"] }),
+  });
+  const run = useMutation({
+    mutationFn: (id: string) => api.importCostAccount(id),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["cost-accounts"] }),
+  });
+  const field = (
+    k: keyof CostAccount,
+    label: string,
+    placeholder = "",
+    type = "text",
+  ) => (
+    <label className="form-field">
+      {label}
+      <input
+        className="input"
+        type={type}
+        placeholder={placeholder}
+        value={(edit?.[k] as string) ?? ""}
+        onChange={(e) => setEdit({ ...edit, [k]: e.target.value })}
+      />
+    </label>
+  );
+  return (
+    <>
+      <div
+        className="section-title"
+        style={{ display: "flex", alignItems: "center" }}
+      >
+        Cloud accounts
+        <div className="spacer" />
+        <button
+          className="btn small"
+          onClick={() => {
+            setError("");
+            setEdit({ type: "s3", name: "", provider: "AWS" });
+          }}
+        >
+          <PlusIcon /> New account
+        </button>
+      </div>
+      <div className="card" style={{ padding: 0 }}>
+        <table className="list">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Source</th>
+              <th style={{ textAlign: "right" }}>Files</th>
+              <th>Last import</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {q.data?.data.map((a) => (
+              <tr key={a.id}>
+                <td>
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setError("");
+                      setEdit(a);
+                    }}
+                  >
+                    {a.name}
+                  </a>
+                </td>
+                <td className="mono">
+                  {a.type === "s3"
+                    ? `s3://${a.bucket}/${a.prefix ?? ""}`
+                    : a.type === "azure"
+                      ? a.sas_url?.split("?")[0]
+                      : a.url}
+                </td>
+                <td style={{ textAlign: "right" }}>{a.files}</td>
+                <td>
+                  {a.last_import ? (
+                    <span className="muted">{ago(a.last_import)}</span>
+                  ) : (
+                    "never"
+                  )}
+                  {a.last_error && (
+                    <div className="error-text">{a.last_error}</div>
+                  )}
+                </td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button
+                    className="btn small"
+                    disabled={run.isPending}
+                    onClick={() => run.mutate(a.id!)}
+                  >
+                    Import now
+                  </button>{" "}
+                  <button
+                    className="btn icon ghost"
+                    title="Delete the account and its costs"
+                    onClick={() => del.mutate(a.id!)}
+                  >
+                    <TrashIcon />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {q.data && !q.data.data.length && (
+              <tr>
+                <td colSpan={5} className="muted">
+                  None.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {run.data && (
+        <p className="muted">
+          {run.data.files} file(s) imported, {run.data.rows} cost rows.
+        </p>
+      )}
+      {run.error && (
+        <div className="error-text">{(run.error as Error).message}</div>
+      )}
+      {edit && (
+        <Modal
+          title={edit.id ? "Edit account" : "New cloud account"}
+          onClose={() => setEdit(null)}
+          width={560}
+        >
+          <div style={{ display: "flex", gap: 8 }}>
+            <label className="form-field" style={{ flex: 1 }}>
+              Source
+              <select
+                className="input"
+                value={edit.type}
+                onChange={(e) =>
+                  setEdit({
+                    ...edit,
+                    type: e.target.value as CostAccount["type"],
+                  })
+                }
+              >
+                <option value="s3">S3 bucket (AWS, GCS, OVH, MinIO…)</option>
+                <option value="azure">Azure Storage container</option>
+                <option value="http">HTTP URL</option>
+              </select>
+            </label>
+            <label className="form-field" style={{ width: 160 }}>
+              Provider (if the file has none)
+              <input
+                className="input"
+                value={edit.provider ?? ""}
+                onChange={(e) => setEdit({ ...edit, provider: e.target.value })}
+              />
+            </label>
+          </div>
+          <p className="muted" style={{ marginTop: 0 }}>
+            {ACCOUNT_HELP[edit.type ?? "s3"]}
+          </p>
+          {field("name", "Name")}
+          {edit.type === "s3" && (
+            <>
+              {field("bucket", "Bucket")}
+              {field("prefix", "Prefix", "exports/focus/")}
+              {field("region", "Region", "eu-west-3")}
+              {field(
+                "endpoint",
+                "Endpoint (not AWS)",
+                "https://storage.googleapis.com",
+              )}
+              {field("access_key_id", "Access key ID")}
+              {field("secret_access_key", "Secret access key", "", "password")}
+            </>
+          )}
+          {edit.type === "azure" && (
+            <>
+              {field(
+                "sas_url",
+                "Container SAS URL",
+                "https://account.blob.core.windows.net/exports?sv=…&sig=…",
+                "password",
+              )}
+              {field("prefix", "Prefix", "focus/")}
+            </>
+          )}
+          {edit.type === "http" && (
+            <>
+              {field("url", "URL")}
+              {field("header_name", "Header (optional)", "Authorization")}
+              {field("header_value", "Header value", "", "password")}
+            </>
+          )}
+          {error && <div className="error-text">{error}</div>}
+          <div className="toolbar">
+            <div className="spacer" />
+            <button
+              className="btn primary"
+              disabled={!edit.name?.trim()}
+              onClick={() => save.mutate()}
+            >
+              Save and import
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 /** Where costs come from. */
 export function CostSettings() {
   return (
     <>
       <PageHeader title="Cloud Cost settings" tabs={COST_TABS} />
       <div className="page-scroll page-padding">
+        <CloudAccounts />
         <Clusters />
         <CustomCosts />
       </div>
