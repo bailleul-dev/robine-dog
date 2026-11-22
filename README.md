@@ -40,6 +40,7 @@ state (facets, metric metadata) is in PostgreSQL.
 | Dashboard features: free layout (`layout_type: free`, widgets moved and resized on a grid), dashboard lists (`/api/v1/dashboard/lists/manual`, `/api/v2/dashboard/lists/manual/{id}/dashboards`), favorites, saved views of the template variables (`template_variable_presets`), read-only public links (`/api/v1/dashboard/public`, page `/p/{token}` without sign-in: only the stored widgets' queries run, with the variables the link allows, over 30 days at most) | `/dashboard/lists` |
 | Host Map: hosts as tiles colored by a metric, grouped by tags | `/infrastructure/map` |
 | Saved views of the Log and Trace explorers (query, facets, visualization, time) | `/api/ui/views` |
+| Phone-sized UI: the navigation as a drawer (tap a section for its pages), tabs and toolbars that scroll or wrap, facets above the results, tables that scroll sideways, dashboards one widget per row | under 760px wide |
 | Generate Metrics: log- and span-based counts and distributions, tagged by attributes, computed at ingestion | `/api/v2/logs/config/metrics`, `/api/v2/apm/config/metrics` |
 | OpenTelemetry: OTLP/HTTP traces, logs and metrics (protobuf and JSON, gzip), with Datadog's OTLP mapping | `/v1/traces`, `/v1/logs`, `/v1/metrics` |
 | Service Map: services laid out by call depth, edges from real parent / child spans across services (calls, error rate, latency), health colors, neighbors on hover, details panel | `/apm/map` |

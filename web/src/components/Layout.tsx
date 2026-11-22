@@ -758,8 +758,24 @@ function stored(key: string): boolean {
   }
 }
 
+const PHONE = "(max-width: 760px)";
+
+// On a phone the navigation is a drawer, and its menus open on tap.
+function usePhone() {
+  const [phone, setPhone] = useState(() => window.matchMedia(PHONE).matches);
+  useEffect(() => {
+    const m = window.matchMedia(PHONE);
+    const on = () => setPhone(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return phone;
+}
+
 export function Layout({ me }: { me: Identity }) {
   const { pathname } = useLocation();
+  const phone = usePhone();
+  const [drawer, setDrawer] = useState(false);
   const [collapsed, setCollapsed] = useState(() =>
     stored("robine-dog:nav-collapsed"),
   );
@@ -794,11 +810,15 @@ export function Layout({ me }: { me: Identity }) {
   // Opening waits a moment, so crossing other items on the way to a menu
   // does not switch it; leaving the navigation closes it.
   const later = (id: string | null, delay: number) => {
+    if (phone) return;
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setOpen(id), delay);
   };
   useEffect(() => () => window.clearTimeout(timer.current), []);
-  useEffect(() => setOpen(null), [pathname]);
+  useEffect(() => {
+    setOpen(null);
+    setDrawer(false);
+  }, [pathname]);
 
   const toggle = () => {
     const next = !collapsed;
@@ -822,6 +842,20 @@ export function Layout({ me }: { me: Identity }) {
   return (
     <div className="app">
       <header className="topbar">
+        <button
+          type="button"
+          className="nav-burger"
+          aria-label={drawer ? "Close the navigation" : "Open the navigation"}
+          aria-expanded={drawer}
+          onClick={() => {
+            setDrawer(!drawer);
+            setOpen(null);
+          }}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
         <NavLink to="/logs" className="nav-logo" aria-label="Home">
           <Logo />
           <span className="nav-brand">robine-dog</span>
@@ -839,7 +873,7 @@ export function Layout({ me }: { me: Identity }) {
       </header>
       <div className="app-body">
         <nav
-          className={`nav${collapsed ? " collapsed" : ""}`}
+          className={`nav${collapsed && !phone ? " collapsed" : ""}${drawer ? " drawer-open" : ""}`}
           aria-label="Main"
           onMouseLeave={() => later(null, 250)}
         >
@@ -860,7 +894,13 @@ export function Layout({ me }: { me: Identity }) {
                     );
                     const hover = {
                       onMouseEnter: () => later(it.id, open ? 120 : 60),
-                      onFocus: () => setOpen(it.id),
+                      onFocus: () => !phone && setOpen(it.id),
+                      // On a phone, a tap shows the item's pages.
+                      onClick: (e: React.MouseEvent) => {
+                        if (!phone) return;
+                        e.preventDefault();
+                        setOpen(it.id);
+                      },
                     };
                     return it.to ? (
                       <NavLink
@@ -931,6 +971,7 @@ export function Layout({ me }: { me: Identity }) {
               onMouseEnter={() => window.clearTimeout(timer.current)}
             >
               <div className="nav-menu-main">
+                <BackEntry onBack={close} />
                 <div className="nav-menu-title">{shown.label}</div>
                 {shown.links.map((l) => (
                   <Entry key={l.label} link={l} onNavigate={close} />
@@ -956,6 +997,7 @@ export function Layout({ me }: { me: Identity }) {
               onMouseEnter={() => window.clearTimeout(timer.current)}
             >
               <div className="nav-menu-main">
+                <BackEntry onBack={close} />
                 <div className="nav-menu-title">{me.name ?? "Signed in"}</div>
                 {me.email && <div className="nav-menu-note">{me.email}</div>}
                 <Entry
@@ -983,6 +1025,12 @@ export function Layout({ me }: { me: Identity }) {
             </div>
           )}
         </nav>
+        {drawer && (
+          <div
+            className="nav-drawer-backdrop"
+            onClick={() => setDrawer(false)}
+          />
+        )}
         {searching && (
           <QuickNav pages={pages} onClose={() => setSearching(false)} />
         )}
@@ -991,6 +1039,15 @@ export function Layout({ me }: { me: Identity }) {
         </main>
       </div>
     </div>
+  );
+}
+
+// Phone only (hidden by CSS elsewhere): back from a menu to the sections.
+function BackEntry({ onBack }: { onBack: () => void }) {
+  return (
+    <button type="button" className="nav-menu-back" onClick={onBack}>
+      ‹ All sections
+    </button>
   );
 }
 

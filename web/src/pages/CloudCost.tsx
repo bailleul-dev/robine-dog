@@ -23,6 +23,7 @@ export const COST_TABS = [
 const DAY = 86_400_000;
 
 function money(v: number, currency?: string | null) {
+  v = v || 0; // never "-0"
   const c = currency && /^[A-Z]{3}$/.test(currency) ? currency : undefined;
   try {
     return new Intl.NumberFormat(undefined, {
