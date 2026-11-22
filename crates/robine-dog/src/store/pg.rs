@@ -9,7 +9,7 @@ use tokio_postgres::NoTls;
 /// Applied in order, once each; the applied version is kept in `schema_version`.
 const MIGRATIONS: &[&str] = &[
     r#"
-    CREATE TABLE facets (
+    CREATE TABLE IF NOT EXISTS facets (
         id       BIGSERIAL PRIMARY KEY,
         dataset  TEXT NOT NULL CHECK (dataset IN ('logs', 'spans')),
         path     TEXT NOT NULL,
@@ -30,7 +30,7 @@ const MIGRATIONS: &[&str] = &[
         ('spans', '@peer.service', 'Peer Service', 'Network');
     "#,
     r#"
-    CREATE TABLE metric_metadata (
+    CREATE TABLE IF NOT EXISTS metric_metadata (
         name         TEXT PRIMARY KEY,
         type         TEXT NOT NULL,
         unit         TEXT,
@@ -42,7 +42,7 @@ const MIGRATIONS: &[&str] = &[
     // Configuration objects (pipelines, monitors, dashboards…), one JSON
     // document each, in a user-defined order within their kind.
     r#"
-    CREATE TABLE documents (
+    CREATE TABLE IF NOT EXISTS documents (
         kind        TEXT NOT NULL,
         id          TEXT NOT NULL,
         position    INT NOT NULL DEFAULT 0,
@@ -54,8 +54,8 @@ const MIGRATIONS: &[&str] = &[
     "#,
     // Monitors: per-group state, and the history of state changes.
     r#"
-    CREATE SEQUENCE monitor_ids START 1000;
-    CREATE TABLE monitor_groups (
+    CREATE SEQUENCE IF NOT EXISTS monitor_ids START 1000;
+    CREATE TABLE IF NOT EXISTS monitor_groups (
         monitor_id      BIGINT NOT NULL,
         grp             TEXT NOT NULL,
         status          TEXT NOT NULL,
@@ -67,7 +67,7 @@ const MIGRATIONS: &[&str] = &[
         since           TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY (monitor_id, grp)
     );
-    CREATE TABLE monitor_events (
+    CREATE TABLE IF NOT EXISTS monitor_events (
         id           BIGSERIAL PRIMARY KEY,
         monitor_id   BIGINT NOT NULL,
         grp          TEXT NOT NULL,
@@ -79,15 +79,15 @@ const MIGRATIONS: &[&str] = &[
         message      TEXT NOT NULL,
         notified     TEXT[] NOT NULL DEFAULT '{}'
     );
-    CREATE INDEX monitor_events_by_monitor ON monitor_events (monitor_id, ts DESC);
+    CREATE INDEX IF NOT EXISTS monitor_events_by_monitor ON monitor_events (monitor_id, ts DESC);
     "#,
     // When each group was first seen (`new_group_delay`).
     r#"
-    ALTER TABLE monitor_groups ADD COLUMN first_seen TIMESTAMPTZ NOT NULL DEFAULT now();
+    ALTER TABLE monitor_groups ADD COLUMN IF NOT EXISTS first_seen TIMESTAMPTZ NOT NULL DEFAULT now();
     "#,
     // Synthetic test results, and the screenshots of browser tests' steps.
     r#"
-    CREATE TABLE synthetics_results (
+    CREATE TABLE IF NOT EXISTS synthetics_results (
         result_id TEXT PRIMARY KEY,
         public_id TEXT NOT NULL,
         ts BIGINT NOT NULL,
@@ -95,10 +95,10 @@ const MIGRATIONS: &[&str] = &[
         batch_id TEXT,
         body JSONB NOT NULL
     );
-    CREATE INDEX synthetics_results_by_test ON synthetics_results (public_id, ts DESC);
-    CREATE INDEX synthetics_results_by_batch ON synthetics_results (batch_id)
+    CREATE INDEX IF NOT EXISTS synthetics_results_by_test ON synthetics_results (public_id, ts DESC);
+    CREATE INDEX IF NOT EXISTS synthetics_results_by_batch ON synthetics_results (batch_id)
         WHERE batch_id IS NOT NULL;
-    CREATE TABLE synthetics_screenshots (
+    CREATE TABLE IF NOT EXISTS synthetics_screenshots (
         result_id TEXT NOT NULL REFERENCES synthetics_results ON DELETE CASCADE,
         step INT NOT NULL,
         image BYTEA NOT NULL,
@@ -107,7 +107,7 @@ const MIGRATIONS: &[&str] = &[
     "#,
     // Session Replay segments, zlib-compressed JSON as the browser SDK sends them.
     r#"
-    CREATE TABLE replay_segments (
+    CREATE TABLE IF NOT EXISTS replay_segments (
         id BIGSERIAL PRIMARY KEY,
         session_id TEXT NOT NULL,
         view_id TEXT NOT NULL,
@@ -121,13 +121,13 @@ const MIGRATIONS: &[&str] = &[
         source TEXT,
         data BYTEA NOT NULL
     );
-    CREATE INDEX replay_segments_by_session ON replay_segments (session_id, start_ms);
-    CREATE INDEX replay_segments_by_time ON replay_segments (start_ms);
+    CREATE INDEX IF NOT EXISTS replay_segments_by_session ON replay_segments (session_id, start_ms);
+    CREATE INDEX IF NOT EXISTS replay_segments_by_time ON replay_segments (start_ms);
     "#,
     // Continuous Profiler: a profile's tags, its stacks folded per sample type
     // (zstd JSON), and the uploaded pprof files.
     r#"
-    CREATE TABLE profiles (
+    CREATE TABLE IF NOT EXISTS profiles (
         id BIGSERIAL PRIMARY KEY,
         start_ms BIGINT NOT NULL,
         end_ms BIGINT NOT NULL,
@@ -142,9 +142,9 @@ const MIGRATIONS: &[&str] = &[
         folded BYTEA NOT NULL,
         size BIGINT NOT NULL
     );
-    CREATE INDEX profiles_by_service ON profiles (service, end_ms);
-    CREATE INDEX profiles_by_time ON profiles (end_ms);
-    CREATE TABLE profile_files (
+    CREATE INDEX IF NOT EXISTS profiles_by_service ON profiles (service, end_ms);
+    CREATE INDEX IF NOT EXISTS profiles_by_time ON profiles (end_ms);
+    CREATE TABLE IF NOT EXISTS profile_files (
         profile_id BIGINT NOT NULL REFERENCES profiles ON DELETE CASCADE,
         name TEXT NOT NULL,
         data BYTEA NOT NULL,
@@ -153,7 +153,7 @@ const MIGRATIONS: &[&str] = &[
     "#,
     // LLM Observability: spans of LLM applications and their evaluations.
     r#"
-    CREATE TABLE llm_spans (
+    CREATE TABLE IF NOT EXISTS llm_spans (
         trace_id TEXT NOT NULL,
         span_id TEXT NOT NULL,
         parent_id TEXT,
@@ -178,10 +178,10 @@ const MIGRATIONS: &[&str] = &[
         body JSONB NOT NULL,
         PRIMARY KEY (trace_id, span_id)
     );
-    CREATE INDEX llm_spans_by_app ON llm_spans (ml_app, start_ns);
-    CREATE INDEX llm_spans_by_time ON llm_spans (start_ns);
-    CREATE INDEX llm_spans_by_session ON llm_spans (session_id);
-    CREATE TABLE llm_evals (
+    CREATE INDEX IF NOT EXISTS llm_spans_by_app ON llm_spans (ml_app, start_ns);
+    CREATE INDEX IF NOT EXISTS llm_spans_by_time ON llm_spans (start_ns);
+    CREATE INDEX IF NOT EXISTS llm_spans_by_session ON llm_spans (session_id);
+    CREATE TABLE IF NOT EXISTS llm_evals (
         id BIGSERIAL PRIMARY KEY,
         trace_id TEXT NOT NULL,
         span_id TEXT NOT NULL,
@@ -193,13 +193,13 @@ const MIGRATIONS: &[&str] = &[
         ts BIGINT NOT NULL,
         tags TEXT[] NOT NULL
     );
-    CREATE INDEX llm_evals_by_span ON llm_evals (span_id);
-    CREATE INDEX llm_evals_by_time ON llm_evals (ts);
+    CREATE INDEX IF NOT EXISTS llm_evals_by_span ON llm_evals (span_id);
+    CREATE INDEX IF NOT EXISTS llm_evals_by_time ON llm_evals (ts);
     "#,
     // CI Visibility: test events (session, module, suite, test) and
     // pipeline executions (pipeline, stage, job).
     r#"
-    CREATE TABLE ci_tests (
+    CREATE TABLE IF NOT EXISTS ci_tests (
         id BIGSERIAL PRIMARY KEY,
         level TEXT NOT NULL,
         session_id TEXT,
@@ -218,9 +218,9 @@ const MIGRATIONS: &[&str] = &[
         repository TEXT,
         meta JSONB NOT NULL
     );
-    CREATE INDEX ci_tests_by_time ON ci_tests (start_ns);
-    CREATE INDEX ci_tests_by_test ON ci_tests (service, suite, name);
-    CREATE TABLE ci_pipelines (
+    CREATE INDEX IF NOT EXISTS ci_tests_by_time ON ci_tests (start_ns);
+    CREATE INDEX IF NOT EXISTS ci_tests_by_test ON ci_tests (service, suite, name);
+    CREATE TABLE IF NOT EXISTS ci_pipelines (
         id BIGSERIAL PRIMARY KEY,
         provider TEXT NOT NULL,
         level TEXT NOT NULL,
@@ -238,13 +238,13 @@ const MIGRATIONS: &[&str] = &[
         url TEXT,
         UNIQUE (provider, level, unique_id)
     );
-    CREATE INDEX ci_pipelines_by_time ON ci_pipelines (end_ms);
-    CREATE INDEX ci_pipelines_by_pipeline ON ci_pipelines (provider, pipeline_id);
+    CREATE INDEX IF NOT EXISTS ci_pipelines_by_time ON ci_pipelines (end_ms);
+    CREATE INDEX IF NOT EXISTS ci_pipelines_by_pipeline ON ci_pipelines (provider, pipeline_id);
     "#,
     // Cloud SIEM signals, and the Audit Trail of changes made through the
     // UI and the API.
     r#"
-    CREATE TABLE security_signals (
+    CREATE TABLE IF NOT EXISTS security_signals (
         id BIGSERIAL PRIMARY KEY,
         rule_id TEXT NOT NULL,
         rule_name TEXT NOT NULL,
@@ -260,9 +260,9 @@ const MIGRATIONS: &[&str] = &[
         assignee TEXT,
         archive_reason TEXT
     );
-    CREATE INDEX security_signals_by_time ON security_signals (last_seen);
-    CREATE INDEX security_signals_by_rule ON security_signals (rule_id, group_key);
-    CREATE TABLE audit_events (
+    CREATE INDEX IF NOT EXISTS security_signals_by_time ON security_signals (last_seen);
+    CREATE INDEX IF NOT EXISTS security_signals_by_rule ON security_signals (rule_id, group_key);
+    CREATE TABLE IF NOT EXISTS audit_events (
         id BIGSERIAL PRIMARY KEY,
         ts BIGINT NOT NULL,
         actor TEXT NOT NULL,
@@ -272,11 +272,11 @@ const MIGRATIONS: &[&str] = &[
         path TEXT NOT NULL,
         status INT NOT NULL
     );
-    CREATE INDEX audit_events_by_time ON audit_events (ts);
+    CREATE INDEX IF NOT EXISTS audit_events_by_time ON audit_events (ts);
     "#,
     // Data Streams Monitoring and Database Monitoring.
     r#"
-    CREATE TABLE dsm_points (
+    CREATE TABLE IF NOT EXISTS dsm_points (
         ts BIGINT NOT NULL,
         env TEXT,
         service TEXT NOT NULL,
@@ -289,15 +289,15 @@ const MIGRATIONS: &[&str] = &[
         edge_p50 DOUBLE PRECISION,
         edge_p99 DOUBLE PRECISION
     );
-    CREATE INDEX dsm_points_by_time ON dsm_points (ts);
-    CREATE TABLE dsm_backlogs (
+    CREATE INDEX IF NOT EXISTS dsm_points_by_time ON dsm_points (ts);
+    CREATE TABLE IF NOT EXISTS dsm_backlogs (
         ts BIGINT NOT NULL,
         service TEXT NOT NULL,
         tags TEXT[] NOT NULL,
         value BIGINT NOT NULL
     );
-    CREATE INDEX dsm_backlogs_by_time ON dsm_backlogs (ts);
-    CREATE TABLE dbm_query_metrics (
+    CREATE INDEX IF NOT EXISTS dsm_backlogs_by_time ON dsm_backlogs (ts);
+    CREATE TABLE IF NOT EXISTS dbm_query_metrics (
         ts BIGINT NOT NULL,
         host TEXT NOT NULL,
         dbms TEXT NOT NULL,
@@ -309,9 +309,9 @@ const MIGRATIONS: &[&str] = &[
         total_time_ms DOUBLE PRECISION NOT NULL,
         rows DOUBLE PRECISION NOT NULL
     );
-    CREATE INDEX dbm_query_metrics_by_time ON dbm_query_metrics (ts);
-    CREATE INDEX dbm_query_metrics_by_query ON dbm_query_metrics (query_signature, ts);
-    CREATE TABLE dbm_samples (
+    CREATE INDEX IF NOT EXISTS dbm_query_metrics_by_time ON dbm_query_metrics (ts);
+    CREATE INDEX IF NOT EXISTS dbm_query_metrics_by_query ON dbm_query_metrics (query_signature, ts);
+    CREATE TABLE IF NOT EXISTS dbm_samples (
         ts BIGINT NOT NULL,
         host TEXT NOT NULL,
         dbms TEXT NOT NULL,
@@ -322,12 +322,12 @@ const MIGRATIONS: &[&str] = &[
         plan JSONB,
         body JSONB NOT NULL
     );
-    CREATE INDEX dbm_samples_by_query ON dbm_samples (query_signature, ts);
-    CREATE INDEX dbm_samples_by_time ON dbm_samples (ts);
+    CREATE INDEX IF NOT EXISTS dbm_samples_by_query ON dbm_samples (query_signature, ts);
+    CREATE INDEX IF NOT EXISTS dbm_samples_by_time ON dbm_samples (ts);
     "#,
     // Workflow Automation.
     r#"
-    CREATE TABLE workflow_runs (
+    CREATE TABLE IF NOT EXISTS workflow_runs (
         id BIGSERIAL PRIMARY KEY,
         workflow_id TEXT NOT NULL,
         workflow_name TEXT NOT NULL,
@@ -340,11 +340,11 @@ const MIGRATIONS: &[&str] = &[
         finished_at BIGINT,
         error TEXT
     );
-    CREATE INDEX workflow_runs_by_workflow ON workflow_runs (workflow_id, id);
+    CREATE INDEX IF NOT EXISTS workflow_runs_by_workflow ON workflow_runs (workflow_id, id);
     "#,
     // Software Delivery: deployments, DORA incidents, coverage reports.
     r#"
-    CREATE TABLE deployments (
+    CREATE TABLE IF NOT EXISTS deployments (
         id BIGSERIAL PRIMARY KEY,
         service TEXT NOT NULL,
         env TEXT NOT NULL,
@@ -359,8 +359,8 @@ const MIGRATIONS: &[&str] = &[
         source TEXT NOT NULL,
         url TEXT
     );
-    CREATE INDEX deployments_by_time ON deployments (finished_ms);
-    CREATE TABLE dora_incidents (
+    CREATE INDEX IF NOT EXISTS deployments_by_time ON deployments (finished_ms);
+    CREATE TABLE IF NOT EXISTS dora_incidents (
         id BIGSERIAL PRIMARY KEY,
         services TEXT[] NOT NULL,
         env TEXT,
@@ -370,7 +370,7 @@ const MIGRATIONS: &[&str] = &[
         started_ms BIGINT NOT NULL,
         finished_ms BIGINT
     );
-    CREATE TABLE coverage_reports (
+    CREATE TABLE IF NOT EXISTS coverage_reports (
         id BIGSERIAL PRIMARY KEY,
         repository TEXT NOT NULL,
         branch TEXT,
@@ -382,11 +382,11 @@ const MIGRATIONS: &[&str] = &[
         total BIGINT NOT NULL,
         ts BIGINT NOT NULL
     );
-    CREATE INDEX coverage_reports_by_time ON coverage_reports (ts);
+    CREATE INDEX IF NOT EXISTS coverage_reports_by_time ON coverage_reports (ts);
     "#,
     // Code Security: libraries loaded by services, checked against OSV.
     r#"
-    CREATE TABLE sca_dependencies (
+    CREATE TABLE IF NOT EXISTS sca_dependencies (
         service TEXT NOT NULL,
         env TEXT NOT NULL,
         language TEXT NOT NULL,
@@ -395,7 +395,7 @@ const MIGRATIONS: &[&str] = &[
         last_seen BIGINT NOT NULL,
         PRIMARY KEY (service, env, name, version)
     );
-    CREATE TABLE sca_packages (
+    CREATE TABLE IF NOT EXISTS sca_packages (
         language TEXT NOT NULL,
         name TEXT NOT NULL,
         version TEXT NOT NULL,
@@ -403,7 +403,7 @@ const MIGRATIONS: &[&str] = &[
         vulns TEXT[] NOT NULL,
         PRIMARY KEY (language, name, version)
     );
-    CREATE TABLE sca_vulns (
+    CREATE TABLE IF NOT EXISTS sca_vulns (
         id TEXT PRIMARY KEY,
         summary TEXT,
         severity TEXT,
@@ -413,7 +413,7 @@ const MIGRATIONS: &[&str] = &[
     "#,
     // Cloud Network Monitoring: flows per minute, local addresses per host.
     r#"
-    CREATE TABLE npm_flows (
+    CREATE TABLE IF NOT EXISTS npm_flows (
         ts BIGINT NOT NULL,
         host TEXT NOT NULL,
         local_ip TEXT NOT NULL,
@@ -427,8 +427,8 @@ const MIGRATIONS: &[&str] = &[
         rtt_sum BIGINT NOT NULL,
         connections BIGINT NOT NULL
     );
-    CREATE INDEX npm_flows_by_time ON npm_flows (ts);
-    CREATE TABLE npm_hosts (
+    CREATE INDEX IF NOT EXISTS npm_flows_by_time ON npm_flows (ts);
+    CREATE TABLE IF NOT EXISTS npm_hosts (
         ip TEXT PRIMARY KEY,
         host TEXT NOT NULL,
         seen BIGINT NOT NULL
@@ -582,10 +582,12 @@ impl Pg {
                 .await
                 .with_context(|| format!("migration {}", i + 1))?;
         }
+        // Never lowered: an older image must not make a newer one replay
+        // migrations (they are idempotent anyway).
         tx.execute("DELETE FROM schema_version", &[]).await?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES ($1)",
-            &[&(MIGRATIONS.len() as i32)],
+            &[&(MIGRATIONS.len() as i32).max(current)],
         )
         .await?;
         tx.commit().await?;
