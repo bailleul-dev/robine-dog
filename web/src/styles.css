@@ -5073,13 +5073,21 @@ table.list td.infra-bad {
     padding: 0 10px;
   }
 
-  /* Toolbars wrap instead of running off the screen. */
-  .toolbar {
+  /* Toolbars and filter rows wrap instead of running off the screen. */
+  .toolbar,
+  .filters-row {
     flex-wrap: wrap;
     padding: 6px 12px;
   }
   .viz-picker > .faint {
     display: none;
+  }
+  .filters-row .input {
+    max-width: 100%;
+  }
+  .infra-kinds {
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
   /* Explorers: the facets above the results, in a short scrolling block. */
