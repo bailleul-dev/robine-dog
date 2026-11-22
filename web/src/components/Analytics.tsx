@@ -281,7 +281,7 @@ export function AnalyticsView({
       return {
         key: name,
         label: name,
-        color: facets.length ? serviceColor(name) : "#8b6fd0",
+        color: facets.length ? serviceColor(name) : "#9a82c9",
         values: times.map((t) => byTime.get(t) ?? fill),
       };
     });

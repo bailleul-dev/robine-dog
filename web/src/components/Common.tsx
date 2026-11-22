@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { serviceColor, statusColor } from "../lib/format";
-import { CloseIcon, CopyIcon, ExcludeIcon, FilterIcon, PlusIcon } from "./Icons";
+import {
+  CloseIcon,
+  CopyIcon,
+  ExcludeIcon,
+  FilterIcon,
+  PlusIcon,
+} from "./Icons";
 
 export function ServiceChip({ name }: { name: string | null }) {
   if (!name) return <span className="faint">—</span>;
@@ -20,10 +26,22 @@ export function StatusPill({ status }: { status: string }) {
   );
 }
 
-export function HttpCode({ code }: { code: string | number | undefined | null }) {
-  if (code === undefined || code === null || code === "") return <span className="faint">—</span>;
+export function HttpCode({
+  code,
+}: {
+  code: string | number | undefined | null;
+}) {
+  if (code === undefined || code === null || code === "")
+    return <span className="faint">—</span>;
   const n = Number(code);
-  const cls = n >= 500 ? "code-5xx" : n >= 400 ? "code-4xx" : n >= 300 ? "code-3xx" : "code-2xx";
+  const cls =
+    n >= 500
+      ? "code-5xx"
+      : n >= 400
+        ? "code-4xx"
+        : n >= 300
+          ? "code-3xx"
+          : "code-2xx";
   return <span className={`code-badge ${cls}`}>{code}</span>;
 }
 
@@ -54,7 +72,8 @@ export function SidePanel({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !(e.target instanceof HTMLInputElement)) onClose();
+      if (e.key === "Escape" && !(e.target instanceof HTMLInputElement))
+        onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -63,7 +82,12 @@ export function SidePanel({
   useEffect(() => {
     const move = (e: MouseEvent) => {
       if (!dragging.current) return;
-      setWidth(Math.max(480, Math.min(window.innerWidth - 120, window.innerWidth - e.clientX)));
+      setWidth(
+        Math.max(
+          480,
+          Math.min(window.innerWidth - 120, window.innerWidth - e.clientX),
+        ),
+      );
     };
     const up = () => {
       if (dragging.current) {
@@ -87,7 +111,12 @@ export function SidePanel({
   return (
     <>
       <div className="sidepanel-backdrop" onClick={onClose} />
-      <section className="sidepanel" style={{ width }} role="dialog" aria-modal="true">
+      <section
+        className="sidepanel"
+        style={{ width }}
+        role="dialog"
+        aria-modal="true"
+      >
         <div
           className="sidepanel-resize"
           onMouseDown={(e) => {
@@ -99,7 +128,11 @@ export function SidePanel({
         <div className="sidepanel-header">
           {header}
           <div className="spacer" />
-          <button className="btn icon ghost" onClick={onClose} title="Close (Esc)">
+          <button
+            className="btn icon ghost"
+            onClick={onClose}
+            title="Close (Esc)"
+          >
             <CloseIcon />
           </button>
         </div>
@@ -149,14 +182,18 @@ export function ValueMenu({
         {clause}
       </div>
       <button onClick={() => (onFilter(action), onClose())}>
-        <FilterIcon /> Filter by <span className="mono">{clause.length > 34 ? `${clause.slice(0, 34)}…` : clause}</span>
+        <FilterIcon /> Filter by{" "}
+        <span className="mono">
+          {clause.length > 34 ? `${clause.slice(0, 34)}…` : clause}
+        </span>
       </button>
       <button onClick={() => (onExclude(action), onClose())}>
         <ExcludeIcon /> Exclude <span className="mono">-{action.path}</span>
       </button>
       {onAddFacet && (
         <button onClick={() => (onAddFacet(action.path), onClose())}>
-          <PlusIcon /> Create facet for <span className="mono">{action.path}</span>
+          <PlusIcon /> Create facet for{" "}
+          <span className="mono">{action.path}</span>
         </button>
       )}
       <button
@@ -192,14 +229,39 @@ export function Modal({
 }) {
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(28,26,41,0.35)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center" }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(43,35,51,0.32)",
+        zIndex: 90,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
       onMouseDown={onClose}
     >
       <div
-        style={{ background: "var(--bg)", borderRadius: 8, width: `min(${width}px, calc(100vw - 32px))`, maxHeight: "calc(100vh - 48px)", display: "flex", flexDirection: "column", boxShadow: "var(--shadow)" }}
+        style={{
+          background: "var(--bg)",
+          borderRadius: "var(--radius-lg)",
+          overflow: "hidden",
+          width: `min(${width}px, calc(100vw - 32px))`,
+          maxHeight: "calc(100vh - 48px)",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "var(--shadow)",
+        }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--border)", fontWeight: 600 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--border)",
+            fontWeight: 600,
+          }}
+        >
           {title}
           <div className="spacer" />
           <button className="btn icon ghost" onClick={onClose}>

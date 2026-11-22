@@ -91,17 +91,18 @@ function KeyTable({ kind }: { kind: "api" | "app" }) {
           title={`New ${label.toLowerCase()}`}
           onClose={() => setName(null)}
         >
-          <label className="form-field">
-            Name
-            <input
-              className="input"
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
-          <div className="toolbar">
-            <div className="spacer" />
+          <div className="modal-body">
+            <label className="form-field">
+              Name
+              <input
+                className="input"
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="modal-footer">
             <button
               className="btn primary"
               disabled={!name.trim()}
@@ -118,17 +119,19 @@ function KeyTable({ kind }: { kind: "api" | "app" }) {
           onClose={() => setCreated(null)}
           width={480}
         >
-          <p>Copy it now: it is not shown again.</p>
-          <pre
-            className="mono"
-            style={{
-              userSelect: "all",
-              wordBreak: "break-all",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {created}
-          </pre>
+          <div className="modal-body">
+            <p>Copy it now: it is not shown again.</p>
+            <pre
+              className="mono"
+              style={{
+                userSelect: "all",
+                wordBreak: "break-all",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {created}
+            </pre>
+          </div>
         </Modal>
       )}
     </>

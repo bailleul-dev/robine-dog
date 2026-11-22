@@ -423,7 +423,7 @@ export function MonitorPage() {
       return {
         key: s.group,
         label: s.group === "*" ? (m?.name ?? "value") : s.group,
-        color: s.group === "*" ? "#8b6fd0" : serviceColor(s.group),
+        color: s.group === "*" ? "#9a82c9" : serviceColor(s.group),
         values: times.map((t) => at.get(t) ?? NaN),
       };
     });
@@ -439,12 +439,12 @@ export function MonitorPage() {
   const markers = [
     th.critical !== undefined && {
       value: th.critical,
-      color: "#e74c50",
+      color: "#d8616a",
       label: `Alert ${fmtValue(th.critical)}`,
     },
     th.warning !== undefined && {
       value: th.warning,
-      color: "#f5a524",
+      color: "#e5a24a",
       label: `Warn ${fmtValue(th.warning)}`,
     },
   ].filter(Boolean) as { value: number; color: string; label: string }[];

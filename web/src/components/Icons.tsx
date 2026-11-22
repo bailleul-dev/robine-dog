@@ -5,7 +5,7 @@ const base = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strok
 
 export const Logo = (p: P) => (
   <svg viewBox="0 0 32 32" {...p}>
-    <rect width="32" height="32" rx="7" fill="#632ca6" />
+    <rect width="32" height="32" rx="7" fill="#7a5ca8" />
     <path d="M9 22c0-5.2 3.1-9.2 7-9.2s7 4 7 9.2" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
     <circle cx="13.2" cy="17.6" r="1.5" fill="#fff" />
     <circle cx="18.8" cy="17.6" r="1.5" fill="#fff" />

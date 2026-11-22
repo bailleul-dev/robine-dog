@@ -129,46 +129,49 @@ export function MetricTags() {
           onClose={() => setEdit(null)}
           width={460}
         >
-          <label className="form-field">
-            Metric
-            <input
-              className="input mono"
-              value={edit.metric}
-              onChange={(e) => setEdit({ ...edit, metric: e.target.value })}
-            />
-          </label>
-          <label className="form-field">
-            Type
-            <select
-              className="input"
-              value={edit.type}
-              onChange={(e) => setEdit({ ...edit, type: e.target.value })}
-            >
-              {["gauge", "count", "rate", "distribution"].map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-          </label>
-          <label className="form-field">
-            Tag keys
-            <input
-              className="input mono"
-              placeholder="env, service"
-              value={edit.tags}
-              onChange={(e) => setEdit({ ...edit, tags: e.target.value })}
-            />
-          </label>
-          <label className="muted">
-            <input
-              type="checkbox"
-              checked={edit.exclude}
-              onChange={(e) => setEdit({ ...edit, exclude: e.target.checked })}
-            />{" "}
-            Drop these tags instead of keeping only them
-          </label>
-          {error && <div className="form-error">{error}</div>}
-          <div className="toolbar">
-            <div className="spacer" />
+          <div className="modal-body">
+            <label className="form-field">
+              Metric
+              <input
+                className="input mono"
+                value={edit.metric}
+                onChange={(e) => setEdit({ ...edit, metric: e.target.value })}
+              />
+            </label>
+            <label className="form-field">
+              Type
+              <select
+                className="input"
+                value={edit.type}
+                onChange={(e) => setEdit({ ...edit, type: e.target.value })}
+              >
+                {["gauge", "count", "rate", "distribution"].map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </label>
+            <label className="form-field">
+              Tag keys
+              <input
+                className="input mono"
+                placeholder="env, service"
+                value={edit.tags}
+                onChange={(e) => setEdit({ ...edit, tags: e.target.value })}
+              />
+            </label>
+            <label className="muted">
+              <input
+                type="checkbox"
+                checked={edit.exclude}
+                onChange={(e) =>
+                  setEdit({ ...edit, exclude: e.target.checked })
+                }
+              />{" "}
+              Drop these tags instead of keeping only them
+            </label>
+            {error && <div className="form-error">{error}</div>}
+          </div>
+          <div className="modal-footer">
             <button
               className="btn primary"
               disabled={!edit.metric.trim()}
@@ -365,89 +368,92 @@ export function LogForwarding() {
           onClose={() => setEdit(null)}
           width={520}
         >
-          <label className="form-field">
-            Name
-            <input
-              className="input"
-              value={edit.name}
-              onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-            />
-          </label>
-          <label className="form-field">
-            Logs to forward (query; empty for all)
-            <input
-              className="input mono"
-              value={edit.query}
-              onChange={(e) => setEdit({ ...edit, query: e.target.value })}
-            />
-          </label>
-          <label className="form-field">
-            Type
-            <select
-              className="input"
-              value={edit.type}
-              onChange={(e) => setEdit({ ...edit, type: e.target.value })}
-            >
-              <option value="http">HTTP</option>
-              <option value="splunk_hec">Splunk HEC</option>
-              <option value="elasticsearch">Elasticsearch</option>
-            </select>
-          </label>
-          <label className="form-field">
-            Endpoint
-            <input
-              className="input mono"
-              placeholder="https://…"
-              value={edit.endpoint}
-              onChange={(e) => setEdit({ ...edit, endpoint: e.target.value })}
-            />
-          </label>
-          {edit.type !== "splunk_hec" && (
+          <div className="modal-body">
             <label className="form-field">
-              Username (basic auth, optional)
+              Name
               <input
                 className="input"
-                value={edit.user}
-                onChange={(e) => setEdit({ ...edit, user: e.target.value })}
+                value={edit.name}
+                onChange={(e) => setEdit({ ...edit, name: e.target.value })}
               />
             </label>
-          )}
-          <label className="form-field">
-            {edit.type === "splunk_hec"
-              ? "HEC token"
-              : edit.type === "http" && !edit.user
-                ? "Authorization header (optional)"
-                : "Password"}
-            {edit.id ? " (empty: unchanged)" : ""}
-            <input
-              className="input"
-              type="password"
-              value={edit.secret}
-              onChange={(e) => setEdit({ ...edit, secret: e.target.value })}
-            />
-          </label>
-          {edit.type === "elasticsearch" && (
             <label className="form-field">
-              Index
+              Logs to forward (query; empty for all)
               <input
                 className="input mono"
-                placeholder="datadog-logs"
-                value={edit.index}
-                onChange={(e) => setEdit({ ...edit, index: e.target.value })}
+                value={edit.query}
+                onChange={(e) => setEdit({ ...edit, query: e.target.value })}
               />
             </label>
-          )}
-          <label className="muted">
-            <input
-              type="checkbox"
-              checked={edit.enabled}
-              onChange={(e) => setEdit({ ...edit, enabled: e.target.checked })}
-            />{" "}
-            Enabled
-          </label>
-          {error && <div className="form-error">{error}</div>}
-          <div className="toolbar">
-            <div className="spacer" />
+            <label className="form-field">
+              Type
+              <select
+                className="input"
+                value={edit.type}
+                onChange={(e) => setEdit({ ...edit, type: e.target.value })}
+              >
+                <option value="http">HTTP</option>
+                <option value="splunk_hec">Splunk HEC</option>
+                <option value="elasticsearch">Elasticsearch</option>
+              </select>
+            </label>
+            <label className="form-field">
+              Endpoint
+              <input
+                className="input mono"
+                placeholder="https://…"
+                value={edit.endpoint}
+                onChange={(e) => setEdit({ ...edit, endpoint: e.target.value })}
+              />
+            </label>
+            {edit.type !== "splunk_hec" && (
+              <label className="form-field">
+                Username (basic auth, optional)
+                <input
+                  className="input"
+                  value={edit.user}
+                  onChange={(e) => setEdit({ ...edit, user: e.target.value })}
+                />
+              </label>
+            )}
+            <label className="form-field">
+              {edit.type === "splunk_hec"
+                ? "HEC token"
+                : edit.type === "http" && !edit.user
+                  ? "Authorization header (optional)"
+                  : "Password"}
+              {edit.id ? " (empty: unchanged)" : ""}
+              <input
+                className="input"
+                type="password"
+                value={edit.secret}
+                onChange={(e) => setEdit({ ...edit, secret: e.target.value })}
+              />
+            </label>
+            {edit.type === "elasticsearch" && (
+              <label className="form-field">
+                Index
+                <input
+                  className="input mono"
+                  placeholder="datadog-logs"
+                  value={edit.index}
+                  onChange={(e) => setEdit({ ...edit, index: e.target.value })}
+                />
+              </label>
+            )}
+            <label className="muted">
+              <input
+                type="checkbox"
+                checked={edit.enabled}
+                onChange={(e) =>
+                  setEdit({ ...edit, enabled: e.target.checked })
+                }
+              />{" "}
+              Enabled
+            </label>
+            {error && <div className="form-error">{error}</div>}
+          </div>
+          <div className="modal-footer">
             <button
               className="btn primary"
               disabled={!edit.name || !edit.endpoint}

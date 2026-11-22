@@ -293,7 +293,7 @@ export function ErrorTracking() {
                     <td>
                       <Sparkline
                         values={i.series}
-                        color="#e74c50"
+                        color="#d8616a"
                         width={120}
                         height={26}
                       />
@@ -449,7 +449,7 @@ export function IssuePage() {
               {
                 key: "errors",
                 label: "Errors",
-                color: "#e74c50",
+                color: "#d8616a",
                 values: chart.values,
               },
             ]}

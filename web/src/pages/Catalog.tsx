@@ -538,13 +538,13 @@ export function ResourcePage() {
                       {
                         key: "ok",
                         label: "OK",
-                        color: "#8b6fd0",
+                        color: "#9a82c9",
                         values: d.timeseries.map((p) => p.hits - p.errors),
                       },
                       {
                         key: "errors",
                         label: "Errors",
-                        color: "#e74c50",
+                        color: "#d8616a",
                         values: d.timeseries.map((p) => p.errors),
                       },
                     ]}
@@ -566,17 +566,17 @@ export function ResourcePage() {
                     series={[
                       {
                         key: "p50",
-                        color: "#5d8ae6",
+                        color: "#6b8fd6",
                         values: d.timeseries.map((p) => p.p50),
                       },
                       {
                         key: "p95",
-                        color: "#9b6fd6",
+                        color: "#9a82c9",
                         values: d.timeseries.map((p) => p.p95),
                       },
                       {
                         key: "p99",
-                        color: "#e3a63c",
+                        color: "#dba356",
                         values: d.timeseries.map((p) => p.p99),
                       },
                     ]}

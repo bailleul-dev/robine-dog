@@ -14,9 +14,9 @@ const ROW = 118;
 const R = 28;
 
 function health(errorRate: number): string {
-  if (errorRate >= 0.05) return "#e74c50";
-  if (errorRate >= 0.01) return "#f5a524";
-  return "#2ab673";
+  if (errorRate >= 0.05) return "#d8616a";
+  if (errorRate >= 0.01) return "#e5a24a";
+  return "#55ab83";
 }
 
 type Placed = {
@@ -150,9 +150,9 @@ export function ServiceMap() {
         />
         <div className="spacer" />
         <span className="map-legend">
-          <i style={{ background: "#2ab673" }} /> &lt;1% errors{" "}
-          <i style={{ background: "#f5a524" }} /> 1–5%{" "}
-          <i style={{ background: "#e74c50" }} /> ≥5%
+          <i style={{ background: "#55ab83" }} /> &lt;1% errors{" "}
+          <i style={{ background: "#e5a24a" }} /> 1–5%{" "}
+          <i style={{ background: "#d8616a" }} /> ≥5%
         </span>
         <span className="muted">
           {graph.placed.size} services · {graph.es.length} dependencies
@@ -169,7 +169,7 @@ export function ServiceMap() {
             className="service-map"
           >
             <defs>
-              {["#b8bcc8", "#f5a524", "#e74c50", "#632ca6"].map((c) => (
+              {["#c4bcc4", "#e5a24a", "#d8616a", "#7a5ca8"].map((c) => (
                 <marker
                   key={c}
                   id={`arrow-${c.slice(1)}`}
@@ -193,12 +193,12 @@ export function ServiceMap() {
               const active =
                 focus && (e.source === focus || e.target === focus);
               const color = active
-                ? "#632ca6"
+                ? "#7a5ca8"
                 : er >= 0.05
-                  ? "#e74c50"
+                  ? "#d8616a"
                   : er >= 0.01
-                    ? "#f5a524"
-                    : "#b8bcc8";
+                    ? "#e5a24a"
+                    : "#c4bcc4";
               const w =
                 1 +
                 (3 * Math.log10(1 + e.calls)) / Math.log10(1 + graph.maxCalls);
@@ -241,7 +241,7 @@ export function ServiceMap() {
             })}
             {[...graph.placed.values()].map((p) => {
               const s = p.summary;
-              const color = s ? health(s.error_rate) : "#b8bcc8";
+              const color = s ? health(s.error_rate) : "#c4bcc4";
               const dim = neighbours && !neighbours.has(p.name);
               return (
                 <g

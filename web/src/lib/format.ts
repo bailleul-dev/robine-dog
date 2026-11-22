@@ -1,4 +1,17 @@
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 const pad = (n: number, w = 2) => String(n).padStart(w, "0");
 
 /** `Nov 16 14:21:28.200` — the log list's date column. */
@@ -15,8 +28,10 @@ export function fullDate(ms: number): string {
 export function axisTime(ms: number, spanMs: number): string {
   const d = new Date(ms);
   if (spanMs > 2 * 86_400_000) return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
-  if (spanMs > 6 * 3_600_000 && d.getHours() === 0 && d.getMinutes() === 0) return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
-  if (spanMs <= 5 * 60_000) return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  if (spanMs > 6 * 3_600_000 && d.getHours() === 0 && d.getMinutes() === 0)
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  if (spanMs <= 5 * 60_000)
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
@@ -35,7 +50,8 @@ export function duration(ns: number): string {
   const abs = Math.abs(ns);
   if (abs >= 60e9) return `${(ns / 60e9).toFixed(abs >= 600e9 ? 0 : 1)} min`;
   if (abs >= 1e9) return `${(ns / 1e9).toFixed(abs >= 10e9 ? 1 : 2)} s`;
-  if (abs >= 1e6) return `${(ns / 1e6).toFixed(abs >= 100e6 ? 0 : abs >= 10e6 ? 1 : 2)} ms`;
+  if (abs >= 1e6)
+    return `${(ns / 1e6).toFixed(abs >= 100e6 ? 0 : abs >= 10e6 ? 1 : 2)} ms`;
   if (abs >= 1e3) return `${(ns / 1e3).toFixed(abs >= 100e3 ? 0 : 1)} µs`;
   return `${Math.round(ns)} ns`;
 }
@@ -59,32 +75,57 @@ export function percent(r: number): string {
 }
 
 export function rate(perSecond: number): string {
-  if (perSecond >= 1) return `${perSecond.toFixed(perSecond >= 100 ? 0 : 1)} req/s`;
+  if (perSecond >= 1)
+    return `${perSecond.toFixed(perSecond >= 100 ? 0 : 1)} req/s`;
   const perMin = perSecond * 60;
   return `${perMin.toFixed(perMin >= 10 ? 0 : 1)} req/min`;
 }
 
 export const STATUS_COLORS: Record<string, string> = {
-  emergency: "#a3132a",
-  alert: "#c4162a",
-  critical: "#d81f36",
-  error: "#e74c50",
-  warn: "#f5a524",
-  notice: "#3e88e6",
-  info: "#3e88e6",
-  debug: "#a8acb8",
-  ok: "#3db67b",
+  emergency: "#9e2f3d",
+  alert: "#b83a47",
+  critical: "#c94a55",
+  error: "#d8616a",
+  warn: "#e5a24a",
+  notice: "#5a8dd3",
+  info: "#5a8dd3",
+  debug: "#b0a8b2",
+  ok: "#55ab83",
 };
 
-export const STATUS_ORDER = ["emergency", "alert", "critical", "error", "warn", "notice", "info", "debug", "ok"];
+export const STATUS_ORDER = [
+  "emergency",
+  "alert",
+  "critical",
+  "error",
+  "warn",
+  "notice",
+  "info",
+  "debug",
+  "ok",
+];
 
 export function statusColor(s: string): string {
   return STATUS_COLORS[s] ?? STATUS_COLORS.info;
 }
 
 const PALETTE = [
-  "#5d8ae6", "#e2735a", "#46b39d", "#9b6fd6", "#e3a63c", "#4fb3d9", "#d65c9b", "#7fae4c",
-  "#c7703f", "#5a6fd6", "#38a38a", "#c9b23a", "#8a5ac7", "#d6574f", "#4b9be0", "#a3b84a",
+  "#6b8fd6",
+  "#d98466",
+  "#5bae99",
+  "#9a82c9",
+  "#dba356",
+  "#62afcf",
+  "#c96f9e",
+  "#86ad5e",
+  "#c07a4f",
+  "#6a7ccc",
+  "#4f9f8a",
+  "#c4ae52",
+  "#8c6bbf",
+  "#cf6b62",
+  "#5f9bd4",
+  "#a0b35e",
 ];
 
 /** A stable color per service, as in flame graphs. */

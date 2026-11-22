@@ -1261,10 +1261,10 @@ function SloWidget({ def }: { def: WidgetDef }) {
 }
 
 const MONITOR_COLORS: Record<string, string> = {
-  Alert: "#e74c50",
-  Warn: "#f5a524",
-  "No Data": "#7f8c9d",
-  OK: "#2ab673",
+  Alert: "#d8616a",
+  Warn: "#e5a24a",
+  "No Data": "#8f8794",
+  OK: "#55ab83",
 };
 
 function ManageStatus({ def }: { def: WidgetDef }) {
@@ -1315,7 +1315,7 @@ function ManageStatus({ def }: { def: WidgetDef }) {
                     <span
                       className="w-pill"
                       style={{
-                        background: MONITOR_COLORS[m.status] ?? "#7f8c9d",
+                        background: MONITOR_COLORS[m.status] ?? "#8f8794",
                       }}
                     >
                       {m.status}
@@ -1397,12 +1397,12 @@ function AlertGraph({
       markers={[
         th.critical !== undefined && {
           value: th.critical,
-          color: "#e74c50",
+          color: "#d8616a",
           label: `Alert ${fmt(th.critical)}`,
         },
         th.warning !== undefined && {
           value: th.warning,
-          color: "#f5a524",
+          color: "#e5a24a",
           label: `Warn ${fmt(th.warning)}`,
         },
       ].filter(
@@ -1449,10 +1449,10 @@ function AlertValue({ def }: { def: WidgetDef }) {
 }
 
 const CHECK_COLORS: Record<string, string> = {
-  OK: "#2ab673",
-  WARNING: "#f5a524",
-  CRITICAL: "#e74c50",
-  UNKNOWN: "#7f8c9d",
+  OK: "#55ab83",
+  WARNING: "#e5a24a",
+  CRITICAL: "#d8616a",
+  UNKNOWN: "#8f8794",
 };
 
 function CheckStatus({ def }: { def: WidgetDef }) {
@@ -1584,19 +1584,19 @@ function TraceService({
           chart(
             "Requests",
             ts.map((p) => p.hits),
-            "#3d9be9",
+            "#5a8dd3",
           )}
         {def.show_errors !== false &&
           chart(
             "Errors",
             ts.map((p) => p.errors),
-            "#e74c50",
+            "#d8616a",
           )}
         {def.show_latency !== false &&
           chart(
             "Latency p95",
             ts.map((p) => p.p95),
-            "#8b6fd0",
+            "#9a82c9",
             (v) => nsDuration(v),
           )}
       </div>
@@ -2212,7 +2212,7 @@ export function extraBlank(type: string): WidgetDef {
       return {
         type,
         text: "Text",
-        color: "#4d4d4d",
+        color: "#4a4350",
         font_size: "auto",
         text_align: "left",
       };
@@ -2337,7 +2337,7 @@ export function ExtraFields({
               label="Color"
               value={s("color")}
               onChange={(color) => setDef({ color })}
-              placeholder="#4d4d4d"
+              placeholder="#4a4350"
             />
             <Text
               label="Font size (px or auto)"

@@ -786,7 +786,7 @@ export function SloPage() {
               kind="lines"
               height={140}
               format={(v) => `${v.toFixed(0)} %`}
-              series={chart(charts.budget, "budget left", "#8b6fd0")}
+              series={chart(charts.budget, "budget left", "#9a82c9")}
             />
           </div>
           <div className="card">
@@ -802,10 +802,10 @@ export function SloPage() {
               markers={[
                 {
                   value: 1,
-                  color: "#f5a524",
+                  color: "#e5a24a",
                   label: "1× (budget lasts the window)",
                 },
-                { value: 14.4, color: "#e74c50", label: "14.4×" },
+                { value: 14.4, color: "#d8616a", label: "14.4×" },
               ]}
               series={chart(charts.burn, "burn rate", "#e5484d")}
             />

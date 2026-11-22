@@ -266,8 +266,8 @@ export function ServicePage() {
                     to={time.to}
                     height={150}
                     series={[
-                      { key: "ok", label: "OK", color: "#8b6fd0", values: d.timeseries.map((p) => p.hits - p.errors) },
-                      { key: "errors", label: "Errors", color: "#e74c50", values: d.timeseries.map((p) => p.errors) },
+                      { key: "ok", label: "OK", color: "#9a82c9", values: d.timeseries.map((p) => p.hits - p.errors) },
+                      { key: "errors", label: "Errors", color: "#d8616a", values: d.timeseries.map((p) => p.errors) },
                     ]}
                     onZoom={time.setAbsolute}
                   />
@@ -282,7 +282,7 @@ export function ServicePage() {
                     from={time.from}
                     to={time.to}
                     height={150}
-                    series={[{ key: "errors", label: "Errors", color: "#e74c50", values: d.timeseries.map((p) => p.errors) }]}
+                    series={[{ key: "errors", label: "Errors", color: "#d8616a", values: d.timeseries.map((p) => p.errors) }]}
                     onZoom={time.setAbsolute}
                   />
                 </div>
@@ -299,10 +299,10 @@ export function ServicePage() {
                     height={150}
                     format={duration}
                     series={[
-                      { key: "p50", color: "#5d8ae6", values: d.timeseries.map((p) => p.p50) },
-                      { key: "p95", color: "#9b6fd6", values: d.timeseries.map((p) => p.p95) },
-                      { key: "p99", color: "#e3a63c", values: d.timeseries.map((p) => p.p99) },
-                      { key: "max", color: "#d65c9b", values: d.timeseries.map((p) => p.max) },
+                      { key: "p50", color: "#6b8fd6", values: d.timeseries.map((p) => p.p50) },
+                      { key: "p95", color: "#9a82c9", values: d.timeseries.map((p) => p.p95) },
+                      { key: "p99", color: "#dba356", values: d.timeseries.map((p) => p.p99) },
+                      { key: "max", color: "#c96f9e", values: d.timeseries.map((p) => p.max) },
                     ]}
                     onZoom={time.setAbsolute}
                   />
@@ -479,12 +479,12 @@ export function Distribution({ data, p50, p95, p99 }: { data: [number, number][]
       <svg width={width} height={height + 18}>
         {data.map(([, c], i) => {
           const h = (c / max) * height;
-          return <rect key={i} x={i * bw + 0.5} y={height - h} width={Math.max(1, bw - 1)} height={h} fill="#8b6fd0" />;
+          return <rect key={i} x={i * bw + 0.5} y={height - h} width={Math.max(1, bw - 1)} height={h} fill="#9a82c9" />;
         })}
         {[
-          ["p50", p50, "#5d8ae6"],
-          ["p95", p95, "#9b6fd6"],
-          ["p99", p99, "#e3a63c"],
+          ["p50", p50, "#6b8fd6"],
+          ["p95", p95, "#9a82c9"],
+          ["p99", p99, "#dba356"],
         ].map(([label, v, color], i) => (
           <g key={label as string}>
             <line x1={x(v as number)} x2={x(v as number)} y1={0} y2={height} stroke={color as string} strokeDasharray="3 3" />

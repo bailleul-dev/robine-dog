@@ -189,16 +189,16 @@ function useScalar(def: WidgetDef, ctx: Ctx) {
 }
 
 const PALETTES: Record<string, [string, string]> = {
-  white_on_red: ["#fff", "#e74c50"],
-  white_on_yellow: ["#fff", "#f5a524"],
-  white_on_green: ["#fff", "#2ab673"],
-  white_on_gray: ["#fff", "#7f8c9d"],
-  red_on_white: ["#e74c50", "transparent"],
-  yellow_on_white: ["#c98a10", "transparent"],
-  green_on_white: ["#2ab673", "transparent"],
-  black_on_light_red: ["#1c1a29", "#fde2e2"],
-  black_on_light_yellow: ["#1c1a29", "#fff3cd"],
-  black_on_light_green: ["#1c1a29", "#dcf5e7"],
+  white_on_red: ["#fff", "#d8616a"],
+  white_on_yellow: ["#fff", "#e5a24a"],
+  white_on_green: ["#fff", "#55ab83"],
+  white_on_gray: ["#fff", "#8f8794"],
+  red_on_white: ["#d8616a", "transparent"],
+  yellow_on_white: ["#bd8634", "transparent"],
+  green_on_white: ["#55ab83", "transparent"],
+  black_on_light_red: ["#2b2333", "#fde2e2"],
+  black_on_light_yellow: ["#2b2333", "#fff3cd"],
+  black_on_light_green: ["#2b2333", "#e3f2e9"],
 };
 
 function matches(c: ConditionalFormat, v: number): boolean {
@@ -334,10 +334,10 @@ function TableWidget({ def, ctx }: { def: WidgetDef; ctx: Ctx }) {
 
 const NOTE_COLORS: Record<string, string> = {
   white: "var(--bg)",
-  gray: "#f2f3f5",
+  gray: "#f3efed",
   yellow: "#fff8d6",
-  blue: "#e7f1fd",
-  green: "#e3f6ec",
+  blue: "#eaf0f8",
+  green: "#e6f3ea",
   pink: "#fde8f1",
   purple: "#f0eafa",
   red: "#fde7e7",

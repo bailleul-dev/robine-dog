@@ -81,6 +81,7 @@ import { Pipelines } from "./pages/Pipelines";
 import { ServiceMap } from "./pages/ServiceMap";
 import { TraceExplorer } from "./pages/TraceExplorer";
 import { SharedDashboard } from "./pages/SharedDashboard";
+import "@fontsource-variable/nunito-sans";
 import "./styles.css";
 import { Coverage, Deployments, Dora } from "./pages/Delivery";
 import {

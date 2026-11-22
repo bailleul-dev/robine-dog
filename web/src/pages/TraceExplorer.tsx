@@ -193,7 +193,7 @@ export function TraceExplorer() {
                     {
                       key: "ok",
                       label: "Requests",
-                      color: "#8b6fd0",
+                      color: "#9a82c9",
                       values: histogram.data.buckets.map(
                         (b) => b.counts.ok ?? 0,
                       ),
@@ -201,7 +201,7 @@ export function TraceExplorer() {
                     {
                       key: "error",
                       label: "Errors",
-                      color: "#e74c50",
+                      color: "#d8616a",
                       values: histogram.data.buckets.map(
                         (b) => b.counts.error ?? 0,
                       ),
@@ -320,7 +320,7 @@ export function TraceExplorer() {
                         <span
                           className="status-bar"
                           style={{
-                            background: s.error ? "#e74c50" : "transparent",
+                            background: s.error ? "#d8616a" : "transparent",
                           }}
                         />
                       </td>

@@ -15,7 +15,7 @@ import { ago, serviceColor } from "../lib/format";
 import { useTimeRange } from "../lib/time";
 
 export const COST_TABS = [
-  { to: "/cost", label: "Explorer" },
+  { to: "/cost", label: "Explorer", end: true },
   { to: "/cost/kubernetes", label: "Kubernetes" },
   { to: "/cost/settings", label: "Settings" },
 ];
@@ -128,7 +128,7 @@ export function CostExplorer() {
                   style={{
                     fontSize: 14,
                     marginLeft: 8,
-                    color: change > 0 ? "#d6574f" : "#38a38a",
+                    color: change > 0 ? "#cf6b62" : "#4f9f8a",
                   }}
                 >
                   {change > 0 ? "+" : ""}
@@ -425,64 +425,68 @@ function Clusters() {
           title={edit.id ? "Edit cluster" : "New cluster"}
           onClose={() => setEdit(null)}
         >
-          <label className="form-field">
-            Name
-            <input
-              className="input"
-              value={edit.name}
-              onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-            />
-          </label>
-          <label className="form-field">
-            Metrics filter (its nodes and pods)
-            <input
-              className="input mono"
-              placeholder="kube_cluster_name:silo01"
-              value={edit.filter}
-              onChange={(e) => setEdit({ ...edit, filter: e.target.value })}
-            />
-          </label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <label className="form-field" style={{ flex: 1 }}>
-              Monthly price
+          <div className="modal-body">
+            <label className="form-field">
+              Name
               <input
                 className="input"
-                type="number"
-                min={0}
-                step="0.01"
-                value={edit.monthly_cost}
-                onChange={(e) =>
-                  setEdit({ ...edit, monthly_cost: Number(e.target.value) })
-                }
+                value={edit.name}
+                onChange={(e) => setEdit({ ...edit, name: e.target.value })}
               />
             </label>
-            <label className="form-field" style={{ width: 90 }}>
-              Currency
+            <label className="form-field">
+              Metrics filter (its nodes and pods)
               <input
-                className="input"
-                value={edit.currency}
-                onChange={(e) =>
-                  setEdit({ ...edit, currency: e.target.value.toUpperCase() })
-                }
+                className="input mono"
+                placeholder="kube_cluster_name:silo01"
+                value={edit.filter}
+                onChange={(e) => setEdit({ ...edit, filter: e.target.value })}
               />
             </label>
-            <label className="form-field" style={{ width: 110 }}>
-              CPU share %
-              <input
-                className="input"
-                type="number"
-                min={0}
-                max={100}
-                value={Math.round((edit.cpu_share ?? 0.5) * 100)}
-                onChange={(e) =>
-                  setEdit({ ...edit, cpu_share: Number(e.target.value) / 100 })
-                }
-              />
-            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <label className="form-field" style={{ flex: 1 }}>
+                Monthly price
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={edit.monthly_cost}
+                  onChange={(e) =>
+                    setEdit({ ...edit, monthly_cost: Number(e.target.value) })
+                  }
+                />
+              </label>
+              <label className="form-field" style={{ width: 90 }}>
+                Currency
+                <input
+                  className="input"
+                  value={edit.currency}
+                  onChange={(e) =>
+                    setEdit({ ...edit, currency: e.target.value.toUpperCase() })
+                  }
+                />
+              </label>
+              <label className="form-field" style={{ width: 110 }}>
+                CPU share %
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={Math.round((edit.cpu_share ?? 0.5) * 100)}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      cpu_share: Number(e.target.value) / 100,
+                    })
+                  }
+                />
+              </label>
+            </div>
+            {error && <div className="error-text">{error}</div>}
           </div>
-          {error && <div className="error-text">{error}</div>}
-          <div className="toolbar">
-            <div className="spacer" />
+          <div className="modal-footer">
             <button
               className="btn primary"
               disabled={!edit.name?.trim()}
@@ -757,72 +761,80 @@ function CloudAccounts() {
           onClose={() => setEdit(null)}
           width={560}
         >
-          <div style={{ display: "flex", gap: 8 }}>
-            <label className="form-field" style={{ flex: 1 }}>
-              Source
-              <select
-                className="input"
-                value={edit.type}
-                onChange={(e) =>
-                  setEdit({
-                    ...edit,
-                    type: e.target.value as CostAccount["type"],
-                  })
-                }
-              >
-                <option value="s3">S3 bucket (AWS, GCS, OVH, MinIO…)</option>
-                <option value="azure">Azure Storage container</option>
-                <option value="http">HTTP URL</option>
-              </select>
-            </label>
-            <label className="form-field" style={{ width: 160 }}>
-              Provider (if the file has none)
-              <input
-                className="input"
-                value={edit.provider ?? ""}
-                onChange={(e) => setEdit({ ...edit, provider: e.target.value })}
-              />
-            </label>
+          <div className="modal-body">
+            <div style={{ display: "flex", gap: 8 }}>
+              <label className="form-field" style={{ flex: 1 }}>
+                Source
+                <select
+                  className="input"
+                  value={edit.type}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      type: e.target.value as CostAccount["type"],
+                    })
+                  }
+                >
+                  <option value="s3">S3 bucket (AWS, GCS, OVH, MinIO…)</option>
+                  <option value="azure">Azure Storage container</option>
+                  <option value="http">HTTP URL</option>
+                </select>
+              </label>
+              <label className="form-field" style={{ width: 160 }}>
+                Provider (if the file has none)
+                <input
+                  className="input"
+                  value={edit.provider ?? ""}
+                  onChange={(e) =>
+                    setEdit({ ...edit, provider: e.target.value })
+                  }
+                />
+              </label>
+            </div>
+            <p className="muted" style={{ marginTop: 0 }}>
+              {ACCOUNT_HELP[edit.type ?? "s3"]}
+            </p>
+            {field("name", "Name")}
+            {edit.type === "s3" && (
+              <>
+                {field("bucket", "Bucket")}
+                {field("prefix", "Prefix", "exports/focus/")}
+                {field("region", "Region", "eu-west-3")}
+                {field(
+                  "endpoint",
+                  "Endpoint (not AWS)",
+                  "https://storage.googleapis.com",
+                )}
+                {field("access_key_id", "Access key ID")}
+                {field(
+                  "secret_access_key",
+                  "Secret access key",
+                  "",
+                  "password",
+                )}
+              </>
+            )}
+            {edit.type === "azure" && (
+              <>
+                {field(
+                  "sas_url",
+                  "Container SAS URL",
+                  "https://account.blob.core.windows.net/exports?sv=…&sig=…",
+                  "password",
+                )}
+                {field("prefix", "Prefix", "focus/")}
+              </>
+            )}
+            {edit.type === "http" && (
+              <>
+                {field("url", "URL")}
+                {field("header_name", "Header (optional)", "Authorization")}
+                {field("header_value", "Header value", "", "password")}
+              </>
+            )}
+            {error && <div className="error-text">{error}</div>}
           </div>
-          <p className="muted" style={{ marginTop: 0 }}>
-            {ACCOUNT_HELP[edit.type ?? "s3"]}
-          </p>
-          {field("name", "Name")}
-          {edit.type === "s3" && (
-            <>
-              {field("bucket", "Bucket")}
-              {field("prefix", "Prefix", "exports/focus/")}
-              {field("region", "Region", "eu-west-3")}
-              {field(
-                "endpoint",
-                "Endpoint (not AWS)",
-                "https://storage.googleapis.com",
-              )}
-              {field("access_key_id", "Access key ID")}
-              {field("secret_access_key", "Secret access key", "", "password")}
-            </>
-          )}
-          {edit.type === "azure" && (
-            <>
-              {field(
-                "sas_url",
-                "Container SAS URL",
-                "https://account.blob.core.windows.net/exports?sv=…&sig=…",
-                "password",
-              )}
-              {field("prefix", "Prefix", "focus/")}
-            </>
-          )}
-          {edit.type === "http" && (
-            <>
-              {field("url", "URL")}
-              {field("header_name", "Header (optional)", "Authorization")}
-              {field("header_value", "Header value", "", "password")}
-            </>
-          )}
-          {error && <div className="error-text">{error}</div>}
-          <div className="toolbar">
-            <div className="spacer" />
+          <div className="modal-footer">
             <button
               className="btn primary"
               disabled={!edit.name?.trim()}

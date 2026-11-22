@@ -269,7 +269,7 @@ function QueryPanel({
                 {
                   key: "calls",
                   label: "Calls",
-                  color: "#8b6fd0",
+                  color: "#9a82c9",
                   values: d.series.map((p) => p.calls),
                 },
               ]}
@@ -286,7 +286,7 @@ function QueryPanel({
                 {
                   key: "avg",
                   label: "Avg latency",
-                  color: "#e3a63c",
+                  color: "#dba356",
                   values: d.series.map((p) =>
                     p.calls ? p.total_time_ms / p.calls : 0,
                   ),

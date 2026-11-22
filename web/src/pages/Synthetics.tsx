@@ -1016,7 +1016,7 @@ function Graph({ title, query, unit }: { title: string; query: string; unit: str
           height={130}
           series={built.lines.map((l): Series => {
             const label = l.label.replace(/^a: /, "").replace("status:", "");
-            const color = label === "failed" ? "var(--red)" : label === "passed" ? "var(--green)" : "#8b6fd0";
+            const color = label === "failed" ? "var(--red)" : label === "passed" ? "var(--green)" : "#9a82c9";
             return { key: l.key, label, color, values: unit ? l.values : l.values.map((v) => (Number.isNaN(v) ? 0 : v)) };
           })}
           format={(v) => (unit ? `${Math.round(v)} ${unit}` : String(Math.round(v)))}

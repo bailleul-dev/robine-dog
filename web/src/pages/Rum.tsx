@@ -318,7 +318,7 @@ export function RumAnalytics() {
       </PageHeader>
       <div className="page-scroll page-padding">
         <div className="rum-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-          {chart("Sessions", "c0", "#8b6fd0")}
+          {chart("Sessions", "c0", "#9a82c9")}
           {chart("Page views", "c1", "#3d9bd9")}
         </div>
         <div className="rum-grid">

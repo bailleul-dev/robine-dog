@@ -13,16 +13,16 @@ import { compact } from "./format";
 import type { TimeRange } from "./time";
 
 export const PALETTE = [
-  "#8b6fd0",
-  "#3d9be9",
-  "#2ab673",
-  "#f5a524",
-  "#e74c50",
-  "#17b8be",
-  "#c95cc4",
-  "#7f8c9d",
-  "#a3c93a",
-  "#ef7d3c",
+  "#9a82c9",
+  "#5a8dd3",
+  "#55ab83",
+  "#e5a24a",
+  "#d8616a",
+  "#4fb3b0",
+  "#c070b2",
+  "#8f8794",
+  "#9cbd5a",
+  "#e08a55",
 ];
 export const errorText = (e: unknown) =>
   e instanceof ApiError ? e.message : e ? String(e) : null;

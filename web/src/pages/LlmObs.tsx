@@ -20,20 +20,20 @@ const usd = (v: number) =>
   v === 0 ? "$0" : v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
 
 const KIND_COLORS: Record<string, string> = {
-  workflow: "#8b6fd0",
-  agent: "#6f4fc0",
-  llm: "#e3a63c",
-  embedding: "#d68a3c",
-  retrieval: "#3fa1c6",
-  tool: "#3fb27f",
-  task: "#7a8699",
+  workflow: "#9a82c9",
+  agent: "#7a5ca8",
+  llm: "#dba356",
+  embedding: "#cf8f52",
+  retrieval: "#5aa6c4",
+  tool: "#55ab83",
+  task: "#8a8291",
 };
 
 export function KindBadge({ kind }: { kind: string }) {
   return (
     <span
       className="llm-kind"
-      style={{ background: KIND_COLORS[kind] ?? "#7a8699" }}
+      style={{ background: KIND_COLORS[kind] ?? "#8a8291" }}
     >
       {kind}
     </span>
@@ -173,13 +173,13 @@ export function LlmOverview() {
                       {
                         key: "ok",
                         label: "OK",
-                        color: "#8b6fd0",
+                        color: "#9a82c9",
                         values: d.series.map((p) => p.traces - p.errors),
                       },
                       {
                         key: "errors",
                         label: "Errors",
-                        color: "#e74c50",
+                        color: "#d8616a",
                         values: d.series.map((p) => p.errors),
                       },
                     ]}
@@ -198,7 +198,7 @@ export function LlmOverview() {
                       {
                         key: "tokens",
                         label: "Tokens",
-                        color: "#e3a63c",
+                        color: "#dba356",
                         values: d.series.map((p) => p.tokens),
                       },
                     ]}
@@ -219,7 +219,7 @@ export function LlmOverview() {
                       {
                         key: "cost",
                         label: "Cost",
-                        color: "#3fb27f",
+                        color: "#55ab83",
                         values: d.series.map((p) => p.cost),
                       },
                     ]}
@@ -420,7 +420,7 @@ function TracePanel({ id, onClose }: { id: string; onClose: () => void }) {
                 style={{
                   left: `${((s.start_ns - t0) / total) * 100}%`,
                   width: `${Math.max(0.5, (s.duration / total) * 100)}%`,
-                  background: KIND_COLORS[s.kind] ?? "#7a8699",
+                  background: KIND_COLORS[s.kind] ?? "#8a8291",
                 }}
               />
             </span>

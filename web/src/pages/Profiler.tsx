@@ -333,7 +333,7 @@ export function Profiler() {
                                 2,
                                 (t.self / (f.top[0]?.self || 1)) * 50,
                               ),
-                              background: "var(--orange, #e3a63c)",
+                              background: "var(--orange, #dba356)",
                             }}
                           />
                           {t.name}

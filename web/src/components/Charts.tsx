@@ -284,7 +284,7 @@ export function TimeChart({
   );
 }
 
-export function Sparkline({ values, color = "#8b6fd0", width = 110, height = 22 }: { values: number[]; color?: string; width?: number; height?: number }) {
+export function Sparkline({ values, color = "#9a82c9", width = 110, height = 22 }: { values: number[]; color?: string; width?: number; height?: number }) {
   const max = Math.max(1, ...values);
   const step = width / Math.max(1, values.length);
   return (
