@@ -116,13 +116,20 @@ const client = new QueryClient({
 function App() {
   const me = useQuery({
     queryKey: ["me"],
-    queryFn: api.me,
+    // A 401 is an answer, "nobody": it replaces the identity of an expired
+    // session, which a failed refetch would keep on screen.
+    queryFn: () =>
+      api.me().catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 401) return null;
+        throw e;
+      }),
     retry: false,
     staleTime: Infinity,
   });
 
   useEffect(() => {
-    const onUnauth = () => client.invalidateQueries({ queryKey: ["me"] });
+    const onUnauth = () =>
+      client.invalidateQueries({ queryKey: ["me"] }, { cancelRefetch: false });
     window.addEventListener("robine-dog:unauthenticated", onUnauth);
     return () =>
       window.removeEventListener("robine-dog:unauthenticated", onUnauth);

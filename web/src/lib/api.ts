@@ -983,7 +983,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
     credentials: "same-origin",
   });
-  if (res.status === 401) {
+  // `/me` is what this event re-checks: signalling its own 401 would loop.
+  if (res.status === 401 && path !== "/me") {
     window.dispatchEvent(new CustomEvent("robine-dog:unauthenticated"));
   }
   if (!res.ok) {
