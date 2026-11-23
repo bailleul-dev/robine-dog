@@ -234,6 +234,16 @@ pub fn process(obj: Map<String, Value>, defaults: &Defaults, now: i64) -> LogRow
         for (k, v) in inner {
             obj.insert(k, v);
         }
+        // tracing-subscriber's default JSON layout keeps the text under `fields`.
+        if !obj.contains_key("message")
+            && let Some(Value::Object(fields)) = obj.get_mut("fields")
+            && let Some(text) = fields.remove("message")
+        {
+            if fields.is_empty() {
+                obj.remove("fields");
+            }
+            obj.insert("message".into(), text);
+        }
         message = Some(take_string(&mut obj, &["message", "msg", "log"]).unwrap_or_default());
     }
     if message.is_none() {
@@ -549,6 +559,19 @@ mod tests {
             0,
         );
         assert_eq!(r.status, "warn");
+    }
+
+    #[test]
+    fn reads_the_message_of_tracing_json() {
+        let line = r#"{"timestamp":"2026-11-23T16:32:57.507980Z","level":"ERROR","fields":{"message":"boom","region":"r1"},"target":"store"}"#;
+        let r = process(
+            obj(json!({"message": line, "status": "info"})),
+            &Defaults::default(),
+            0,
+        );
+        assert_eq!((r.status.as_str(), r.message.as_str()), ("error", "boom"));
+        assert_eq!(r.attributes["fields"]["region"], "r1");
+        assert_eq!(r.ts, 1795451577507);
     }
 
     #[test]

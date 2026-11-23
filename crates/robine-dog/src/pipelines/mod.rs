@@ -1071,6 +1071,39 @@ pub fn integration_pipelines() -> Vec<PipelineDef> {
                 processor("Define `agent.message` as the official message of the log", Kind::MessageRemapper { sources: s(&["agent.message"]) }),
             ],
         ),
+        // Garage has no JSON output and always colors its lines, on stderr.
+        pipeline(
+            "Garage",
+            "source:garage",
+            vec![
+                processor(
+                    "Parsing Garage logs",
+                    Kind::GrokParser {
+                        source: "message".into(),
+                        samples: s(&["\u{1b}[2m2026-11-23T16:26:41.549409Z\u{1b}[0m \u{1b}[32m INFO\u{1b}[0m \u{1b}[2mgarage_net::netapp\u{1b}[0m\u{1b}[2m:\u{1b}[0m Connection from 8f2a closed"]),
+                        grok: GrokRules {
+                            support_rules: r#"_ansi (?:\x1b\[[0-9;]*m)*"#.into(),
+                            match_rules: r#"garage.log %{_ansi}%{regex("\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z"):garage.timestamp}%{_ansi}\s+%{_ansi}\s*%{word:level}%{_ansi}\s+%{_ansi}%{regex("[\\w:]+"):logger.name}%{_ansi}:%{_ansi}\s+%{data:garage.message}"#.into(),
+                        },
+                    },
+                ),
+                processor(
+                    "Parsing S3 and admin requests",
+                    Kind::GrokParser {
+                        source: "garage.message".into(),
+                        samples: s(&["[::ffff:10.42.0.83]:46138 (key GK5d03aadb) GET /robine-id/applications/robine-dog.json"]),
+                        grok: GrokRules {
+                            support_rules: String::new(),
+                            match_rules: r#"garage.request \[?%{ip:network.client.ip}\]?:%{port:network.client.port}(?: \(key %{notSpace:garage.key_id}\))? %{word:http.method} %{notSpace:http.url}"#.into(),
+                        },
+                    },
+                ),
+                processor("Define `garage.timestamp` as the official date of the log", Kind::DateRemapper { sources: s(&["garage.timestamp"]) }),
+                processor("Define `level` as the official status of the log", Kind::StatusRemapper { sources: s(&["level"]) }),
+                processor("Define `garage.message` as the official message of the log", Kind::MessageRemapper { sources: s(&["garage.message"]) }),
+                processor("URL parser", Kind::UrlParser { sources: s(&["http.url"]), target: "http.url_details".into(), normalize_ending_slashes: false }),
+            ],
+        ),
         // Not tied to a source: what Go programs commonly write (logrus and
         // slog text, klog), whatever the application. A line of another
         // shape matches no rule and is left as it is.
@@ -1272,6 +1305,43 @@ mod tests {
         assert_eq!(l.status, "warn");
         assert_eq!(l.message, "Failed to collect telemetry | really");
         assert_eq!(l.attributes["agent"]["component"], "CORE");
+    }
+
+    #[test]
+    fn garage_colored_logs() {
+        let run = |m: &str| {
+            // What an Agent sends for a line read from stderr.
+            let mut l = log(json!({"ddsource": "garage", "status": "error", "message": m}));
+            preview(&integration_pipelines(), &mut l);
+            l
+        };
+        let l = run(
+            "\u{1b}[2m2026-11-23T16:26:41.549409Z\u{1b}[0m \u{1b}[32m INFO\u{1b}[0m \u{1b}[2mgarage_api_common::generic_server\u{1b}[0m\u{1b}[2m:\u{1b}[0m [::ffff:10.42.0.83]:46138 (key GK5d03aadb) GET /robine-id/applications/robine-dog.json",
+        );
+        assert_eq!(l.status, "info");
+        assert_eq!(
+            l.message,
+            "[::ffff:10.42.0.83]:46138 (key GK5d03aadb) GET /robine-id/applications/robine-dog.json"
+        );
+        assert_eq!(l.ts, 1795451201549);
+        assert_eq!(
+            l.attributes["logger"]["name"],
+            "garage_api_common::generic_server"
+        );
+        assert_eq!(l.attributes["network"]["client"]["ip"], "::ffff:10.42.0.83");
+        assert_eq!(l.attributes["garage"]["key_id"], "GK5d03aadb");
+        assert_eq!(l.attributes["http"]["method"], "GET");
+        assert_eq!(
+            l.attributes["http"]["url_details"]["path"],
+            "/robine-id/applications/robine-dog.json"
+        );
+        let l = run(
+            "\u{1b}[2m2026-11-23T16:26:41.549409Z\u{1b}[0m \u{1b}[33m WARN\u{1b}[0m \u{1b}[2mgarage_net::netapp\u{1b}[0m\u{1b}[2m:\u{1b}[0m Connection from 8f2a closed",
+        );
+        assert_eq!(
+            (l.status.as_str(), l.message.as_str()),
+            ("warn", "Connection from 8f2a closed")
+        );
     }
 
     #[test]
