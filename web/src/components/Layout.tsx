@@ -858,7 +858,7 @@ export function Layout({ me }: { me: Identity }) {
         </button>
         <NavLink to="/logs" className="nav-logo" aria-label="Home">
           <Logo />
-          <span className="nav-brand">robine-dog</span>
+          <span className="nav-brand">Robine Dog</span>
         </NavLink>
         <button
           type="button"

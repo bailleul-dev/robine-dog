@@ -10,7 +10,7 @@ export function Login() {
     <div className="login">
       <div className="login-card">
         <Logo className="logo" />
-        <h1>robine-dog</h1>
+        <h1>Robine Dog</h1>
         <p>Logs & traces, for one.</p>
         {error && <div className="login-error">{error}</div>}
         {signedOut && !error && <div className="muted" style={{ marginBottom: 16 }}>You are signed out.</div>}
