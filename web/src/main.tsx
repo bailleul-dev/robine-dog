@@ -27,7 +27,7 @@ import {
   QueryClientProvider,
   useQuery,
 } from "@tanstack/react-query";
-import { StrictMode, useEffect } from "react";
+import { lazy, StrictMode, Suspense, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
@@ -99,7 +99,16 @@ import {
 } from "./pages/InfraMore";
 import { LlmAgents, LlmExperiments } from "./pages/LlmMore";
 import { LogForwarding, MetricTags } from "./pages/Forwarding";
-import { AgentSetup, ApiKeys, Help, OpenTelemetrySetup } from "./pages/Setup";
+import { AgentSetup, ApiKeys, OpenTelemetrySetup } from "./pages/Setup";
+import { Help } from "./pages/Help";
+
+// The documentation (its pages and the Markdown renderer) loads when opened.
+const Docs = lazy(() => import("./pages/Docs").then((m) => ({ default: m.Docs })));
+const docs = (
+  <Suspense fallback={<div className="empty-state">Loading the documentation…</div>}>
+    <Docs />
+  </Suspense>
+);
 import { CostExplorer, CostKubernetes, CostSettings } from "./pages/CloudCost";
 
 const client = new QueryClient({
@@ -333,6 +342,8 @@ function App() {
           element={<OpenTelemetrySetup />}
         />
         <Route path="/help" element={<Help />} />
+        <Route path="/docs" element={docs} />
+        <Route path="/docs/:slug" element={docs} />
         <Route path="/cost" element={<CostExplorer />} />
         <Route path="/cost/kubernetes" element={<CostKubernetes />} />
         <Route path="/cost/settings" element={<CostSettings />} />

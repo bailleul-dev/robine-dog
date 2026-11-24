@@ -10,6 +10,8 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // The documentation's Markdown is in the repository's docs/.
+    fs: { allow: [".", "../docs"] },
     proxy: {
       "/api": backend,
       "/auth": backend,

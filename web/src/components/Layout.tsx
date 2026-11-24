@@ -25,9 +25,9 @@ import {
 } from "./Icons";
 
 /** A link of the navigation; without `to`, Datadog has it and robine-dog does not. */
-type NavEntry = { label: string; to?: string; hint?: string };
-type NavGroup = { title: string; links: NavEntry[] };
-type Item = {
+export type NavEntry = { label: string; to?: string; hint?: string };
+export type NavGroup = { title: string; links: NavEntry[] };
+export type Item = {
   id: string;
   label: string;
   icon: React.ReactNode;
@@ -46,7 +46,7 @@ type Item = {
  * product areas, then metrics and logs. What robine-dog implements is a
  * link; the rest is listed, greyed out.
  */
-const SECTIONS: Item[][] = [
+export const SECTIONS: Item[][] = [
   [
     {
       id: "watchdog",
@@ -709,7 +709,7 @@ const SECTIONS: Item[][] = [
   ],
 ];
 
-const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
+export const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 const UNAVAILABLE = "In Datadog, not in robine-dog";
 
 function initials(id: Identity): string {

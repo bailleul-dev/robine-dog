@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { Modal } from "../components/Common";
 import { PageHeader } from "../components/Layout";
 import { PlusIcon, TrashIcon } from "../components/Icons";
@@ -159,7 +159,7 @@ export function ApiKeys() {
   );
 }
 
-function Snippet({ title, text }: { title: string; text: string }) {
+export function Snippet({ title, text }: { title: string; text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="card">
@@ -327,150 +327,6 @@ service:
         </p>
         <Snippet title="An SDK, directly" text={sdk} />
         <Snippet title="The OpenTelemetry Collector" text={collector} />
-      </div>
-    </>
-  );
-}
-
-/** Headings, paragraphs, lists, code blocks and tables: enough for the README. */
-function Doc({ text }: { text: string }) {
-  const out: React.ReactNode[] = [];
-  const lines = text.split("\n");
-  const inline = (s: string) =>
-    s.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g).map((p, i) => {
-      if (p.startsWith("`")) return <code key={i}>{p.slice(1, -1)}</code>;
-      if (p.startsWith("**")) return <b key={i}>{p.slice(2, -2)}</b>;
-      const l = p.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-      if (l)
-        return (
-          <a
-            key={i}
-            href={l[2]}
-            target={l[2].startsWith("http") ? "_blank" : undefined}
-            rel="noreferrer"
-          >
-            {l[1]}
-          </a>
-        );
-      return <Fragment key={i}>{p}</Fragment>;
-    });
-  for (let i = 0; i < lines.length;) {
-    const l = lines[i];
-    if (l.startsWith("```")) {
-      const code: string[] = [];
-      for (i++; i < lines.length && !lines[i].startsWith("```"); i++)
-        code.push(lines[i]);
-      i++;
-      out.push(
-        <pre
-          key={i}
-          className="mono"
-          style={{ fontSize: 12, overflow: "auto" }}
-        >
-          {code.join("\n")}
-        </pre>,
-      );
-    } else if (/^#{1,4} /.test(l)) {
-      const n = l.indexOf(" ");
-      const H = (["h2", "h3", "h4", "h5"] as const)[n - 1];
-      out.push(<H key={i}>{inline(l.slice(n + 1))}</H>);
-      i++;
-    } else if (l.startsWith("|")) {
-      const rows: string[][] = [];
-      for (; i < lines.length && lines[i].startsWith("|"); i++)
-        if (!/^\|[\s:-]+\|/.test(lines[i]) || /[a-z]/i.test(lines[i]))
-          rows.push(
-            lines[i]
-              .split("|")
-              .slice(1, -1)
-              .map((c) => c.trim()),
-          );
-      out.push(
-        <table key={i} className="list" style={{ marginBottom: 12 }}>
-          <thead>
-            <tr>
-              {rows[0].map((c, j) => (
-                <th key={j}>{inline(c)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.slice(1).map((r, k) => (
-              <tr key={k}>
-                {r.map((c, j) => (
-                  <td key={j}>{inline(c)}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>,
-      );
-    } else if (/^\s*[-*] /.test(l)) {
-      const items: string[] = [];
-      for (; i < lines.length && /^\s*[-*] /.test(lines[i]); i++)
-        items.push(lines[i].replace(/^\s*[-*] /, ""));
-      out.push(
-        <ul key={i}>
-          {items.map((t, k) => (
-            <li key={k}>{inline(t)}</li>
-          ))}
-        </ul>,
-      );
-    } else if (!l.trim()) {
-      i++;
-    } else {
-      const para: string[] = [];
-      for (
-        ;
-        i < lines.length &&
-        lines[i].trim() &&
-        !/^(```|#|\||\s*[-*] )/.test(lines[i]);
-        i++
-      )
-        para.push(lines[i]);
-      out.push(<p key={i}>{inline(para.join(" "))}</p>);
-    }
-  }
-  return <>{out}</>;
-}
-
-/** Help: the README, in the app. */
-export function Help() {
-  const q = useQuery({ queryKey: ["help"], queryFn: api.help });
-  const [filter, setFilter] = useState("");
-  const text = q.data?.readme ?? "";
-  const sections = text.split(/\n(?=## )/);
-  const f = filter.toLowerCase();
-  return (
-    <>
-      <PageHeader title="Help" />
-      <div className="filters-row">
-        <input
-          className="input"
-          style={{ flex: 1 }}
-          placeholder="Search the documentation"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <span className="muted">version {q.data?.version}</span>
-        <a className="btn small" href="/organization-settings/agent">
-          Agent
-        </a>
-        <a className="btn small" href="/organization-settings/opentelemetry">
-          OpenTelemetry
-        </a>
-      </div>
-      <div
-        className="page-scroll page-padding help-doc"
-        style={{ maxWidth: 1100 }}
-      >
-        <Doc
-          text={
-            f
-              ? sections.filter((x) => x.toLowerCase().includes(f)).join("\n")
-              : text
-          }
-        />
       </div>
     </>
   );

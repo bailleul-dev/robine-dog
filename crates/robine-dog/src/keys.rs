@@ -212,11 +212,12 @@ pub async fn delete_app(State(st): State<AppState>, Path(id): Path<String>) -> A
     revoke(&st, APP, &id).await
 }
 
-/// `GET /api/ui/help`: the README, and whether an API key is configured.
+/// `GET /api/ui/help`: the README, whether an API key is configured, and the
+/// version the image was built from, as `/health` reports it.
 pub async fn help(State(st): State<AppState>) -> Json<Value> {
     Json(
         json!({"readme": include_str!("../../../README.md"), "api_key_configured": st.cfg.api_key.is_some(),
-        "version": std::env::var("ROBINE_DOG_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into())}),
+        "version": option_env!("ROBINE_DOG_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))}),
     )
 }
 

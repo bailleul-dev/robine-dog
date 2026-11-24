@@ -12,6 +12,9 @@ and every intake. Telemetry (logs, spans, metric points) is stored in
 TTLs, full-text and inverted indexes, JSON columns); the application's own
 state (facets, metric metadata) is in PostgreSQL.
 
+The full documentation is in [`docs/`](docs/README.md), and in the app at
+`/docs`.
+
 ## What works
 
 | Datadog | robine-dog |
@@ -82,7 +85,7 @@ state (facets, metric metadata) is in PostgreSQL.
 | Metrics without Limits: per metric, the tag keys kept (or dropped, `exclude_tags_mode`) when points are written, the rest aggregated away (counts and rates summed, gauges averaged), with the series ingested and stored this hour (`/api/v2/metrics/{name}/tags`, `/api/v2/metrics/{name}/volumes`) | `/metrics/tags` |
 | Log Forwarding: custom destinations (`/api/v2/logs/config/custom-destinations`) receive the logs matching their query after the pipelines, in batches: any HTTP endpoint (JSON array, basic auth or a header), Splunk HEC or Elasticsearch (`_bulk`, dated index); sent, dropped and the last error per destination; secrets never returned | `/logs/forwarding` |
 | API keys and application keys: named keys (`/api/v2/api_keys`, `/api/v2/application_keys`), stored hashed and shown once, with their last use, revocable; API keys are accepted wherever `ROBINE_DOG_API_KEY` is, which stays valid | `/organization-settings/api-keys` |
-| Agent and OpenTelemetry setup pages: Docker, Helm and `datadog.yaml` for the Agent, SDK variables and a Collector configuration, filled in with this robine-dog's address; Help: this README in the app, searchable | `/organization-settings/agent`, `/organization-settings/opentelemetry`, `/help` |
+| Agent and OpenTelemetry setup pages: Docker, Helm and `datadog.yaml` for the Agent, SDK variables and a Collector configuration, filled in with this robine-dog's address; Help (a help center: data sources, product areas, search syntax, shortcuts) and the documentation of [`docs/`](docs/README.md), searchable in the app | `/organization-settings/agent`, `/organization-settings/opentelemetry`, `/help`, `/docs` |
 | Cloud Cost: daily costs from FOCUS files (Custom Costs, `PUT /api/v2/cost/custom_costs`, CSV or JSON; AWS CUR columns too) and Kubernetes clusters, whose monthly price is split across pods by CPU and memory usage against the nodes' capacity, the rest idle (as OpenCost does); explorer grouped by provider, service, account, workload or tag, compared to the previous period; every cost is also `all.cost` and `<provider>.cost.amortized`, for dashboards and monitors | `/cost`, `/cost/kubernetes`, `/cost/settings` |
 | Cloud bills: the billing exports a cloud writes to a bucket (FOCUS, or the AWS CUR), read every 6 hours: S3 or S3-compatible (AWS Data Exports and CUR, GCS with HMAC keys, OVH, Garage…), an Azure Storage container by its SAS URL (Cost Management exports), or one HTTP URL; a file is re-read when its ETag changes, and in a billing period's folder only the latest run counts | `/cost/settings` |
 | Error Tracking: error spans (`error.type`, `error.message`, `error.stack`) and error logs (`error.kind`, `error.stack`) grouped into issues by service, type, masked message and top stack frame; volume, first / last seen, stack trace with app frames highlighted, breakdown by version, env, host and resource, links to the trace or log; For Review / Reviewed / Ignored / Resolved, with regressions | `/error-tracking` |

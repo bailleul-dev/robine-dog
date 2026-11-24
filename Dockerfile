@@ -3,6 +3,7 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-fund --no-audit
 COPY web/ ./
+COPY docs/ /docs/
 RUN npm run build
 
 FROM rust:1.98-slim AS server
