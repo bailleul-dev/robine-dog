@@ -65,7 +65,7 @@ with `.as_count()`, `.as_rate()` or `.rollup()` as needed.
 | Function | Arguments | Value compared with the threshold |
 | --- | --- | --- |
 | `anomalies(q, '<algo>', <bounds>, direction=…, alert_window=…, seasonality=…)` | `basic`, `agile` or `robust`; bounds in deviations (default 2); `direction` `above`, `below` or `both`; `alert_window` (default `last_15m`); `seasonality` `hourly`, `daily` or `weekly` (default weekly) | The share of the alert window's points outside the band, 0 to 1 |
-| `outliers(q, '<algo>', <tolerance>)` | `dbscan`, `scaleddbscan`, `mad` or `scaledmad` | 1 for a group that is an outlier, 0 otherwise |
+| `outliers(q, '<algo>', <tolerance>)` | `dbscan`, `scaledbscan`, `mad` or `scaledmad` | 1 for a group that is an outlier, 0 otherwise |
 | `forecast(q, '<algo>', <deviations>)` | `linear` or `seasonal` | The forecast's upper bound over the `next_` window (its lower bound when the comparator is `<` or `<=`) |
 
 A forecast monitor must use a `next_` window and learns from four times

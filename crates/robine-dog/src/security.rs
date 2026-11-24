@@ -403,11 +403,34 @@ pub async fn get_rule(State(st): State<AppState>, Path(id): Path<String>) -> Api
     Ok(Json(rule_json(&d)))
 }
 
-fn clean(mut v: Value) -> Value {
+/// A rule as sent, without the fields the server owns.
+fn strip(mut v: Value) -> Value {
     if let Some(o) = v.as_object_mut() {
         for k in ["id", "createdAt", "isDefault"] {
             o.remove(k);
         }
+    }
+    v
+}
+
+/// A new rule, with the defaults of what it leaves out.
+fn clean(v: Value) -> Value {
+    with_defaults(strip(v))
+}
+
+/// An update merged into the stored rule: only the fields sent change, so
+/// `{"isEnabled": false}` keeps the rule's options.
+fn merged(mut stored: Value, update: Value) -> Value {
+    if let (Some(b), Some(n)) = (stored.as_object_mut(), strip(update).as_object()) {
+        for (k, x) in n {
+            b.insert(k.clone(), x.clone());
+        }
+    }
+    with_defaults(stored)
+}
+
+fn with_defaults(mut v: Value) -> Value {
+    if let Some(o) = v.as_object_mut() {
         o.entry("isEnabled").or_insert(json!(true));
         o.entry("type").or_insert(json!("log_detection"));
         o.entry("options").or_insert(
@@ -439,12 +462,7 @@ pub async fn update_rule(
         .doc(KIND, &id)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let mut body = old.body;
-    if let (Some(b), Some(n)) = (body.as_object_mut(), clean(v).as_object()) {
-        for (k, x) in n {
-            b.insert(k.clone(), x.clone());
-        }
-    }
+    let body = merged(old.body, v);
     validate(&body).map_err(ApiError::BadQuery)?;
     let d = st.store.pg.put_doc(KIND, &id, &body).await?;
     Ok(Json(rule_json(&d)))
@@ -564,6 +582,23 @@ pub async fn triage(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_update_keeps_what_it_does_not_send() {
+        let stored = clean(json!({
+            "name": "SSH brute force",
+            "options": {"evaluationWindow": 900, "keepAlive": 7200, "maxSignalDuration": 86400,
+                        "newValueOptions": {"learningDuration": 7}},
+        }));
+        let r = merged(stored, json!({"isEnabled": false, "id": "x"}));
+        assert_eq!(r["isEnabled"], json!(false));
+        assert_eq!(r["options"]["evaluationWindow"], json!(900));
+        assert_eq!(
+            r["options"]["newValueOptions"]["learningDuration"],
+            json!(7)
+        );
+        assert!(r.get("id").is_none());
+    }
 
     #[test]
     fn cases_and_validation() {

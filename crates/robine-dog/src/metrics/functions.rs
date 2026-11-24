@@ -517,7 +517,8 @@ impl OutlierAlgo {
     pub fn parse(s: &str) -> Option<Self> {
         Some(match s.to_ascii_lowercase().as_str() {
             "dbscan" => Self::Dbscan,
-            "scaleddbscan" => Self::ScaledDbscan,
+            // Datadog's name; the double d was accepted before, and still is.
+            "scaledbscan" | "scaleddbscan" => Self::ScaledDbscan,
             "mad" => Self::Mad,
             "scaledmad" => Self::ScaledMad,
             _ => return None,
@@ -795,6 +796,23 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![0.0, 5.0, 10.0, 5.0]
         );
+    }
+
+    #[test]
+    fn outlier_algorithms_have_datadog_names() {
+        assert_eq!(
+            OutlierAlgo::parse("scaledbscan"),
+            Some(OutlierAlgo::ScaledDbscan)
+        );
+        assert_eq!(
+            OutlierAlgo::parse("scaleddbscan"),
+            Some(OutlierAlgo::ScaledDbscan)
+        );
+        assert_eq!(
+            OutlierAlgo::parse("ScaledMAD"),
+            Some(OutlierAlgo::ScaledMad)
+        );
+        assert_eq!(OutlierAlgo::parse("kmeans"), None);
     }
 
     #[test]

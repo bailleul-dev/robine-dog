@@ -177,7 +177,7 @@ season plus the average change between seasons, and falls back to `linear`
 until two seasons of history exist. Without `seasonality`, it picks the
 longest of weekly, daily and hourly that the history can hold.
 
-`outliers` algorithms: `dbscan` and `scaleddbscan` cluster the series by
+`outliers` algorithms: `dbscan` and `scaledbscan` cluster the series by
 distance and flag those outside the main cluster; `mad` and `scaledmad` flag
 a series when more than the percentage of its points are further than
 tolerance × MAD from the group's median. The scaled variants divide

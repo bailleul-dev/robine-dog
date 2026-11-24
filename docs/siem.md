@@ -110,7 +110,7 @@ Send `DD-API-KEY` (and, as Datadog clients do, `DD-APPLICATION-KEY`).
 | --- | --- |
 | `GET /api/v2/security_monitoring/rules` | Lists rules (`data`, with `id`, `isDefault`, `createdAt`). |
 | `POST /api/v2/security_monitoring/rules` | Creates a rule. |
-| `GET`, `PUT`, `DELETE /api/v2/security_monitoring/rules/{id}` | Reads, updates or deletes a rule. On `PUT`, the top-level fields you send replace the stored ones; `isEnabled`, `type` and `options` you leave out go back to their defaults. |
+| `GET`, `PUT`, `DELETE /api/v2/security_monitoring/rules/{id}` | Reads, updates or deletes a rule. On `PUT`, the top-level fields you send replace the stored ones and the others are kept, so `{"isEnabled": false}` disables a rule without touching its options. |
 | `GET /api/v2/security_monitoring/signals` | Lists signals: `from`, `to` (epoch ms, default the last 7 days), `status`, `severity`, `query` (part of the rule name or group). Also `filter[from]`, `filter[to]`, `filter[query]`. At most 500, newest first. |
 | `PATCH /api/v2/security_monitoring/signals/{id}/state` | `{"data": {"attributes": {"state": "archived", "archive_reason": "false_positive"}}}` |
 | `PATCH /api/v2/security_monitoring/signals/{id}/assignee` | `{"data": {"attributes": {"assignee": {"uuid": "alice@example.com"}}}}` |
