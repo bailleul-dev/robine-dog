@@ -10,9 +10,11 @@
   --purple-border: #dccfeb;
   --bg: #fdfbf8;
   --bg-subtle: #f7f4f0;
+  /* Behind the page's panels, a shade darker than they are. */
+  --canvas: #f3eef0;
   --bg-hover: #f2eef1;
   --bg-selected: #efe7f6;
-  --border: #ece6e8;
+  --border: #efeaeb;
   --border-strong: #d8d0d6;
   --text: #2c2630;
   --text-muted: #6b6372;
@@ -31,10 +33,10 @@
   --sans:
     "Nunito Sans Variable", "Noto Sans", "Helvetica Neue", -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 16px;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 20px;
   --radius-pill: 999px;
   --shadow:
     0 12px 32px rgba(60, 40, 80, 0.12), 0 2px 6px rgba(60, 40, 80, 0.06);
@@ -43,6 +45,8 @@
   --ring: 0 0 0 3px rgba(122, 92, 168, 0.16);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --fast: 140ms;
+  /* The inner corner where the top bar turns into the side bar. */
+  --frame-radius: 22px;
   color-scheme: light;
 }
 
@@ -133,6 +137,8 @@ a:hover {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  /* Top bar and side bar are one surface; the page sits inside it. */
+  background: var(--nav-bg);
 }
 
 .app-body {
@@ -149,7 +155,6 @@ a:hover {
   align-items: center;
   background: var(--nav-bg);
   color: var(--nav-fg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
   z-index: 31;
 }
 
@@ -211,9 +216,9 @@ a:hover {
   max-width: calc(100% - 440px);
   margin: 0 auto;
   transform: translateX(-104px);
-  padding: 6px 10px;
+  padding: 7px 14px;
   overflow: hidden;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.08);
   font-size: 12.5px;
   white-space: nowrap;
@@ -245,7 +250,25 @@ a:hover {
 
 .nav-section {
   padding: 6px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  position: relative;
+}
+
+/* A short, faded divider rather than a rule across the bar. */
+.nav-section + .nav-section::before,
+.nav-bottom::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08) 20%,
+    rgba(255, 255, 255, 0.08) 80%,
+    transparent
+  );
 }
 
 .nav-section:first-child {
@@ -262,7 +285,7 @@ a:hover {
   padding: 0 7px;
   border: 0;
   border-left: 3px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   background: none;
   color: var(--nav-fg);
   font-size: 13px;
@@ -288,6 +311,7 @@ a:hover {
   color: var(--nav-fg-strong);
   border-left-color: transparent;
   background: rgba(182, 154, 217, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(214, 196, 238, 0.08);
 }
 
 /* In Datadog, not here: listed, greyed out, and not a link. */
@@ -303,8 +327,8 @@ a:hover {
 
 .nav-bottom {
   flex: none;
-  padding: 6px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  position: relative;
+  padding: 6px 0 10px;
 }
 
 .nav-user {
@@ -357,15 +381,15 @@ a:hover {
   top: 0;
   bottom: 0;
   display: flex;
+  overflow: hidden;
   background: #2f2638;
   color: var(--nav-fg);
-  box-shadow: 12px 0 28px rgba(43, 35, 51, 0.22);
-  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0 var(--frame-radius) var(--frame-radius) 0;
+  box-shadow: 16px 0 40px rgba(43, 35, 51, 0.24);
 }
 
 .nav-menu-user {
   top: auto;
-  border-radius: 0 6px 0 0;
 }
 
 .nav-menu-main {
@@ -410,8 +434,8 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  border-radius: var(--radius);
   color: var(--nav-fg-strong);
 }
 
@@ -580,6 +604,10 @@ a.nav-entry.active .nav-entry-label {
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  background: var(--canvas);
+  /* Where the frame turns: a rounded inner corner, no seam. */
+  border-top-left-radius: var(--frame-radius);
+  box-shadow: inset 1px 1px 0 rgba(43, 35, 51, 0.06);
 }
 
 /* ---------- Page header ---------- */
@@ -590,9 +618,8 @@ a.nav-entry.active .nav-entry-label {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  padding: 0 18px;
+  background: transparent;
 }
 
 .page-title {
@@ -606,17 +633,22 @@ a.nav-entry.active .nav-entry-label {
 
 .page-tabs {
   display: flex;
-  height: 100%;
+  align-items: center;
   gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: rgba(122, 92, 168, 0.06);
 }
 
 .page-tabs a {
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
-  border-bottom: 2px solid transparent;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .page-tabs a:hover {
@@ -626,7 +658,8 @@ a.nav-entry.active .nav-entry-label {
 
 .page-tabs a.active {
   color: var(--purple);
-  border-bottom-color: var(--purple);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .spacer {
@@ -640,7 +673,7 @@ a.nav-entry.active .nav-entry-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 13px;
   border: 1px solid var(--border-strong);
   background: var(--bg);
   border-radius: var(--radius-sm);
@@ -661,6 +694,8 @@ a.nav-entry.active .nav-entry-label {
   background: var(--purple);
   border-color: var(--purple);
   color: white;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 2px 8px rgba(122, 92, 168, 0.25);
 }
 
 .btn.primary:hover {
@@ -703,7 +738,7 @@ a.nav-entry.active .nav-entry-label {
 }
 
 .btn-group .btn:last-child {
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .btn-group .btn.selected {
@@ -715,7 +750,7 @@ a.nav-entry.active .nav-entry-label {
 
 .input {
   height: 30px;
-  padding: 0 8px;
+  padding: 0 11px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg);
@@ -990,16 +1025,20 @@ select.input {
 .explorer {
   flex: 1;
   display: flex;
+  gap: 12px;
   min-height: 0;
+  padding: 0 12px 12px;
 }
 
 .facets {
   width: 250px;
   flex: none;
-  border-right: 1px solid var(--border);
   overflow-y: auto;
   background: var(--bg);
-  padding-bottom: 40px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding-bottom: 24px;
+  scrollbar-width: thin;
 }
 
 .facets-search {
@@ -1027,7 +1066,12 @@ select.input {
 }
 
 .facet {
-  border-bottom: 1px solid #f2eeec;
+  margin: 0 6px;
+  border-radius: var(--radius);
+}
+
+.facet + .facet {
+  margin-top: 2px;
 }
 
 .facet-header {
@@ -1170,6 +1214,12 @@ select.input {
   overflow: hidden;
 }
 
+.explorer > .content {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -1270,8 +1320,8 @@ table.list th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
+  padding: 7px 8px;
+  border-bottom: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1288,7 +1338,7 @@ table.list th.sortable:hover {
 table.list td {
   padding: 0 8px;
   height: 27px;
-  border-bottom: 1px solid #f3efed;
+  border-bottom: 1px solid transparent;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1301,6 +1351,18 @@ table.list tbody tr {
 
 table.list tbody tr:hover td {
   background: var(--bg-hover);
+}
+
+table.list th:first-child,
+table.list tbody tr td:first-child {
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+table.list th:last-child,
+table.list tbody tr td:last-child {
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
 }
 
 table.list tbody tr.selected td {
@@ -1440,7 +1502,9 @@ table.list td.content-cell {
   right: 0;
   bottom: 0;
   background: var(--bg);
-  box-shadow: -8px 0 30px rgba(43, 35, 51, 0.18);
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  overflow: hidden;
+  box-shadow: -12px 0 40px rgba(43, 35, 51, 0.16);
   z-index: 26;
   display: flex;
   flex-direction: column;
@@ -1868,6 +1932,10 @@ table.list td.content-cell {
 .page-scroll {
   flex: 1;
   overflow: auto;
+  margin: 0 12px 12px;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .page-padding {
@@ -4999,6 +5067,14 @@ table.list td.infra-bad {
     transform: none;
     box-shadow: var(--shadow);
   }
+  .nav,
+  .nav-bar {
+    border-bottom-right-radius: var(--frame-radius);
+  }
+  .main {
+    --frame-radius: 16px;
+    border-top-right-radius: var(--frame-radius);
+  }
   .nav-drawer-backdrop {
     position: fixed;
     inset: 44px 0 0 0;
@@ -5061,10 +5137,8 @@ table.list td.infra-bad {
   }
   .page-tabs {
     order: 10;
-    width: calc(100% + 24px);
-    margin: 0 -12px;
-    padding: 0 6px;
-    height: 38px;
+    width: 100%;
+    margin-bottom: 8px;
     overflow-x: auto;
     scrollbar-width: none;
   }
